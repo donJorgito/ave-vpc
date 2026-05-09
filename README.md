@@ -308,7 +308,7 @@ Si Oracle Cloud no tiene capacidad disponible en tu región, estos proveedores t
 | [Hetzner](https://hetzner.com) | ~€3–4 | Núremberg, Falkenstein, Helsinki | Muy fiable |
 | [Scaleway](https://scaleway.com) | €4.99 | París, Amsterdam | |
 
-Para usarlos: crea el VPS manualmente (Ubuntu 24.04, IP pública, puertos 22/UDP 5080-5082 abiertos) y pon la IP en `VPS_IP` de `config/env`.
+Para usarlos: crea el VPS manualmente (Ubuntu 24.04, IP pública) y asegúrate de abrir los puertos TCP 22 y UDP 5080-5082 en su firewall. Luego pon la IP en `VPS_IP` de `config/env`. Con Oracle Cloud esto lo hace Terraform automáticamente.
 
 ---
 

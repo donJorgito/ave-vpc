@@ -5,6 +5,27 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.3.0] — 2026-05-09
+
+### Añadido
+- `06-provision-vps.sh` — itera automáticamente por ambos shapes Always Free (A1.Flex ARM y E2.1.Micro x86) en cada intento; para en cuanto uno tiene éxito
+- `.github/workflows/ci.yml` — GitHub Actions con ShellCheck, validación de sintaxis bash, checks IDLC y terraform fmt/validate
+- `tests/verificar-setup.sh` — script de verificación del entorno completo
+- `requirements/REQ.md` — requisitos del sistema documentados con IDs trazables
+- `CONTRIBUTING.md`, `CODEOWNERS`, `LICENSE` — cumplimiento IDLC v6
+- Pre-commit hooks: ShellCheck, detect-private-key, trailing whitespace, check-yaml
+
+### Cambiado
+- `06-provision-vps.sh` — corregido bug de log doble (tee + cron redirect); añadido PATH completo para que terraform sea encontrado desde cron; jitter aleatorio 0-600s para evitar patrón detectable
+- `02-setup-vps.sh` — eliminado mensaje que pedía abrir puertos manualmente (ya lo hace Terraform); añadida dependencia `libtool` necesaria para `autogen.sh`
+- `03-setup-mac.sh` — añadido check explícito de Xcode CLT y Homebrew; corregidos warnings SC2155 de ShellCheck
+- `04-conectar.sh` — corregidos warnings SC2024 y SC2034 de ShellCheck
+- `README.md` — reescrito con arquitectura, tabla de configuración, troubleshooting, alternativas VPS y flujo completo
+- `.gitignore` — añadidos `.playwright-mcp/`, `.DS_Store`, `.mcp.json`, `*.png`
+
+### Corregido
+- Puertos UDP 5080-5082 y TCP 22 gestionados 100% por Terraform (security list en VCN) — ningún paso manual
+
 ## [0.2.0] — 2026-05-08
 
 ### Añadido

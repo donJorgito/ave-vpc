@@ -77,23 +77,15 @@ else
 fi
 
 # ─── Salvaguarda: solo shapes Always Free ─────────────────────────────────────
-# Si el shape en terraform.tfvars no es uno de los dos shapes Always Free,
-# el script se niega a ejecutar para evitar costes accidentales.
-
-ALLOWED_SHAPES="VM.Standard.A1.Flex VM.Standard.E2.1.Micro"
-CURRENT_SHAPE=$(grep -E '^\s*shape\s*=' "$TF_DIR/terraform.tfvars" 2>/dev/null | sed 's/.*=\s*"\(.*\)"/\1/' || echo "")
-# Si no hay shape en tfvars, se usa el default del variables.tf (A1.Flex) → OK
-if [ -n "$CURRENT_SHAPE" ] && ! echo "$ALLOWED_SHAPES" | grep -qw "$CURRENT_SHAPE"; then
-  echo "ERROR DE SEGURIDAD: shape '$CURRENT_SHAPE' no es Always Free. Script detenido."
-  echo "Shapes permitidos: $ALLOWED_SHAPES"
-  exit 1
-fi
+# Orden de prueba: A1.Flex primero (ARM, más RAM), E2.1.Micro segundo (x86).
+# Ambos son Always Free permanente. Si uno tiene éxito, para.
+SHAPES_TO_TRY=("VM.Standard.A1.Flex" "VM.Standard.E2.1.Micro")
 
 # Si la VM ya existe en el state de Terraform, no hace falta seguir
 if [ -f "$TF_DIR/terraform.tfstate" ]; then
   EXISTING=$(grep -c '"type": "oci_core_instance"' "$TF_DIR/terraform.tfstate" 2>/dev/null; true)
   if [ "${EXISTING:-0}" -gt 0 ] 2>/dev/null; then
-    echo "La VM ya existe en el state de Terraform. Nada que hacer."
+    log "La VM ya existe en el state de Terraform. Nada que hacer."
     remove_cron
     exit 0
   fi
@@ -128,43 +120,47 @@ fi
 
 log "=== Intento de provisión ==="
 
-if terraform apply -auto-approve -input=false >> "$LOG_FILE" 2>&1; then
-  IP=$(terraform output -raw public_ip 2>/dev/null || echo "")
-  log "✓ VM creada con éxito. IP pública: $IP"
+SUCCESS=0
+for SHAPE in "${SHAPES_TO_TRY[@]}"; do
+  log "  Probando shape: $SHAPE"
 
-  # Actualiza config/env con la IP del VPS
-  ENV_FILE="$SCRIPT_DIR/config/env"
-  if [ -n "$IP" ]; then
-    # Crea config/env desde el ejemplo si no existe
-    if [ ! -f "$ENV_FILE" ]; then
-      cp "$SCRIPT_DIR/config/env.example" "$ENV_FILE"
-      log "✓ config/env creado desde env.example"
+  if terraform apply -auto-approve -input=false -var="shape=${SHAPE}" >> "$LOG_FILE" 2>&1; then
+    SUCCESS=1
+    IP=$(terraform output -raw public_ip 2>/dev/null || echo "")
+    log "✓ VM creada con shape $SHAPE. IP pública: $IP"
+
+    # Actualiza config/env con la IP del VPS
+    ENV_FILE="$SCRIPT_DIR/config/env"
+    if [ -n "$IP" ]; then
+      if [ ! -f "$ENV_FILE" ]; then
+        cp "$SCRIPT_DIR/config/env.example" "$ENV_FILE"
+        log "✓ config/env creado desde env.example"
+      fi
+      sed -i '' "s/^VPS_IP=.*/VPS_IP=\"$IP\"/" "$ENV_FILE"
+      log "✓ config/env actualizado con VPS_IP=$IP"
+      log "  ⚠ Revisa IFACE_IPHONE e IFACE_PIXEL en config/env (dependen de tu Mac)"
     fi
-    sed -i '' "s/^VPS_IP=.*/VPS_IP=\"$IP\"/" "$ENV_FILE"
-    log "✓ config/env actualizado con VPS_IP=$IP"
-    log "  ⚠ Revisa IFACE_IPHONE e IFACE_PIXEL en config/env (dependen de tu Mac)"
+
+    notify "¡VM creada ($SHAPE)! IP: $IP — Ejecuta ./02-setup-vps.sh"
+
+    log ""
+    log "╔══════════════════════════════════════════════╗"
+    log "║  ✓  VM CREADA CON ÉXITO                      ║"
+    log "║  Shape: $SHAPE"
+    log "║  IP: $IP"
+    log "║  Siguiente paso: ./02-setup-vps.sh            ║"
+    log "╚══════════════════════════════════════════════╝"
+    log ""
+
+    remove_cron
+    log "✓ Cron eliminado (ya no hace falta reintentar)"
+    break  # ← Para aquí, no prueba el siguiente shape
+  else
+    log "  ✗ $SHAPE sin capacidad — probando siguiente shape..."
   fi
+done
 
-  # Notificación macOS (aparece aunque el Mac esté bloqueado)
-  notify "¡VM creada! IP: $IP — Ejecuta ./02-setup-vps.sh"
-
-  # Banner en el log para que sea inconfundible
-  log ""
-  log "╔══════════════════════════════════════════════╗"
-  log "║  ✓  VM CREADA CON ÉXITO                      ║"
-  log "║  IP: $IP"
-  log "║  Siguiente paso: ./02-setup-vps.sh            ║"
-  log "╚══════════════════════════════════════════════╝"
-  log ""
-
-  # Elimina el cron automáticamente
-  remove_cron
-  log "✓ Cron eliminado (ya no hace falta reintentar)"
-
-else
-  # Terraform falla por "Out of capacity" u otro error transitorio
-  EXIT_CODE=${PIPESTATUS[0]}
-  log "✗ Fallo (código $EXIT_CODE) — se reintentará en el próximo cron"
-  # Salimos con 0 para que cron no lo marque como error permanente
+if [ "$SUCCESS" -eq 0 ]; then
+  log "✗ Todos los shapes sin capacidad — se reintentará en el próximo cron"
   exit 0
 fi
