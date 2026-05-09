@@ -1,0 +1,35 @@
+# Configuracion con datos reales (IPs, puertos)
+config/env
+
+# Secreto compartido de mlvpn
+keys/
+
+# Configuraciones generadas y logs
+generated/
+
+# Compilacion de mlvpn
+build/
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfvars
+
+# macOS
+.DS_Store
+.DS_Store?
+
+# Playwright (screenshots y logs de automatización)
+.playwright-mcp/
+
+# Imágenes y capturas de trabajo
+*.png
+*.jpg
+
+# MCP config local
+.mcp.json
+
+# pre-commit
+.secrets.baseline

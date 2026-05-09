@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint y calidad
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck — análisis estático de scripts
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          severity: warning
+          scandir: '.'
+          additional_files: '*.sh tests/*.sh'
+
+      - name: Verificar que no hay claves privadas en el código
+        uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: detect-private-key --all-files
+
+  test:
+    name: Tests de verificación
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verificar sintaxis de todos los scripts bash
+        run: |
+          find . -name "*.sh" -not -path "./.git/*" | while read -r f; do
+            echo "Comprobando sintaxis: $f"
+            bash -n "$f" || exit 1
+          done
+
+      - name: Verificar que config/env.example tiene todas las variables requeridas
+        run: |
+          required=(VPS_IP VPS_USER VPS_SSH_PORT MLVPN_PORT_1 MLVPN_PORT_2
+                    TUN_VPS_IP TUN_MAC_IP TUN_MTU IFACE_IPHONE IFACE_PIXEL)
+          for var in "${required[@]}"; do
+            grep -q "^${var}=" config/env.example || {
+              echo "ERROR: ${var} no está en config/env.example"
+              exit 1
+            }
+            echo "✓ ${var}"
+          done
+
+      - name: Verificar que terraform.tfvars.example existe y tiene tenancy_ocid
+        run: |
+          test -f terraform/terraform.tfvars.example || { echo "ERROR: terraform.tfvars.example no existe"; exit 1; }
+          grep -q "tenancy_ocid" terraform/terraform.tfvars.example && echo "✓ tenancy_ocid en tfvars.example"
+
+      - name: Verificar que los archivos obligatorios IDLC existen
+        run: |
+          required=(README.md CONTRIBUTING.md CHANGELOG.md CODEOWNERS LICENSE
+                    .pre-commit-config.yaml requirements/REQ.md tests/verificar-setup.sh)
+          for f in "${required[@]}"; do
+            test -f "$f" && echo "✓ $f" || { echo "ERROR: $f no existe"; exit 1; }
+          done
+
+      - name: Verificar que .gitignore excluye archivos sensibles
+        run: |
+          sensitive=(config/env keys/ terraform/terraform.tfvars terraform/terraform.tfstate)
+          for entry in "${sensitive[@]}"; do
+            grep -q "$entry" .gitignore && echo "✓ $entry en .gitignore" || {
+              echo "ERROR: $entry no está en .gitignore"
+              exit 1
+            }
+          done
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.5"
+
+      - name: Validar Terraform (fmt y validate)
+        run: |
+          cd terraform
+          terraform fmt -check -recursive && echo "✓ terraform fmt OK"
+          terraform init -backend=false -input=false
+          terraform validate && echo "✓ terraform validate OK"

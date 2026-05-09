@@ -1,0 +1,14 @@
+# Copia este archivo a terraform.tfvars y rellena tus valores.
+# NUNCA subas terraform.tfvars a git (está en .gitignore).
+#
+# Cómo obtener los valores:
+#   1. Entra en cloud.oracle.com
+#   2. Haz clic en tu avatar (arriba a la derecha) → "My profile"
+#   3. tenancy_ocid: clic en tu nombre de usuario → "Tenancy: donjorgito" → copia el OCID
+#   4. user_ocid: en "My profile" → copia el OCID de usuario
+#   5. Para fingerprint + clave privada: ver instrucciones en docs/oracle-cloud-setup.md
+
+tenancy_ocid = "ocid1.tenancy.oc1..XXXXX"
+
+# Cambia a "VM.Standard.E2.1.Micro" si A1.Flex sigue sin capacidad
+# shape = "VM.Standard.A1.Flex"
