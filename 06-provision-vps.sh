@@ -78,8 +78,10 @@ fi
 
 # ─── Salvaguarda: solo shapes Always Free ─────────────────────────────────────
 # Orden de prueba: A1.Flex primero (ARM, más RAM), E2.1.Micro segundo (x86).
-# Ambos son Always Free permanente. Si uno tiene éxito, para.
+# Para cada shape se prueban las 3 ADs de la región (Madrid solo tiene 1, pero
+# si solo existe AD-0, los intentos con índice 1 y 2 fallan rápido y se saltan).
 SHAPES_TO_TRY=("VM.Standard.A1.Flex" "VM.Standard.E2.1.Micro")
+ADS_TO_TRY=(0 1 2)
 
 # Si la VM ya existe en el state de Terraform, no hace falta seguir
 if [ -f "$TF_DIR/terraform.tfstate" ]; then
@@ -122,42 +124,45 @@ log "=== Intento de provisión ==="
 
 SUCCESS=0
 for SHAPE in "${SHAPES_TO_TRY[@]}"; do
-  log "  Probando shape: $SHAPE"
+  for AD_INDEX in "${ADS_TO_TRY[@]}"; do
+    log "  Probando shape: $SHAPE, AD: $AD_INDEX"
 
-  if terraform apply -auto-approve -input=false -var="shape=${SHAPE}" >> "$LOG_FILE" 2>&1; then
-    SUCCESS=1
-    IP=$(terraform output -raw public_ip 2>/dev/null || echo "")
-    log "✓ VM creada con shape $SHAPE. IP pública: $IP"
+    if terraform apply -auto-approve -input=false \
+        -var="shape=${SHAPE}" -var="ad_index=${AD_INDEX}" >> "$LOG_FILE" 2>&1; then
+      SUCCESS=1
+      IP=$(terraform output -raw public_ip 2>/dev/null || echo "")
+      log "✓ VM creada con shape $SHAPE (AD $AD_INDEX). IP pública: $IP"
 
-    # Actualiza config/env con la IP del VPS
-    ENV_FILE="$SCRIPT_DIR/config/env"
-    if [ -n "$IP" ]; then
-      if [ ! -f "$ENV_FILE" ]; then
-        cp "$SCRIPT_DIR/config/env.example" "$ENV_FILE"
-        log "✓ config/env creado desde env.example"
+      # Actualiza config/env con la IP del VPS
+      ENV_FILE="$SCRIPT_DIR/config/env"
+      if [ -n "$IP" ]; then
+        if [ ! -f "$ENV_FILE" ]; then
+          cp "$SCRIPT_DIR/config/env.example" "$ENV_FILE"
+          log "✓ config/env creado desde env.example"
+        fi
+        sed -i '' "s/^VPS_IP=.*/VPS_IP=\"$IP\"/" "$ENV_FILE"
+        log "✓ config/env actualizado con VPS_IP=$IP"
+        log "  ⚠ Revisa IFACE_IPHONE e IFACE_PIXEL en config/env (dependen de tu Mac)"
       fi
-      sed -i '' "s/^VPS_IP=.*/VPS_IP=\"$IP\"/" "$ENV_FILE"
-      log "✓ config/env actualizado con VPS_IP=$IP"
-      log "  ⚠ Revisa IFACE_IPHONE e IFACE_PIXEL en config/env (dependen de tu Mac)"
+
+      notify "¡VM creada ($SHAPE / AD $AD_INDEX)! IP: $IP — Ejecuta ./02-setup-vps.sh"
+
+      log ""
+      log "╔══════════════════════════════════════════════╗"
+      log "║  ✓  VM CREADA CON ÉXITO                      ║"
+      log "║  Shape: $SHAPE (AD $AD_INDEX)"
+      log "║  IP: $IP"
+      log "║  Siguiente paso: ./02-setup-vps.sh            ║"
+      log "╚══════════════════════════════════════════════╝"
+      log ""
+
+      remove_cron
+      log "✓ Cron eliminado (ya no hace falta reintentar)"
+      break 2  # ← Sale de ambos bucles
+    else
+      log "  ✗ $SHAPE/AD-$AD_INDEX sin capacidad o AD no disponible — probando siguiente..."
     fi
-
-    notify "¡VM creada ($SHAPE)! IP: $IP — Ejecuta ./02-setup-vps.sh"
-
-    log ""
-    log "╔══════════════════════════════════════════════╗"
-    log "║  ✓  VM CREADA CON ÉXITO                      ║"
-    log "║  Shape: $SHAPE"
-    log "║  IP: $IP"
-    log "║  Siguiente paso: ./02-setup-vps.sh            ║"
-    log "╚══════════════════════════════════════════════╝"
-    log ""
-
-    remove_cron
-    log "✓ Cron eliminado (ya no hace falta reintentar)"
-    break  # ← Para aquí, no prueba el siguiente shape
-  else
-    log "  ✗ $SHAPE sin capacidad — probando siguiente shape..."
-  fi
+  done
 done
 
 if [ "$SUCCESS" -eq 0 ]; then

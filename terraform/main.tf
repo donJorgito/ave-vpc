@@ -112,7 +112,7 @@ resource "oci_core_subnet" "main" {
 
 resource "oci_core_instance" "server" {
   compartment_id      = var.tenancy_ocid
-  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[var.ad_index].name
   display_name        = "ave-vpc-server"
   shape               = var.shape
 
