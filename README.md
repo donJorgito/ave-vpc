@@ -116,6 +116,11 @@ Los scripts instalan automáticamente el resto de dependencias (libev, libsodium
 - Ubuntu 24.04 LTS, IP pública IPv4
 - Puertos UDP 5080–5082 abiertos (Terraform los configura automáticamente)
 
+> ⚠️ **Aviso**: Las VMs gratuitas de Oracle Cloud (especialmente las ARM A1.Flex)
+> tienen muy poca disponibilidad. Es habitual esperar días o semanas hasta que
+> Oracle asigne capacidad, y en algunas regiones nunca llega. Si no quieres
+> esperar, usa directamente la **Opción B** (Raspberry Pi).
+
 **Opción B — Raspberry Pi en casa (~167€ una sola vez):**
 - Raspberry Pi 4 (4GB) + carcasa pasiva + microSD + fuente USB-C
 - Router con port forwarding y DDNS (el ZTE F6640 de Yoigo los tiene nativos)
@@ -141,7 +146,13 @@ cp config/env.example config/env
 
 ### 3. Provisionar el VPS automáticamente
 
-Los servidores ARM gratuitos de Oracle tienen lista de espera. El script lo intenta cada hora hasta conseguirlo (se para solo cuando lo logra).
+> ⚠️ **Esto puede tardar días o no conseguirse nunca.** Oracle limita la
+> disponibilidad de las VMs gratuitas (sobre todo ARM) por región. El script
+> reintenta automáticamente cada hora, pero si tras varios días no hay suerte,
+> considera la Opción B (Raspberry Pi) o un VPS de pago desde €2/mes en
+> Vultr, IONOS o Hetzner.
+
+El script lo intenta cada hora hasta conseguirlo (se para solo cuando lo logra).
 
 Primero configura las credenciales OCI siguiendo [`docs/oracle-cloud-setup.md`](docs/oracle-cloud-setup.md), luego:
 
