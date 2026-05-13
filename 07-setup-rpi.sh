@@ -24,7 +24,7 @@
 #     (Internet -> Security -> Port Forwarding)
 #
 # REQUISITOS PREVIOS:
-#   - RPi con Ubuntu Server 24.04, SSH activado con tu clave publica
+#   - RPi con Ubuntu Server 26.04 LTS, SSH activado con tu clave publica
 #   - RPi conectada por cable ethernet al router
 #   - 01-generar-secreto.sh ejecutado
 #   - config/env con RPi_IP, RPi_USER, RPi_SSH_PORT rellenados
@@ -32,7 +32,7 @@
 #   - DDNS configurado en el router con el hostname que usaras como VPS_IP
 #
 # DESPUES DE ESTE SCRIPT:
-#   - Pon VPS_IP=tu-hostname.duckdns.org en config/env
+#   - Pon VPS_IP=tu-hostname.dedyn.io en config/env
 #   - Ejecuta ./03-setup-mac.sh para regenerar la config del Mac
 #   - Ejecuta ./04-conectar.sh en el AVE como siempre
 ###############################################################################
@@ -231,6 +231,6 @@ echo "  Proximos pasos:"
 echo "  1. Asegurate de que el DDNS esta configurado en el router ZTE"
 echo "     (Internet -> DDNS) — ver docs/rpi-setup.md"
 echo "  2. Actualiza VPS_IP en config/env con tu hostname DDNS:"
-echo "     VPS_IP=\"tu-hostname.duckdns.org\""
+echo "     VPS_IP=\"tu-hostname.dedyn.io\""
 echo "  3. Ejecuta ./03-setup-mac.sh para regenerar la config del Mac"
 echo "  4. En el AVE: ./04-conectar.sh (igual que siempre)"

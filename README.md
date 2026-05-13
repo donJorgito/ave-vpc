@@ -69,7 +69,7 @@ mlvpn distribuye los paquetes entre los dos enlaces activos simultáneamente. El
   10.10.10.2 ── mlvpn ─ UDP:5080 ──│→ port forward → RPi 4       │── internet
                        ─ UDP:5081 ──│→ port forward │ 10.10.10.1  │   (fibra)
                             │       │               └─────────────│
-                   ┌────────┴────────┐  tu-hostname.duckdns.org   │
+                   ┌────────┴────────┐  tu-hostname.dedyn.io   │
               iPhone (WiFi)   Pixel (USB)   (DDNS → IP dinámica)  │
               Movistar          Yoigo  └──────────────────────────┘
 ```
@@ -113,7 +113,7 @@ Los scripts instalan automáticamente el resto de dependencias (libev, libsodium
 
 **Opción A — Oracle Cloud (gratis permanente):**
 - Cuenta en [Oracle Cloud Free Tier](https://cloud.oracle.com)
-- Ubuntu 24.04 LTS, IP pública IPv4
+- Ubuntu 26.04 LTS, IP pública IPv4
 - Puertos UDP 5080–5082 abiertos (Terraform los configura automáticamente)
 
 > ⚠️ **Aviso**: Las VMs gratuitas de Oracle Cloud (especialmente las ARM A1.Flex)
@@ -226,7 +226,7 @@ lista de la compra, setup headless sin monitor, configuración del router y DDNS
 Pasos resumidos:
 
 ```bash
-# 1. Grabar Ubuntu Server 24.04 en la microSD con Raspberry Pi Imager
+# 1. Grabar Ubuntu Server 26.04 LTS en la microSD con Raspberry Pi Imager
 #    (activar SSH con tu clave pública en el Imager antes de grabar)
 
 # 2. Configurar en el router:
@@ -234,14 +234,15 @@ Pasos resumidos:
 #    - DDNS: apuntar un hostname a tu IP pública dinámica
 
 # 3. Rellenar config/env con la IP local de la RPi
-#    RPi_IP="192.168.1.xxx"
+#    RPi_IP="192.168.1.XXX"
+#    RPi_USER="TU_USUARIO"
 
 # 4. Generar secreto y configurar la RPi
 ./01-generar-secreto.sh
 ./07-setup-rpi.sh
 
 # 5. Actualizar VPS_IP con el hostname DDNS y configurar el Mac
-#    VPS_IP="tu-hostname.duckdns.org"  (en config/env)
+#    VPS_IP="tu-hostname.dedyn.io"  (en config/env)
 ./03-setup-mac.sh
 ```
 

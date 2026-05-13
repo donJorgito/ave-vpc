@@ -5,6 +5,25 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.4.0] — 2026-05-13
+
+### Añadido
+- `docs/rpi-setup.md` — guía actualizada con deSEC como proveedor DDNS recomendado (protocolo DynDNS2, nativo en router ZTE F6640)
+- Soporte deSEC (`*.dedyn.io`) en documentación: alternativa a No-IP, gratuita y privada
+
+### Cambiado
+- SO objetivo para Raspberry Pi: **Ubuntu Server 26.04 LTS** (antes 24.04 LTS)
+- `07-setup-rpi.sh` — actualizado a Ubuntu 26.04 LTS en comentarios y mensajes de salida
+- `docs/rpi-setup.md` — reescrito: Imager headless con Ubuntu 26.04, port forwarding tres puertos (5080-5082), DDNS con deSEC
+- `config/env.example` — ejemplo de `VPS_IP` actualizado a `*.dedyn.io`
+- `terraform/terraform.tfvars.example` — añadido campo `ssh_public_key` con placeholder
+- `terraform/variables.tf` — eliminado default hardcodeado de `ssh_public_key`; ahora se define en `terraform.tfvars`
+- `requirements/REQ.md` — REQ-VPS-01 actualizado a Ubuntu 26.04 LTS
+- `README.md` — Ubuntu 26.04 LTS, deSEC/dedyn.io, puerto 5082 añadido al port forwarding
+
+### Seguridad
+- Eliminada clave pública SSH hardcodeada de `terraform/variables.tf` (historial reescrito con `git filter-repo`)
+
 ## [0.3.0] — 2026-05-09
 
 ### Añadido

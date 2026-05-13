@@ -16,7 +16,7 @@ abiertos en el router y sale a internet a través de la fibra óptica.
 | **Total** | | **~167€** |
 
 > La carcasa Geekworm es de aluminio macizo y actúa como disipador térmico
-> pasivo. Sin ventilador, sin ruido. Verificado con 2.627 reseñas en Amazon.
+> pasivo. Sin ventilador, sin ruido.
 
 ## Arquitectura con RPi en casa
 
@@ -26,126 +26,117 @@ abiertos en el router y sale a internet a través de la fibra óptica.
     │ iPhone (UDP 5080)            │         │
     │ Pixel  (UDP 5081)            │    port forwarding
     └──────── internet ────────────┘    UDP 5080, 5081 → RPi
-                                        DDNS: tu-hostname.duckdns.org
+                                        DDNS: tu-hostname.dedyn.io
 ```
 
-El Mac en el AVE se conecta al hostname DDNS que apunta a tu IP de casa.
-El router reenvía los paquetes UDP a la RPi. La RPi los reensambla con
-mlvpn y los reenvía a internet a través de la fibra.
+El Mac en el AVE se conecta al hostname DDNS que siempre apunta a la IP
+pública de casa. El router reenvía los paquetes UDP a la RPi.
 
 ## Paso 1: Grabar la microSD (headless, sin monitor)
 
 Instala **Raspberry Pi Imager** en el Mac:
-```
+```bash
 brew install --cask raspberry-pi-imager
 ```
-O descarga desde https://www.raspberrypi.com/software/
 
 En el Imager:
-1. **OS**: Ubuntu Server 24.04 LTS (64-bit) — en la sección "Other general-purpose OS"
-2. **Storage**: tu microSD
-3. Haz clic en el icono de engranaje (⚙) **antes de grabar** y configura:
-   - Hostname: `ave-vpc-rpi`
-   - Usuario: `ubuntu` / contraseña (la que quieras, solo por si acaso)
+1. **Dispositivo**: Raspberry Pi 4
+2. **OS**: Other general-purpose OS → Ubuntu → **Ubuntu Server 26.04 LTS (64-bit)**
+3. **Storage**: tu microSD
+4. Haz clic en **Editar ajustes** (⚙) antes de grabar:
+   - Hostname: el que quieras (ej. `mi-rpi`)
+   - Usuario: el que quieras (ej. `ubuntu`)
    - Activar SSH: "Allow public-key authentication only"
-   - Pega tu clave pública SSH (la misma que usas para Oracle Cloud)
+   - Pega tu clave pública SSH (`cat ~/.ssh/id_rsa.pub` o `~/.ssh/id_ed25519.pub`)
+   - No configurar WiFi (va por Ethernet)
 
-Graba. Mete la tarjeta en la RPi, conecta el cable de red al router, enchúfala.
+Graba. Mete la tarjeta en la RPi, conecta el cable Ethernet al router, enchúfala.
 
-## Paso 2: Buscar la IP de la RPi en el router
+## Paso 2: Asignar IP fija a la RPi
 
-Abre el router en http://192.168.1.1 → Home → LAN Devices (o WLAN Devices).
-Busca `ave-vpc-rpi` o una MAC nueva. Anota la IP (ej. `192.168.1.150`).
+La RPi debe tener siempre la misma IP local para que el port forwarding funcione.
+Opciones:
 
-Verifica que puedes entrar:
+- **Reserva DHCP por MAC** en el router (Home → LAN Devices, busca la nueva MAC)
+- **IP estática** en la RPi tras el primer arranque con `sudo nmtui`
+
+Verifica que puedes entrar (espera ~1 min tras enchufar):
 ```bash
-ssh ubuntu@192.168.1.150
+ssh TU_USUARIO@192.168.1.XXX
+# o por hostname mDNS:
+ssh TU_USUARIO@mi-rpi.local
 ```
 
 ## Paso 3: Port Forwarding en el router ZTE F6640
 
 En el router: **Internet → Security → Port Forwarding**
 
-Añade dos reglas:
+Añade tres reglas:
 
 | Nombre | Protocolo | Puerto externo | IP interna | Puerto interno |
 |---|---|---|---|---|
-| mlvpn-iphone | UDP | 5080 | 192.168.1.150 | 5080 |
-| mlvpn-pixel | UDP | 5081 | 192.168.1.150 | 5081 |
+| mlvpn-5080 | UDP | 5080 | IP_LOCAL_RPi | 5080 |
+| mlvpn-5081 | UDP | 5081 | IP_LOCAL_RPi | 5081 |
+| mlvpn-5082 | UDP | 5082 | IP_LOCAL_RPi | 5082 |
 
-> Reemplaza `192.168.1.150` con la IP real de tu RPi.
-> Conviene asignarle una IP fija: en el router busca "DHCP Static" o reserva
-> por MAC para que siempre tenga la misma IP.
+> Sustituye `IP_LOCAL_RPi` por la IP fija que hayas asignado (ej. `192.168.1.101`).
 
-## Paso 4: DDNS — resolver el problema de IP dinámica
+## Paso 4: DDNS
 
-La fibra de casa tiene IP pública **dinámica**: puede cambiar cuando el
-router se reinicia o el ISP la renueva. El Mac en el AVE necesita un
-hostname fijo que siempre apunte a tu IP actual.
+La fibra de casa tiene IP pública dinámica. Un hostname DDNS mantiene siempre
+un nombre fijo que apunta a tu IP actual.
 
-**Cómo funciona DDNS**: un cliente (el router o un servicio en la RPi)
-detecta cuándo cambia tu IP pública y actualiza automáticamente el registro
-DNS del hostname. Así `tu-casa.duckdns.org` siempre apunta a tu IP actual,
-aunque cambie cada semana.
+### Opción A: deSEC (recomendado, gratuito y privado)
 
-### Opción A: DDNS nativo del router ZTE F6640 (recomendada)
+[deSEC](https://desec.io) ofrece subdominios `*.dedyn.io` gratuitos con soporte
+para el protocolo DynDNS2 que el router ZTE F6640 soporta nativamente.
 
-El ZTE F6640 tiene soporte DDNS integrado. Ve a **Internet → DDNS**.
+1. Regístrate en https://desec.io y crea un subdominio `*.dedyn.io`
+2. En el router: **Internet → DDNS**
+   - Provider: `DynDNS`
+   - Provider URL: `https://update.dedyn.io/`
+   - Username: tu subdominio completo (`tu-hostname.dedyn.io`)
+   - Password: tu token de deSEC
+   - Host Name: tu subdominio completo
+3. Activa DDNS y aplica
 
-1. Registra un hostname gratuito en uno de los proveedores compatibles:
-   - **DuckDNS** (https://www.duckdns.org) — más sencillo, gratuito
-   - **No-IP** (https://www.noip.com) — también gratuito
-2. En el router, introduce el hostname y el token/contraseña del proveedor
-3. El router actualiza automáticamente la IP cada vez que cambia
+### Opción B: No-IP (soportado nativamente por el router)
 
-**Ventaja sobre otras opciones**: funciona aunque la RPi esté apagada o
-reiniciándose, porque es el propio router quien hace las actualizaciones.
+[No-IP](https://www.noip.com) está en la lista de proveedores del router ZTE.
+Regístrate, crea un hostname y configúralo directamente con el proveedor `No-IP`.
 
-### Opción B: ddclient en la RPi (alternativa)
-
-`ddclient` es el cliente DDNS estándar de Linux, disponible en los repos
-de Ubuntu desde hace décadas. Soporta DuckDNS, No-IP, Cloudflare y muchos más.
-
+Verifica que el hostname resuelve:
 ```bash
-sudo apt install ddclient
+dig tu-hostname.dedyn.io +short
+# Debe devolver la IP pública de casa
 ```
-
-Se configura en `/etc/ddclient.conf`. Ejemplo para DuckDNS:
-```
-protocol=duckdns
-login=token
-password=TU_TOKEN_AQUI
-tu-hostname
-```
-
-Arranca como servicio systemd automáticamente. Útil si el router no tiene
-soporte DDNS o prefieres tener el control en la RPi.
 
 ## Paso 5: Configurar y ejecutar el script de setup
 
 Actualiza `config/env` con los valores de la RPi:
 
 ```bash
-# RPi (añadir estas variables)
-RPi_IP="192.168.1.150"      # IP local durante el setup
-RPi_USER="ubuntu"
+RPi_IP="192.168.1.XXX"     # IP local de la RPi
+RPi_USER="TU_USUARIO"      # usuario configurado en el Imager
 RPi_SSH_PORT="22"
 ```
 
 Ejecuta el script desde el Mac:
 ```bash
+./01-generar-secreto.sh   # si no existe ya keys/mlvpn.secret
 ./07-setup-rpi.sh
 ```
 
-El script instala mlvpn (tarda 2-3 min en compilar en ARM), configura el
-servidor y activa el servicio systemd.
+El script instala mlvpn (tarda 2-3 min en compilar en ARM), configura NAT,
+IP forwarding y el servicio systemd.
 
 ## Paso 6: Configurar el Mac para conectar a la RPi
 
-Una vez que el DDNS esté funcionando, cambia `VPS_IP` en `config/env`:
+Cambia `VPS_IP` en `config/env`:
 
 ```bash
-VPS_IP="tu-hostname.duckdns.org"
+VPS_IP="tu-hostname.dedyn.io"
+VPS_USER="TU_USUARIO"
 ```
 
 Regenera la configuración del Mac:
@@ -153,8 +144,7 @@ Regenera la configuración del Mac:
 ./03-setup-mac.sh
 ```
 
-A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con
-el VPS de Oracle Cloud.
+A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con Oracle Cloud.
 
 ## Ventajas e inconvenientes frente a Oracle Cloud
 
@@ -165,5 +155,5 @@ el VPS de Oracle Cloud.
 | Ancho de banda | Fibra (~600 Mbps) | Limitado (~480 Mbps) |
 | Latencia | Baja (tu casa) | Baja (Madrid) |
 | Disponibilidad | Depende de luz y router | Alta (Oracle SLA) |
-| Setup | Más pasos (router, DDNS) | Automatizado con Terraform |
+| Setup | Router + DDNS | Automatizado con Terraform |
 | Control | Total | Limitado |

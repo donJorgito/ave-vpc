@@ -26,7 +26,7 @@
 
 | ID | Requisito | Detalle |
 |----|-----------|---------|
-| REQ-VPS-01 | Sistema operativo | Ubuntu 24.04 LTS |
+| REQ-VPS-01 | Sistema operativo | Ubuntu 26.04 LTS |
 | REQ-VPS-02 | CPU mínima | 1 vCPU |
 | REQ-VPS-03 | RAM mínima | 512 MB |
 | REQ-VPS-04 | Disco mínimo | 10 GB |
