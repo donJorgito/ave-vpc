@@ -10,12 +10,13 @@
 #   un VPS en la nube.
 #
 # QUE INSTALA/CONFIGURA EN LA RPi:
-#   1. mlvpn (compilado desde fuente)
+#   1. mlvpn (compilado desde fuente con libpcap-dev, libsodium-dev, libev-dev)
 #   2. /etc/mlvpn/mlvpn.conf      — configuracion del servidor
 #   3. /etc/mlvpn/mlvpn.secret    — secreto compartido
 #   4. /etc/mlvpn/mlvpn_updown.sh — configura red al conectar/desconectar
-#   5. IP forwarding + NAT         — para reenviar trafico a internet
-#   6. Servicio systemd            — mlvpn arranca con la RPi
+#   5. /nonexistent               — directorio chroot para usuario nobody
+#   6. IP forwarding + NAT         — para reenviar trafico a internet
+#   7. Servicio systemd            — mlvpn arranca con la RPi (--user nobody)
 #
 # LO QUE NO HACE ESTE SCRIPT (se configura fuera):
 #   - DDNS: lo gestiona el router ZTE F6640 de forma nativa
@@ -93,7 +94,7 @@ echo "  [RPi] Instalando dependencias..."
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
     build-essential pkg-config autoconf automake libtool \
-    libev-dev libsodium-dev git
+    libev-dev libsodium-dev libpcap-dev git
 
 # =====================================================================
 # Paso 2: Compilar mlvpn
@@ -174,7 +175,15 @@ UPDOWN
 sudo chmod 755 /etc/mlvpn/mlvpn_updown.sh
 
 # =====================================================================
-# Paso 5: IP forwarding
+# Paso 5: Directorio de chroot para mlvpn
+# mlvpn hace chroot al home del usuario nobody (/nonexistent en Ubuntu).
+# Sin este directorio el servicio falla al arrancar.
+# =====================================================================
+sudo mkdir -p /nonexistent
+sudo chmod 755 /nonexistent
+
+# =====================================================================
+# Paso 7: IP forwarding
 # Sin esto el kernel descarta los paquetes en lugar de reenviarlos.
 # =====================================================================
 echo "  [RPi] Activando IP forwarding..."
@@ -183,7 +192,7 @@ echo "net.ipv4.ip_forward = 1" | sudo tee /etc/sysctl.d/99-mlvpn.conf > /dev/nul
 sudo sysctl -p /etc/sysctl.d/99-mlvpn.conf 2>/dev/null || true
 
 # =====================================================================
-# Paso 6: Firewall — SSH + puertos mlvpn
+# Paso 8: Firewall — SSH + puertos mlvpn
 # =====================================================================
 echo "  [RPi] Configurando firewall (ufw)..."
 sudo ufw --force enable
@@ -193,7 +202,7 @@ sudo ufw allow "${MLVPN_PORT_2}/udp"
 sudo ufw reload
 
 # =====================================================================
-# Paso 7: Servicio systemd — mlvpn arranca automaticamente con la RPi
+# Paso 9: Servicio systemd — mlvpn arranca automaticamente con la RPi
 # =====================================================================
 echo "  [RPi] Creando servicio systemd..."
 
@@ -205,7 +214,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/sbin/mlvpn --config /etc/mlvpn/mlvpn.conf --name mlvpn0
+ExecStart=/usr/local/sbin/mlvpn --config /etc/mlvpn/mlvpn.conf --name mlvpn0 --user nobody
 Restart=always
 RestartSec=5
 

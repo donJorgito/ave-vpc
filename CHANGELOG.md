@@ -5,6 +5,19 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.5.0] — 2026-05-15
+
+### Añadido
+- `docs/rpi-setup.md` — sección "Notas de compatibilidad con Ubuntu 26.04 LTS" con las diferencias descubiertas al instalar en producción
+- `docs/rpi-setup.md` — advertencia de CGNAT con instrucciones para verificar y solicitar retirada al ISP
+- `README.md` — advertencia de CGNAT en la sección de Opción B (Raspberry Pi)
+
+### Corregido
+- `07-setup-rpi.sh` — añadida dependencia `libpcap-dev` (requerida por mlvpn en Ubuntu 26.04)
+- `07-setup-rpi.sh` — servicio systemd ahora incluye `--user nobody` (mlvpn rechaza arrancar como root sin este flag)
+- `07-setup-rpi.sh` — añadida creación de `/nonexistent` (directorio chroot del usuario nobody en Ubuntu; sin él mlvpn falla al arrancar)
+- `07-setup-rpi.sh` — numeración de pasos actualizada (1-9)
+
 ## [0.4.0] — 2026-05-13
 
 ### Añadido

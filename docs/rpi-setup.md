@@ -32,6 +32,12 @@ abiertos en el router y sale a internet a través de la fibra óptica.
 El Mac en el AVE se conecta al hostname DDNS que siempre apunta a la IP
 pública de casa. El router reenvía los paquetes UDP a la RPi.
 
+> ⚠️ **Requisito previo: IP pública sin CGNAT**
+> Muchos ISPs residenciales usan CGNAT (la IP WAN del router empieza por `100.x.x.x`).
+> Con CGNAT el port forwarding no funciona — el tráfico entrante nunca llega al router.
+> Verifica la IP WAN en el router (Internet → Status → WAN IP Address).
+> Si empieza por `100.`, contacta con tu ISP y pide la retirada del CGNAT (suele ser gratuito).
+
 ## Paso 1: Grabar la microSD (headless, sin monitor)
 
 Instala **Raspberry Pi Imager** en el Mac:
@@ -145,6 +151,21 @@ Regenera la configuración del Mac:
 ```
 
 A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con Oracle Cloud.
+
+## Notas de compatibilidad con Ubuntu 26.04 LTS
+
+El script `07-setup-rpi.sh` está probado en Ubuntu Server 26.04 LTS ARM64.
+Diferencias respecto a versiones anteriores:
+
+- **`libpcap-dev` requerido**: Ubuntu 26.04 exige `libpcap-dev` para compilar mlvpn
+  (antes era opcional). El script lo instala automáticamente.
+- **mlvpn requiere `--user nobody`**: mlvpn rechaza arrancar como root sin este flag.
+  El script configura systemd con `--user nobody` automáticamente.
+- **Directorio chroot `/nonexistent`**: mlvpn hace chroot al home del usuario `nobody`,
+  que en Ubuntu es `/nonexistent`. El script crea este directorio automáticamente.
+- **Sin NetworkManager**: Ubuntu Server 26.04 usa `systemd-networkd` por defecto,
+  no NetworkManager. Para configurar IP estática usar `sudo nmtui` si lo instalas
+  o editar `/etc/systemd/network/`. Lo más sencillo: reserva DHCP por MAC en el router.
 
 ## Ventajas e inconvenientes frente a Oracle Cloud
 

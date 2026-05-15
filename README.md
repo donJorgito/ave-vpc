@@ -123,8 +123,14 @@ Los scripts instalan automáticamente el resto de dependencias (libev, libsodium
 
 **Opción B — Raspberry Pi en casa (~167€ una sola vez):**
 - Raspberry Pi 4 (4GB) + carcasa pasiva + microSD + fuente USB-C
-- Router con port forwarding y DDNS (el ZTE F6640 de Yoigo los tiene nativos)
+- Router con port forwarding y DDNS
 - Ver lista de la compra y guía completa en [`docs/rpi-setup.md`](docs/rpi-setup.md)
+
+> ⚠️ **CGNAT**: Muchos ISPs residenciales en España usan CGNAT (la IP WAN del router
+> empieza por `100.x.x.x`), lo que impide recibir conexiones desde internet aunque
+> configures port forwarding. Verifica antes de montar la RPi: si `ip route show default`
+> en el router muestra una gateway `100.x.x.x`, tienes CGNAT. Solución: pide a tu ISP
+> que te retire el CGNAT (muchos lo hacen gratis con una llamada de soporte).
 
 ---
 
