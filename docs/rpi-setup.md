@@ -159,10 +159,10 @@ Diferencias respecto a versiones anteriores:
 
 - **`libpcap-dev` requerido**: Ubuntu 26.04 exige `libpcap-dev` para compilar mlvpn
   (antes era opcional). El script lo instala automáticamente.
-- **mlvpn requiere `--user nobody`**: mlvpn rechaza arrancar como root sin este flag.
-  El script configura systemd con `--user nobody` automáticamente.
-- **Directorio chroot `/nonexistent`**: mlvpn hace chroot al home del usuario `nobody`,
-  que en Ubuntu es `/nonexistent`. El script crea este directorio automáticamente.
+- **mlvpn requiere `--user <usuario>`**: mlvpn rechaza arrancar como root sin este flag.
+  El script crea un usuario de sistema dedicado `mlvpn` y configura systemd con `--user mlvpn`.
+- **Directorio chroot `/var/lib/mlvpn`**: mlvpn hace chroot al home del usuario con el que corre.
+  El script crea el usuario `mlvpn` con home en `/var/lib/mlvpn` y los permisos correctos.
 - **Sin NetworkManager**: Ubuntu Server 26.04 usa `systemd-networkd` por defecto,
   no NetworkManager. Para configurar IP estática usar `sudo nmtui` si lo instalas
   o editar `/etc/systemd/network/`. Lo más sencillo: reserva DHCP por MAC en el router.

@@ -14,9 +14,9 @@
 #   2. /etc/mlvpn/mlvpn.conf      — configuracion del servidor
 #   3. /etc/mlvpn/mlvpn.secret    — secreto compartido
 #   4. /etc/mlvpn/mlvpn_updown.sh — configura red al conectar/desconectar
-#   5. /nonexistent               — directorio chroot para usuario nobody
+#   5. usuario mlvpn (system) + /var/lib/mlvpn (chroot dir)
 #   6. IP forwarding + NAT         — para reenviar trafico a internet
-#   7. Servicio systemd            — mlvpn arranca con la RPi (--user nobody)
+#   7. Servicio systemd            — mlvpn arranca con la RPi (--user mlvpn)
 #
 # LO QUE NO HACE ESTE SCRIPT (se configura fuera):
 #   - DDNS: lo gestiona el router ZTE F6640 de forma nativa
@@ -175,12 +175,15 @@ UPDOWN
 sudo chmod 755 /etc/mlvpn/mlvpn_updown.sh
 
 # =====================================================================
-# Paso 5: Directorio de chroot para mlvpn
-# mlvpn hace chroot al home del usuario nobody (/nonexistent en Ubuntu).
-# Sin este directorio el servicio falla al arrancar.
+# Paso 5: Usuario dedicado mlvpn y directorio de chroot
+# mlvpn hace chroot al home del usuario con el que corre. Usar un usuario
+# dedicado en lugar de nobody mejora la trazabilidad en logs y auditoría.
 # =====================================================================
-sudo mkdir -p /nonexistent
-sudo chmod 755 /nonexistent
+sudo useradd --system --no-create-home --home-dir /var/lib/mlvpn \
+    --shell /usr/sbin/nologin mlvpn 2>/dev/null || true
+sudo mkdir -p /var/lib/mlvpn
+sudo chown mlvpn:mlvpn /var/lib/mlvpn
+sudo chmod 750 /var/lib/mlvpn
 
 # =====================================================================
 # Paso 7: IP forwarding
@@ -214,7 +217,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/sbin/mlvpn --config /etc/mlvpn/mlvpn.conf --name mlvpn0 --user nobody
+ExecStart=/usr/local/sbin/mlvpn --config /etc/mlvpn/mlvpn.conf --name mlvpn0 --user mlvpn
 Restart=always
 RestartSec=5
 

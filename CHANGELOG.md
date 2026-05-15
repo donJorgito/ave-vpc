@@ -14,8 +14,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Corregido
 - `07-setup-rpi.sh` — añadida dependencia `libpcap-dev` (requerida por mlvpn en Ubuntu 26.04)
-- `07-setup-rpi.sh` — servicio systemd ahora incluye `--user nobody` (mlvpn rechaza arrancar como root sin este flag)
-- `07-setup-rpi.sh` — añadida creación de `/nonexistent` (directorio chroot del usuario nobody en Ubuntu; sin él mlvpn falla al arrancar)
+- `07-setup-rpi.sh` — usuario de sistema dedicado `mlvpn` con home `/var/lib/mlvpn` (mejor que `nobody` para trazabilidad)
+- `07-setup-rpi.sh` — servicio systemd usa `--user mlvpn` (mlvpn rechaza arrancar como root sin este flag)
+- `07-setup-rpi.sh` — chroot a `/var/lib/mlvpn` (home del usuario mlvpn; mlvpn usa el home del usuario como jaula)
 - `07-setup-rpi.sh` — numeración de pasos actualizada (1-9)
 
 ## [0.4.0] — 2026-05-13
