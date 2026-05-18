@@ -53,8 +53,9 @@ else
 fi
 
 # REQ-SW-06 / REQ-SW-07
-if command -v mlvpn &>/dev/null; then
-  ok "mlvpn instalado: $(mlvpn --version 2>&1 | head -1)"
+MLVPN_BIN=$(command -v mlvpn 2>/dev/null || echo "/usr/local/sbin/mlvpn")
+if [[ -x "${MLVPN_BIN}" ]]; then
+  ok "mlvpn instalado: ${MLVPN_BIN}"
 else
   warn "mlvpn no instalado — se instalará al ejecutar ./03-setup-mac.sh"
 fi
@@ -109,9 +110,9 @@ if [[ -n "${VPS_IP:-}" && "${VPS_IP}" != "203.0.113.50" ]]; then
 
   if ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no \
        -p "${VPS_SSH_PORT:-22}" "${VPS_USER:-ubuntu}@${VPS_IP}" "exit" &>/dev/null 2>&1; then
-    ok "SSH al VPS: OK"
+    ok "SSH al VPS (puerto ${VPS_SSH_PORT:-22}): OK"
   else
-    warn "SSH al VPS: no accesible (normal si el VPS aún no está configurado)"
+    warn "SSH al VPS: no accesible en puerto ${VPS_SSH_PORT:-22} (normal si aún no configurado)"
   fi
 else
   warn "VPS_IP no configurada — omitiendo tests de conectividad"

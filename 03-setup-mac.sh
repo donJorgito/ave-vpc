@@ -103,8 +103,8 @@ done
 # No esta en Homebrew, asi que lo compilamos desde el repo oficial.
 # Es un binario pequeño en C, tarda ~30 segundos.
 # =====================================================================
-if command -v mlvpn &>/dev/null; then
-    echo "=> mlvpn ya esta instalado: $(mlvpn --version 2>&1 | head -1)"
+if command -v mlvpn &>/dev/null || [[ -x /usr/local/sbin/mlvpn ]]; then
+    echo "=> mlvpn ya esta instalado: $(/usr/local/sbin/mlvpn --version 2>&1 | head -1)"
 else
     echo "=> Compilando mlvpn desde fuente..."
     mkdir -p "${BUILD_DIR}"
