@@ -109,6 +109,10 @@ El Mac se conecta al hostname DDNS (siempre actualizado por el router), que apun
 
 Los scripts instalan automáticamente el resto de dependencias (libev, libsodium, etc.).
 
+> **Nota macOS**: mlvpn compila desde fuente. El script `03-setup-mac.sh` aplica
+> automáticamente los workarounds necesarios para macOS (incompatibilidad de `strnvis`
+> en `setproctitle.c`). No se requiere ninguna acción manual.
+
 ### Servidor mlvpn (elige uno)
 
 **Opción A — Oracle Cloud (gratis permanente):**

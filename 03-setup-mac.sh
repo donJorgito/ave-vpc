@@ -115,6 +115,8 @@ else
     fi
 
     cd MLVPN
+    # Limpiar compilacion anterior si existe
+    [[ -f Makefile ]] && make clean 2>/dev/null || true
     ./autogen.sh
 
     # En macOS, pkg-config necesita saber donde Homebrew instala las libs
@@ -125,7 +127,9 @@ else
     LDFLAGS="-L$(brew --prefix libev)/lib -L$(brew --prefix libsodium)/lib"
     export LDFLAGS
 
-    ./configure --prefix=/usr/local --sysconfdir=/etc
+    # ac_cv_func_strnvis=no: macOS tiene strnvis() pero con firma incompatible
+    # con la que usa setproctitle.c de mlvpn — forzamos el fallback interno.
+    ac_cv_func_strnvis=no ./configure --prefix=/usr/local --sysconfdir=/etc
     make -j"$(sysctl -n hw.ncpu)"
     sudo make install
 

@@ -5,6 +5,15 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.6.0] — 2026-05-18
+
+### Corregido
+- `03-setup-mac.sh` — añadido `ac_cv_func_strnvis=no` al configure: macOS detecta
+  `strnvis()` pero con firma incompatible con la usada en `setproctitle.c` de mlvpn,
+  provocando errores de compilación. Forzar el fallback interno resuelve el problema.
+- `03-setup-mac.sh` — sustituido borrado de directorio de build por `make clean`
+  (más seguro y semánticamente correcto)
+
 ## [0.5.0] — 2026-05-15
 
 ### Añadido
