@@ -41,6 +41,15 @@
 ###############################################################################
 set -euo pipefail
 
+# No ejecutar como root — brew no funciona como root.
+# El script usa sudo internamente donde hace falta.
+if [[ "${EUID}" -eq 0 ]]; then
+    echo "ERROR: No ejecutes este script con sudo."
+    echo "Ejecuta: ./03-setup-mac.sh"
+    echo "(El script usa sudo internamente para lo que necesita permisos)"
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KEYS_DIR="${SCRIPT_DIR}/keys"
 CONFIG_FILE="${SCRIPT_DIR}/config/env"
@@ -117,6 +126,12 @@ else
     cd MLVPN
     # Limpiar compilacion anterior si existe
     [[ -f Makefile ]] && make clean 2>/dev/null || true
+
+    # Aplicar parche utun: sustituye la implementacion legacy /dev/tun por
+    # la API nativa de macOS (SYSPROTO_CONTROL + UTUN_CONTROL_NAME).
+    # Ver patches/tuntap_darwin_utun.c para documentacion detallada.
+    cp "${SCRIPT_DIR}/patches/tuntap_darwin_utun.c" src/tuntap_darwin.c
+
     ./autogen.sh
 
     # En macOS, pkg-config necesita saber donde Homebrew instala las libs
@@ -133,12 +148,38 @@ else
     make -j"$(sysctl -n hw.ncpu)"
     sudo make install
 
-    echo "  mlvpn instalado: $(mlvpn --version 2>&1 | head -1)"
+    echo "  mlvpn instalado: $(/usr/local/sbin/mlvpn --version 2>&1 | head -1)"
     cd "${SCRIPT_DIR}"
 fi
 
 # =====================================================================
-# Paso 3: Generar configuracion del cliente
+# Paso 3: Usuario de sistema mlvpn (privilege separation)
+#
+# mlvpn rechaza arrancar como root sin --user. Creamos un usuario de
+# sistema dedicado igual que en la RPi. En macOS se usa dscl.
+# /var/empty es el home (directorio de chroot de mlvpn).
+# =====================================================================
+echo "=> Verificando usuario de sistema mlvpn..."
+if ! id mlvpn &>/dev/null; then
+    echo "  Creando usuario de sistema mlvpn..."
+    # Buscar un UniqueID libre a partir de 500
+    NEW_UID=500
+    while dscl . -list /Users UniqueID 2>/dev/null | awk '{print $2}' | grep -q "^${NEW_UID}$"; do
+        NEW_UID=$((NEW_UID + 1))
+    done
+    sudo dscl . -create /Users/mlvpn
+    sudo dscl . -create /Users/mlvpn UserShell /usr/bin/false
+    sudo dscl . -create /Users/mlvpn RealName "mlvpn"
+    sudo dscl . -create /Users/mlvpn UniqueID "${NEW_UID}"
+    sudo dscl . -create /Users/mlvpn PrimaryGroupID 99
+    sudo dscl . -create /Users/mlvpn NFSHomeDirectory /var/empty
+    echo "  ✓ Usuario mlvpn creado (UID ${NEW_UID})"
+else
+    echo "  ✓ Usuario mlvpn ya existe"
+fi
+
+# =====================================================================
+# Paso 4: Generar configuracion del cliente
 #
 # Cada [links.X] es un enlace fisico. mlvpn envia paquetes por TODOS
 # los enlaces a la vez (bonding). Si uno se cae, redistribuye entre
@@ -156,9 +197,8 @@ echo "=> Generando configuracion del cliente..."
 mkdir -p "${GENERATED_DIR}"
 chmod 700 "${GENERATED_DIR}"
 
-# Copiar secreto al directorio de trabajo
-cp "${KEYS_DIR}/mlvpn.secret" "${GENERATED_DIR}/mlvpn.secret"
-chmod 600 "${GENERATED_DIR}/mlvpn.secret"
+# Leer secreto (se incrusta directamente — file:// no está implementado en mlvpn)
+MLVPN_SECRET="$(tr -d '\n' < "${KEYS_DIR}/mlvpn.secret")"
 
 cat > "${GENERATED_DIR}/mlvpn.conf" <<EOF
 [general]
@@ -175,7 +215,7 @@ ip4_gateway = "${TUN_VPS_IP}"
 mtu = ${TUN_MTU}
 
 # Secreto compartido (mismo que en el VPS)
-password = "file://${GENERATED_DIR}/mlvpn.secret"
+password = "${MLVPN_SECRET}"
 
 # Si no recibe nada en 30s, considera el enlace muerto
 timeout = 30

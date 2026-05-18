@@ -14,6 +14,12 @@
 ###############################################################################
 set -euo pipefail
 
+if [[ "${EUID}" -ne 0 ]]; then
+    echo "ERROR: Este script requiere sudo."
+    echo "Ejecuta: sudo ./05-desconectar.sh"
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/config/env"
 GENERATED_DIR="${SCRIPT_DIR}/generated"
@@ -27,12 +33,10 @@ fi
 echo "=> Parando mlvpn..."
 if [[ -f "${GENERATED_DIR}/mlvpn.pid" ]]; then
     MLVPN_PID="$(cat "${GENERATED_DIR}/mlvpn.pid")"
-    if sudo kill -0 "${MLVPN_PID}" 2>/dev/null; then
-        sudo kill "${MLVPN_PID}"
-        # Esperar a que termine limpiamente (ejecutara el script down)
+    if kill -0 "${MLVPN_PID}" 2>/dev/null; then
+        kill "${MLVPN_PID}" 2>/dev/null || true
         sleep 2
-        # Si sigue vivo, forzar
-        sudo kill -9 "${MLVPN_PID}" 2>/dev/null || true
+        kill -9 "${MLVPN_PID}" 2>/dev/null || true
         echo "  mlvpn (PID ${MLVPN_PID}) parado"
     else
         echo "  mlvpn ya no estaba corriendo"
@@ -40,13 +44,17 @@ if [[ -f "${GENERATED_DIR}/mlvpn.pid" ]]; then
     rm -f "${GENERATED_DIR}/mlvpn.pid"
 else
     # Buscar por nombre de proceso como fallback
-    sudo pkill -f "mlvpn.*mlvpn_active.conf" 2>/dev/null && echo "  mlvpn parado (por nombre)" || echo "  No hay mlvpn activo"
+    pkill -f "mlvpn.*mlvpn_active" 2>/dev/null && echo "  mlvpn parado (por nombre)" || echo "  No hay mlvpn activo"
 fi
 
 # --- Paso 2: Limpiar rutas ---
 echo "=> Limpiando rutas..."
 if [[ -n "${VPS_IP:-}" ]]; then
-    sudo route -n delete -host "${VPS_IP}" 2>/dev/null && echo "  Ruta a ${VPS_IP} eliminada" || echo "  No habia ruta a ${VPS_IP}"
+    # Borrar rutas con -ifscope (una por interfaz) y la ruta genérica
+    sudo route -n delete -host "${VPS_IP}" -ifscope "${IFACE_IPHONE:-en8}" 2>/dev/null || true
+    sudo route -n delete -host "${VPS_IP}" -ifscope "${IFACE_PIXEL:-en12}" 2>/dev/null || true
+    sudo route -n delete -host "${VPS_IP}" 2>/dev/null || true
+    echo "  Rutas a ${VPS_IP} eliminadas"
 fi
 
 # Limpiar rutas /1 del tunel (las que puso el script up/down)
@@ -56,6 +64,8 @@ sudo route -n delete -net 128.0.0.0/1 2>/dev/null || true
 # --- Paso 3: Limpiar archivos temporales ---
 echo "=> Limpiando archivos temporales..."
 rm -f "${GENERATED_DIR}/mlvpn_active.conf"
+rm -f "${GENERATED_DIR}/mlvpn.log"
+rm -f "${GENERATED_DIR}/mlvpn.pid"
 
 echo ""
 echo "=== Desconectado ==="

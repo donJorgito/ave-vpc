@@ -5,6 +5,36 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.7.0] — 2026-05-18
+
+### Añadido
+- `patches/tuntap_darwin_utun.c` — parche utun para macOS: sustituye `/dev/tun` (requiere
+  kext obsoleto) por la API nativa `SYSPROTO_CONTROL + UTUN_CONTROL_NAME` (macOS 10.6+,
+  Apple Silicon). Aplicado automáticamente por `03-setup-mac.sh` antes de compilar.
+- `03-setup-mac.sh` — creación automática de usuario de sistema `mlvpn` en macOS via `dscl`
+  (equivalente al usuario mlvpn en la RPi, para privilege separation)
+- `03-setup-mac.sh` — comprobación de EUID: el script NO debe ejecutarse con sudo
+  (brew no funciona como root); usa sudo internamente donde lo necesita
+- `04-conectar.sh` / `05-desconectar.sh` — comprobación de EUID: estos scripts SÍ
+  requieren sudo (rutas, utun, proceso mlvpn)
+
+### Corregido
+- `04-conectar.sh` — mlvpn arranca con `--user mlvpn` (privilege separation) y sin sudo
+  en el propio binario (utun no requiere root en macOS, pero sí el script completo)
+- `04-conectar.sh` — log file recreado sin root para evitar permisos incorrectos
+- `05-desconectar.sh` — rutas eliminadas correctamente con `-ifscope` por interfaz;
+  log y pid limpios en cada desconexión
+- `07-setup-rpi.sh` — password embebida directamente en mlvpn.conf en lugar de `file://`
+  (`file://` no está implementado en mlvpn: usa el literal como contraseña, no el fichero)
+- `07-setup-rpi.sh` — añadido `bindhost = "0.0.0.0"` explícito en los links del servidor
+  (sin este campo, mlvpn no hace bind a los puertos UDP en Ubuntu 26.04)
+- `03-setup-mac.sh` — password embebida directamente (misma corrección que en RPi)
+
+### Pendiente (en investigación)
+- `crypto_decrypt failed: -1` entre Mac (mlvpn compilado con utun patch, libsodium 1.0.20)
+  y RPi (mlvpn Ubuntu 26.04). Passwords idénticas, mismo commit de mlvpn (master-b934d49),
+  mismo protocolo. Causa pendiente de identificar.
+
 ## [0.6.0] — 2026-05-18
 
 ### Corregido

@@ -131,7 +131,7 @@ interface_name = "mlvpn0"
 ip4 = "${TUN_VPS_IP}"
 ip4_gateway = "${TUN_MAC_IP}"
 mtu = ${TUN_MTU}
-password = "file:///etc/mlvpn/mlvpn.secret"
+password = "${MLVPN_SECRET}"
 timeout = 30
 ip4_updns = "/etc/mlvpn/mlvpn_updown.sh"
 

@@ -163,6 +163,10 @@ Diferencias respecto a versiones anteriores:
   El script crea un usuario de sistema dedicado `mlvpn` y configura systemd con `--user mlvpn`.
 - **Directorio chroot `/var/lib/mlvpn`**: mlvpn hace chroot al home del usuario con el que corre.
   El script crea el usuario `mlvpn` con home en `/var/lib/mlvpn` y los permisos correctos.
+- **`file://` no funciona como password**: mlvpn NO implementa el prefijo `file://` — usa el
+  literal completo como contraseña. Los scripts embeben el secreto directamente en el config.
+- **`bindhost = "0.0.0.0"` obligatorio en servidor**: sin este campo, mlvpn no hace bind a
+  los puertos UDP en Ubuntu 26.04 (los links quedan configurados pero sin socket activo).
 - **Sin NetworkManager**: Ubuntu Server 26.04 usa `systemd-networkd` por defecto,
   no NetworkManager. Para configurar IP estática usar `sudo nmtui` si lo instalas
   o editar `/etc/systemd/network/`. Lo más sencillo: reserva DHCP por MAC en el router.

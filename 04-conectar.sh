@@ -42,6 +42,15 @@
 ###############################################################################
 set -euo pipefail
 
+# Este script requiere sudo: las rutas y la creación de la interfaz utun
+# necesitan root. mlvpn hace privilege separation con --user mlvpn:
+# el proceso padre (root) crea la interfaz, el hijo cae a usuario mlvpn.
+if [[ "${EUID}" -ne 0 ]]; then
+    echo "ERROR: Este script requiere sudo."
+    echo "Ejecuta: sudo ./04-conectar.sh"
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/config/env"
 GENERATED_DIR="${SCRIPT_DIR}/generated"
@@ -134,6 +143,7 @@ echo ""
 echo "=> Actualizando configuracion con IPs reales..."
 
 cp "${GENERATED_DIR}/mlvpn.conf" "${GENERATED_DIR}/mlvpn_active.conf"
+chmod 600 "${GENERATED_DIR}/mlvpn_active.conf"
 
 sed -i '' "s/PLACEHOLDER_IPHONE_IP/${IP_IPHONE:-0.0.0.0}/" "${GENERATED_DIR}/mlvpn_active.conf"
 sed -i '' "s/PLACEHOLDER_PIXEL_IP/${IP_PIXEL:-0.0.0.0}/" "${GENERATED_DIR}/mlvpn_active.conf"
@@ -156,10 +166,15 @@ if [[ -f "${GENERATED_DIR}/mlvpn.pid" ]]; then
     rm -f "${GENERATED_DIR}/mlvpn.pid"
 fi
 
-sudo mlvpn \
+MLVPN_BIN=$(command -v mlvpn 2>/dev/null || echo "/usr/local/sbin/mlvpn")
+rm -f "${GENERATED_DIR}/mlvpn.log"
+touch "${GENERATED_DIR}/mlvpn.log"
+# --user mlvpn: privilege separation — root crea utun, hijo cae a usuario mlvpn
+"${MLVPN_BIN}" \
     --config "${GENERATED_DIR}/mlvpn_active.conf" \
     --name mlvpn0 \
-    2>&1 | sudo tee "${GENERATED_DIR}/mlvpn.log" &
+    --user mlvpn \
+    2>&1 | tee "${GENERATED_DIR}/mlvpn.log" &
 
 MLVPN_PID=$!
 echo "${MLVPN_PID}" > "${GENERATED_DIR}/mlvpn.pid"
