@@ -142,15 +142,15 @@ ip4 = "${TUN_VPS_IP}"
 ip4_gateway = "${TUN_MAC_IP}"
 mtu = ${TUN_MTU}
 
-# Archivo con el secreto compartido
-password = "file:///etc/mlvpn/mlvpn.secret"
+# Secreto compartido (embebido directamente — file:// no implementado en mlvpn)
+password = "${MLVPN_SECRET}"
 
 # Timeout: si no recibe paquetes en 30s, considera el enlace caido
 timeout = 30
 
-# Script que se ejecuta cuando mlvpn levanta/baja la interfaz
-# (configura rutas, NAT, etc.)
-ip4_updns = "/etc/mlvpn/mlvpn_updown.sh"
+# Script que mlvpn ejecuta al subir/bajar la interfaz
+# Firma: script <device> <evento> — env: IP4, IP4_GATEWAY, MTU, DEVICE
+statuscommand = "/etc/mlvpn/mlvpn_updown.sh"
 
 [filters]
 # Reorder buffer: mlvpn reordena los paquetes que llegan desordenados
@@ -181,37 +181,32 @@ echo "  [VPS] Escribiendo /etc/mlvpn/mlvpn_updown.sh..."
 
 sudo tee /etc/mlvpn/mlvpn_updown.sh > /dev/null <<'UPDOWN'
 #!/bin/bash
-# mlvpn pasa estas variables de entorno:
-#   MLVPN_INTERFACE: nombre de la interfaz tun (mlvpn0)
-#   MLVPN_IPADDR: IP local del tunel
-#   MLVPN_REMOTEADDR: IP remota del tunel
-#   MLVPN_MTU: MTU configurado
-
-# Detectar la interfaz que tiene la ruta por defecto (la que sale a internet)
+# mlvpn statuscommand — firma: script <device> <evento> [link]
+# Env: IP4, IP4_GATEWAY, MTU, DEVICE
+IFACE="$1"
+EVENT="$2"
 DEFAULT_IFACE=$(ip route show default | awk '{print $5; exit}')
 
-case "$1" in
-    up)
-        # Asignar IP a la interfaz del tunel
-        ip addr add "${MLVPN_IPADDR}/24" dev "${MLVPN_INTERFACE}"
-        ip link set "${MLVPN_INTERFACE}" up mtu "${MLVPN_MTU}"
-
-        # Activar NAT: los paquetes que salen del tunel a internet
-        # se reescriben con la IP publica del VPS
-        iptables -t nat -A POSTROUTING -s "${MLVPN_IPADDR%.*}.0/24" -o "${DEFAULT_IFACE}" -j MASQUERADE
-        iptables -A FORWARD -i "${MLVPN_INTERFACE}" -j ACCEPT
-        iptables -A FORWARD -o "${MLVPN_INTERFACE}" -j ACCEPT
+case "${EVENT}" in
+    tuntap_up)
+        ip addr add "${IP4}/24" dev "${IFACE}"
+        ip link set "${IFACE}" up mtu "${MTU}"
+        iptables -t nat -A POSTROUTING -s "${IP4%.*}.0/24" -o "${DEFAULT_IFACE}" -j MASQUERADE
+        iptables -A FORWARD -i "${IFACE}" -j ACCEPT
+        iptables -A FORWARD -o "${IFACE}" -j ACCEPT
         ;;
-    down)
-        # Limpiar NAT y reglas de firewall
-        iptables -t nat -D POSTROUTING -s "${MLVPN_IPADDR%.*}.0/24" -o "${DEFAULT_IFACE}" -j MASQUERADE 2>/dev/null || true
-        iptables -D FORWARD -i "${MLVPN_INTERFACE}" -j ACCEPT 2>/dev/null || true
-        iptables -D FORWARD -o "${MLVPN_INTERFACE}" -j ACCEPT 2>/dev/null || true
+    tuntap_down)
+        iptables -t nat -D POSTROUTING -s "${IP4%.*}.0/24" -o "${DEFAULT_IFACE}" -j MASQUERADE 2>/dev/null || true
+        iptables -D FORWARD -i "${IFACE}" -j ACCEPT 2>/dev/null || true
+        iptables -D FORWARD -o "${IFACE}" -j ACCEPT 2>/dev/null || true
+        ;;
+    rtun_up|rtun_down)
         ;;
 esac
 UPDOWN
 
-sudo chmod 755 /etc/mlvpn/mlvpn_updown.sh
+# 700: mlvpn rechaza ejecutar scripts accesibles por grupo/otros
+sudo chmod 700 /etc/mlvpn/mlvpn_updown.sh
 
 # =====================================================================
 # Paso 5: Activar IP forwarding

@@ -5,6 +5,21 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.10.0] — 2026-05-19
+
+### Añadido
+- `03-setup-mac.sh` — crea `/tmp/sudo-askpass.sh` automáticamente: helper que muestra
+  un diálogo gráfico macOS para la contraseña de sudo. Necesario en Macs corporativos
+  con Jamf/MDM donde sudo sin TTY falla. Uso: `SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A <cmd>`
+- `docs/rpi-setup.md` — documentadas las restricciones del statuscommand de mlvpn:
+  firma correcta, env vars, permisos 700, key `statuscommand` vs `ip4_updns`
+
+### Corregido
+- `02-setup-vps.sh` — sincronizado con los fixes de mlvpn: `statuscommand`, firma
+  correcta del updown script, `chmod 700`, password embebida (sin `file://`)
+- `04-conectar.sh` / `05-desconectar.sh` — mensajes de error actualizados con instrucciones
+  para usar el askpass desde Claude Code
+
 ## [0.9.0] — 2026-05-19
 
 ### Corregido — TÚNEL COMPLETAMENTE FUNCIONAL

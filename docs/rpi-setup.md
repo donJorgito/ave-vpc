@@ -167,6 +167,13 @@ Diferencias respecto a versiones anteriores:
   literal completo como contraseña. Los scripts embeben el secreto directamente en el config.
 - **`bindhost = "0.0.0.0"` obligatorio en servidor**: sin este campo, mlvpn no hace bind a
   los puertos UDP en Ubuntu 26.04 (los links quedan configurados pero sin socket activo).
+- **`statuscommand` no `ip4_updns`**: el key correcto del config es `statuscommand`. La clave
+  `ip4_updns` es ignorada silenciosamente — el script nunca se ejecuta.
+- **Firma del statuscommand**: `script <device> <evento> [link]` con env vars `IP4`,
+  `IP4_GATEWAY`, `MTU`, `DEVICE`. La API antigua con `MLVPN_IPADDR`/`MLVPN_INTERFACE` no
+  está implementada en este mlvpn.
+- **Permisos del statuscommand**: debe ser `chmod 700` (solo owner). mlvpn rechaza ejecutar
+  scripts con permisos de grupo u otros (`group/other accessible` → error fatal).
 - **Sin NetworkManager**: Ubuntu Server 26.04 usa `systemd-networkd` por defecto,
   no NetworkManager. Para configurar IP estática usar `sudo nmtui` si lo instalas
   o editar `/etc/systemd/network/`. Lo más sencillo: reserva DHCP por MAC en el router.

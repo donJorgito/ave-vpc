@@ -179,7 +179,23 @@ else
 fi
 
 # =====================================================================
-# Paso 4: Generar configuracion del cliente
+# Paso 4: Crear helper sudo-askpass para Claude Code
+#
+# En macOS corporativo (Jamf/MDM), sudo dentro de Claude Code no puede
+# pedir contraseña por terminal. Este helper muestra un diálogo gráfico
+# nativo de macOS. Uso: SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A <cmd>
+# =====================================================================
+ASKPASS_SCRIPT="/tmp/sudo-askpass.sh"
+cat > "${ASKPASS_SCRIPT}" << 'ASKPASS'
+#!/bin/bash
+osascript -e 'Tell application "System Events" to display dialog "Contraseña sudo (ave-vpc):" with hidden answer default answer ""' -e 'text returned of result'
+ASKPASS
+chmod 700 "${ASKPASS_SCRIPT}"
+echo "=> sudo askpass listo: ${ASKPASS_SCRIPT}"
+echo "   Uso en Claude Code: SUDO_ASKPASS=${ASKPASS_SCRIPT} sudo -A ./04-conectar.sh"
+
+# =====================================================================
+# Paso 5: Generar configuracion del cliente
 #
 # Cada [links.X] es un enlace fisico. mlvpn envia paquetes por TODOS
 # los enlaces a la vez (bonding). Si uno se cae, redistribuye entre

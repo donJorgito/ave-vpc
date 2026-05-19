@@ -16,7 +16,7 @@ set -euo pipefail
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "ERROR: Este script requiere sudo."
-    echo "Ejecuta: sudo ./05-desconectar.sh"
+    echo "Desde Claude Code: SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A ./05-desconectar.sh"
     exit 1
 fi
 

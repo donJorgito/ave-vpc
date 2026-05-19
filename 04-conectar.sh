@@ -47,7 +47,11 @@ set -euo pipefail
 # el proceso padre (root) crea la interfaz, el hijo cae a usuario mlvpn.
 if [[ "${EUID}" -ne 0 ]]; then
     echo "ERROR: Este script requiere sudo."
-    echo "Ejecuta: sudo ./04-conectar.sh"
+    echo ""
+    echo "Opciones:"
+    echo "  Desde Terminal.app:  sudo ./04-conectar.sh"
+    echo "  Desde Claude Code:   SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A ./04-conectar.sh"
+    echo "  (el askpass lo crea 03-setup-mac.sh automáticamente)"
     exit 1
 fi
 
