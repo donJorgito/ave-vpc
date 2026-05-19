@@ -5,6 +5,22 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.11.0] — 2026-05-19
+
+### Añadido
+- `08-monitor.py` — monitor en tiempo real de enlaces mlvpn y tráfico agregado.
+  Muestra throughput por enlace físico (iPhone, Pixel, WiFi) + estado de autenticación
+  de cada link mlvpn. El agregado se calcula sumando las interfaces físicas porque
+  `netstat -ibn` no captura TX de interfaces TUN (utun) en macOS.
+
+### Corregido
+- `04-conectar.sh` — routing anti-loop para bonding completo con rutas 0/1 via tunel:
+  Las rutas ifscope al VPS no se usan en lookups globales de macOS (sockets sin
+  `IP_BOUND_IF`). Fix: añadir ruta /32 regular (sin ifscope) al VPS justo antes de
+  las 0/1. Las /32 son más específicas que /1 en la tabla global → mlvpn usa ruta
+  directa, el resto del tráfico entra por el tunel.
+  Verificado: `traceroute 8.8.8.8` → hop 1 = 10.10.10.1 (RPi) ✓
+
 ## [0.10.0] — 2026-05-19
 
 ### Añadido

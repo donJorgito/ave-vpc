@@ -40,6 +40,17 @@
 
 | ID | Requisito | Detalle |
 |----|-----------|---------|
-| REQ-NET-01 | iPhone compartiendo red por WiFi hotspot | Interfaz `en0` en el Mac |
-| REQ-NET-02 | Android compartiendo red por USB tethering | Interfaz `en5` o similar |
+| REQ-NET-01 | iPhone compartiendo red por USB tethering | Interfaz `en8` o similar |
+| REQ-NET-02 | Android compartiendo red por USB tethering | Interfaz `en12` o similar |
 | REQ-NET-03 | Los dos enlaces activos simultáneamente al conectar | Para bonding real |
+| REQ-NET-04 | IP pública sin CGNAT en el servidor doméstico | Opción B (RPi): verificar que IP WAN no empieza por `100.x` |
+| REQ-NET-05 | WiFi corporativa o captive portal | Tercer enlace opcional — detección automática pendiente (Fase 2) |
+
+## macOS — Restricciones conocidas
+
+| ID | Restricción | Workaround |
+|----|-------------|------------|
+| REQ-MAC-01 | `sudo` sin TTY falla en Claude Code y entornos Jamf/MDM | Usar `SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A` — creado por `03-setup-mac.sh` |
+| REQ-MAC-02 | `netstat -ibn` no captura TX de interfaces TUN (utun) | `08-monitor.py` usa suma de interfaces físicas como métrica del agregado |
+| REQ-MAC-03 | Rutas ifscope no se usan en lookups globales (sin `IP_BOUND_IF`) | `04-conectar.sh` añade ruta /32 regular al VPS antes de las 0/1 para evitar loop |
+| REQ-MAC-04 | mlvpn no llama al statuscommand vía `priv_run_script` de forma fiable en macOS | `04-conectar.sh` configura la IP del utun directamente |

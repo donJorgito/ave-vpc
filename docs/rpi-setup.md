@@ -152,6 +152,26 @@ Regenera la configuración del Mac:
 
 A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con Oracle Cloud.
 
+## Routing en macOS: bonding completo y anti-loop
+
+Para que el tráfico pase por el tunel mlvpn (bonding real), `04-conectar.sh` añade
+rutas 0/1 y 128/1 via utun. Sin ellas, el tráfico va directo por los móviles sin pasar
+por el VPN.
+
+**El problema del loop**: las rutas ifscope (flag `I`) al VPS solo aplican cuando el
+socket usa `IP_BOUND_IF`. mlvpn usa `bind()` estándar, sin `IP_BOUND_IF`. Con 0/1 en
+la tabla global, macOS resuelve el VPS por la ruta 0/1 → el propio tunel → loop.
+
+**La solución**: añadir una ruta regular /32 al VPS (sin ifscope) ANTES de las 0/1.
+Las /32 son más específicas que /1 en la tabla global → mlvpn usa ruta directa por
+el móvil, el resto del tráfico entra por el tunel.
+
+Para verificar que el bonding funciona correctamente:
+```bash
+traceroute 8.8.8.8
+# Hop 1 debe ser 10.10.10.1 (la RPi) — indica que el tráfico pasa por el tunel
+```
+
 ## Notas de compatibilidad con Ubuntu 26.04 LTS
 
 El script `07-setup-rpi.sh` está probado en Ubuntu Server 26.04 LTS ARM64.

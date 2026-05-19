@@ -270,26 +270,35 @@ A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con Oracle 
 ### En el tren
 
 ```bash
-./04-conectar.sh
+# Desde Terminal.app:
+sudo ./04-conectar.sh
+
+# Desde Claude Code (Macs con Jamf/MDM donde sudo sin TTY falla):
+SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A ./04-conectar.sh
+# El askpass lo crea 03-setup-mac.sh automáticamente
 ```
 
-Verifica que funciona:
+Verifica que el tráfico pasa por el tunel:
 
 ```bash
-ping 10.10.10.1        # debe responder el servidor (VPS u RPi)
-curl ifconfig.me       # debe mostrar la IP del servidor, no la tuya
+ping 10.10.10.1                    # debe responder el servidor
+traceroute 8.8.8.8                 # hop 1 debe ser 10.10.10.1
+curl ifconfig.me                   # debe mostrar la IP del servidor
 ```
 
 Monitoriza el bonding en tiempo real:
 
 ```bash
-tail -f generated/mlvpn.log
+python3 ./08-monitor.py            # throughput por enlace + agregado
+tail -f generated/mlvpn.log        # log de mlvpn
 ```
 
 ### Al llegar
 
 ```bash
-./05-desconectar.sh
+sudo ./05-desconectar.sh
+# o con askpass:
+SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A ./05-desconectar.sh
 ```
 
 ---
@@ -302,10 +311,13 @@ ave-vpc/
 ├── 01-generar-secreto.sh       # Genera el secreto de cifrado mlvpn
 ├── 02-setup-vps.sh             # Configura el VPS (ejecutar una vez)
 ├── 03-setup-mac.sh             # Configura el Mac (ejecutar una vez)
-├── 04-conectar.sh              # Conectar en el tren
-├── 05-desconectar.sh           # Desconectar al llegar
+├── 04-conectar.sh              # Conectar en el tren (requiere sudo)
+├── 05-desconectar.sh           # Desconectar al llegar (requiere sudo)
 ├── 06-provision-vps.sh         # Provisiona el VPS en Oracle Cloud (auto-retry)
 ├── 07-setup-rpi.sh             # Configura una Raspberry Pi como servidor (opción B)
+├── 08-monitor.py               # Monitor en tiempo real: throughput por enlace + agregado
+├── patches/
+│   └── tuntap_darwin_utun.c    # Parche utun para macOS (API nativa, sin kext)
 ├── config/
 │   └── env.example             # Plantilla de configuración
 ├── docs/
