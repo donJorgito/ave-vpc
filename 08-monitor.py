@@ -155,15 +155,18 @@ def draw(interfaces, prev_stats, curr_stats, interval, links_status, utun, itera
     # ─── Estado del túnel ─────────────────────────────────────────────
     if utun:
         utun_ip = get_interface_ip(utun) or '–'
-        p = prev_stats.get(utun, (0, 0))
-        c = curr_stats.get(utun, (0, 0))
-        rx = max(0, c[0] - p[0]) / interval
-        tx = max(0, c[1] - p[1]) / interval
-        total_rx = c[0]
-        total_tx = c[1]
+        # netstat -ibn no captura TX de interfaces TUN en macOS.
+        # El agregado real es la suma de las interfaces físicas activas.
+        agg_rx = agg_tx = 0
+        for iface in ['en8', 'en12', 'en0']:
+            if get_interface_ip(iface):
+                p2 = prev_stats.get(iface, (0, 0))
+                c2 = curr_stats.get(iface, (0, 0))
+                agg_rx += max(0, c2[0] - p2[0]) / interval
+                agg_tx += max(0, c2[1] - p2[1]) / interval
         print(f'{BOLD}  TÚNEL mlvpn  {GREEN}●{RESET}  {utun}  IP: {BOLD}10.10.10.2{RESET}')
-        print(f'  {"↓ RX":<12} {GREEN}{fmt_bytes(rx):>12}{RESET}   total: {DIM}{fmt_total(total_rx)}{RESET}')
-        print(f'  {"↑ TX":<12} {CYAN}{fmt_bytes(tx):>12}{RESET}   total: {DIM}{fmt_total(total_tx)}{RESET}')
+        print(f'  {"↓ RX":<18} {GREEN}{fmt_bytes(agg_rx):>10}{RESET}  {DIM}(suma enlaces){RESET}')
+        print(f'  {"↑ TX":<18} {CYAN}{fmt_bytes(agg_tx):>10}{RESET}  {DIM}(suma enlaces){RESET}')
     else:
         print(f'  {RED}TÚNEL mlvpn  ✗  No activo — ejecuta ./04-conectar.sh{RESET}')
     print()
@@ -219,11 +222,14 @@ def draw(interfaces, prev_stats, curr_stats, interval, links_status, utun, itera
 
     print(f'  {bonding_str}', end='')
     if utun:
-        p = prev_stats.get(utun, (0, 0))
-        c = curr_stats.get(utun, (0, 0))
-        agg_rx = max(0, c[0] - p[0]) / interval
-        agg_tx = max(0, c[1] - p[1]) / interval
-        print(f'  •  Agregado {GREEN}↓{fmt_bytes(agg_rx)}{RESET} {CYAN}↑{fmt_bytes(agg_tx)}{RESET}')
+        sum_rx = sum_tx = 0
+        for iface in ['en8', 'en12', 'en0']:
+            if get_interface_ip(iface):
+                p2 = prev_stats.get(iface, (0, 0))
+                c2 = curr_stats.get(iface, (0, 0))
+                sum_rx += max(0, c2[0] - p2[0]) / interval
+                sum_tx += max(0, c2[1] - p2[1]) / interval
+        print(f'  •  Agregado {GREEN}↓{fmt_bytes(sum_rx)}{RESET} {CYAN}↑{fmt_bytes(sum_tx)}{RESET}')
     else:
         print()
     print()
