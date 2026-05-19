@@ -40,8 +40,10 @@ jobs:
 
       - name: Verificar que config/env.example tiene todas las variables requeridas
         run: |
-          required=(VPS_IP VPS_USER VPS_SSH_PORT MLVPN_PORT_1 MLVPN_PORT_2
-                    TUN_VPS_IP TUN_MAC_IP TUN_MTU IFACE_IPHONE IFACE_PIXEL)
+          required=(VPS_IP VPS_USER VPS_SSH_PORT
+                    MLVPN_PORT_1 MLVPN_PORT_2 MLVPN_PORT_3
+                    TUN_VPS_IP TUN_MAC_IP TUN_MTU
+                    IFACE_IPHONE IFACE_PIXEL IFACE_WIFI)
           for var in "${required[@]}"; do
             grep -q "^${var}=" config/env.example || {
               echo "ERROR: ${var} no está en config/env.example"
@@ -84,3 +86,32 @@ jobs:
           terraform fmt -check -recursive && echo "✓ terraform fmt OK"
           terraform init -backend=false -input=false
           terraform validate && echo "✓ terraform validate OK"
+
+      - name: Verificar trazabilidad IDLC — un fichero por REQ + un test por REQ
+        run: |
+          set -e
+          missing=0
+          for req in requirements/ave-vpc-REQ-*-requirement.md; do
+            ID=$(basename "$req" | sed -E 's/^ave-vpc-(REQ-[A-Z]+-[0-9]+)-requirement\.md$/\1/')
+            if ! ls tests/test_${ID}_*.sh >/dev/null 2>&1; then
+              echo "ERROR: ${ID} no tiene un test correspondiente en tests/"
+              missing=$((missing + 1))
+            fi
+          done
+          if [ "${missing}" -gt 0 ]; then
+            echo "ERROR: ${missing} requirement(s) sin test."
+            exit 1
+          fi
+          echo "✓ Cada requirement tiene su test (trazabilidad IDLC v6)"
+
+      - name: Ejecutar tests test_REQ-*.sh (orquestador)
+        run: |
+          ./tests/verificar-setup.sh
+
+      - name: Publicar reportes JUnit XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-reports
+          path: reports/
+          if-no-files-found: warn

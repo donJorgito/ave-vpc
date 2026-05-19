@@ -5,6 +5,41 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.14.0] — 2026-05-19
+
+### Cambiado
+- **Estructura de `requirements/` conforme a IDLC v6**: un fichero por
+  requirement (`ave-vpc-<REQ-ID>-requirement.md`) siguiendo la plantilla
+  oficial `templates/iac_component-id-requirement.md` del repo IDLC. 31
+  ficheros generados (5 HW + 7 SW + 9 VPS + 6 NET + 4 MAC). El antiguo
+  `requirements/REQ.md` queda como índice navegable con links a cada
+  fichero individual.
+
+### Añadido
+- **31 tests de trazabilidad** en `tests/test_<REQ-ID>_*.sh`, uno por
+  requirement (cumple Section 5.3.3.4 de IDLC v5 / Test traceability de
+  IDLC v6). Cada test:
+  - Sigue el patrón POSIX shell del repo IDLC (visto en
+    `tests/test_RQ001_markdown_lint.sh` del propio IDLC).
+  - Emite reporte JUnit XML en `reports/<TESTSUITE>.xml`.
+  - Soporta SKIP cuando el entorno no aplica (CI Linux sin Mac, sin
+    móviles, sin SSH al VPS).
+- `tests/_lib_junit.sh` — helper común con funciones `junit_init`,
+  `junit_pass`, `junit_fail`, `junit_skip`, `junit_finalize`.
+- `tests/verificar-setup.sh` — orquestador reescrito: ejecuta todos los
+  `test_REQ-*.sh` secuencialmente y resume PASS/FAIL/SKIP. Sustituye al
+  conjunto de checks lineales que tenía antes.
+- `.github/workflows/ci.yml`:
+  - Step nuevo "Verificar trazabilidad IDLC": comprueba que cada
+    `requirements/ave-vpc-REQ-*-requirement.md` tiene su test
+    correspondiente.
+  - Step nuevo "Ejecutar tests test_REQ-*.sh": ejecuta el orquestador.
+  - Step nuevo "Publicar reportes JUnit XML": sube `reports/` como
+    artifact del workflow run.
+  - El check de variables en `config/env.example` ahora también valida
+    `MLVPN_PORT_3` e `IFACE_WIFI` (introducidos en 0.12.0).
+- `.gitignore`: excluye `reports/` (los XML se generan en cada ejecución).
+
 ## [0.13.0] — 2026-05-19
 
 ### Corregido

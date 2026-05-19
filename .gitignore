@@ -37,3 +37,6 @@ terraform/terraform.tfvars
 # Python
 __pycache__/
 *.pyc
+
+# Reportes JUnit XML generados por tests/test_REQ-*.sh
+reports/
