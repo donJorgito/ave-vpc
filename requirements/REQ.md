@@ -52,6 +52,6 @@
 | ID | Restricción | Workaround |
 |----|-------------|------------|
 | REQ-MAC-01 | `sudo` sin TTY falla en Claude Code y entornos Jamf/MDM | Usar `SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A` — creado por `03-setup-mac.sh` |
-| REQ-MAC-02 | `netstat -ibn` no captura TX de interfaces TUN (utun) | `08-monitor.py` usa suma de interfaces físicas como métrica del agregado |
+| REQ-MAC-02 | ~~`netstat -ibn` no captura TX de interfaces TUN (utun)~~ — INCORRECTO, era un bug de parsing | Resuelto en 0.13.0: `netstat -ibn` sí captura el utun en macOS, pero las líneas sin MAC (utun, lo0) tienen offset distinto a las físicas. `08-monitor.py` ahora lee del utun directamente. |
 | REQ-MAC-03 | Rutas ifscope no se usan en lookups globales (sin `IP_BOUND_IF`) | `04-conectar.sh` añade ruta /32 regular al VPS antes de las 0/1 para evitar loop |
 | REQ-MAC-04 | mlvpn no llama al statuscommand vía `priv_run_script` de forma fiable en macOS | `04-conectar.sh` configura la IP del utun directamente |

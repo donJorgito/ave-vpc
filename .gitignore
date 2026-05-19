@@ -33,3 +33,7 @@ terraform/terraform.tfvars
 
 # pre-commit
 .secrets.baseline
+
+# Python
+__pycache__/
+*.pyc

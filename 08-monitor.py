@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 ###############################################################################
-# 08-monitor.sh — Monitor de bonding mlvpn en tiempo real
+# 08-monitor.py — Monitor de bonding mlvpn en tiempo real
 #
 # DONDE SE EJECUTA: En tu Mac (con mlvpn activo)
 #
 # QUE MUESTRA:
+#   - Throughput útil del túnel mlvpn leído del utun (sin overhead UDP)
 #   - Throughput de cada enlace físico (iPhone, Pixel, WiFi si activo)
-#   - Throughput agregado del túnel mlvpn (utunX)
-#   - Estado de cada link: ACTIVO | INACTIVO | CAPTIVE | BLOQUEADO
+#   - Estado de cada link: ACTIVO | AUTH... | sin IP
+#   - Suma encapsulada (tráfico real por las físicas, incluye overhead)
 #   - Actualización cada segundo
 #
 # USO:
-#   ./08-monitor.sh
-#   ./08-monitor.sh --interval 2   # actualizar cada 2 segundos
+#   ./08-monitor.py
+#   ./08-monitor.py --interval 2   # actualizar cada 2 segundos
 #
 # REQUISITOS:
 #   - Python 3 (incluido en macOS)
@@ -40,7 +41,15 @@ BLUE   = '\033[94m'
 
 
 def get_interface_stats():
-    """Lee bytes in/out de todas las interfaces via netstat -ibn."""
+    """Lee bytes in/out de todas las interfaces via netstat -ibn.
+
+    netstat -ibn varía las columnas según la interfaz:
+      - Físicas (con MAC):    name mtu <Link#N> MAC  Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll  (11 cols)
+      - utun/lo0 (sin MAC):   name mtu <Link#N>      Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll  (10 cols)
+
+    Detectamos si parts[3] es una MAC (5 ':') para desplazar el offset y leer Ibytes/Obytes
+    correctamente en ambos casos. Esto es lo que permite leer el utun de mlvpn directamente.
+    """
     try:
         out = subprocess.check_output(['netstat', '-ibn'], text=True)
     except Exception:
@@ -48,14 +57,17 @@ def get_interface_stats():
     stats = {}
     for line in out.splitlines():
         parts = line.split()
-        if len(parts) < 10:
+        if len(parts) < 9 or '<Link#' not in line:
             continue
-        iface = parts[0]
-        if '<Link#' not in line:
-            continue
+        # netstat añade '*' al nombre cuando la interfaz tiene flag UP en estado
+        # transitorio. Lo eliminamos para que el lookup contra ifconfig coincida.
+        iface = parts[0].rstrip('*')
+        # Si parts[3] tiene formato MAC (xx:xx:xx:xx:xx:xx), los counters empiezan en [4]
+        # Si no (utun, lo0), empiezan en [3]
+        offset = 4 if len(parts) > 3 and parts[3].count(':') == 5 else 3
         try:
-            ibytes = int(parts[6])
-            obytes = int(parts[9])
+            ibytes = int(parts[offset + 2])
+            obytes = int(parts[offset + 5])
             stats[iface] = (ibytes, obytes)
         except (ValueError, IndexError):
             continue
@@ -154,19 +166,16 @@ def draw(interfaces, prev_stats, curr_stats, interval, links_status, utun, itera
 
     # ─── Estado del túnel ─────────────────────────────────────────────
     if utun:
-        utun_ip = get_interface_ip(utun) or '–'
-        # netstat -ibn no captura TX de interfaces TUN en macOS.
-        # El agregado real es la suma de las interfaces físicas activas.
-        agg_rx = agg_tx = 0
-        for iface in ['en8', 'en12', 'en0']:
-            if get_interface_ip(iface):
-                p2 = prev_stats.get(iface, (0, 0))
-                c2 = curr_stats.get(iface, (0, 0))
-                agg_rx += max(0, c2[0] - p2[0]) / interval
-                agg_tx += max(0, c2[1] - p2[1]) / interval
+        # Leemos los bytes directamente del utun (tráfico útil del túnel,
+        # sin overhead UDP). En macOS, netstat -ibn sí captura los counters
+        # del utun de mlvpn una vez parseado correctamente (ver get_interface_stats).
+        p_utun = prev_stats.get(utun, (0, 0))
+        c_utun = curr_stats.get(utun, (0, 0))
+        agg_rx = max(0, c_utun[0] - p_utun[0]) / interval
+        agg_tx = max(0, c_utun[1] - p_utun[1]) / interval
         print(f'{BOLD}  TÚNEL mlvpn  {GREEN}●{RESET}  {utun}  IP: {BOLD}10.10.10.2{RESET}')
-        print(f'  {"↓ RX":<18} {GREEN}{fmt_bytes(agg_rx):>10}{RESET}  {DIM}(suma enlaces){RESET}')
-        print(f'  {"↑ TX":<18} {CYAN}{fmt_bytes(agg_tx):>10}{RESET}  {DIM}(suma enlaces){RESET}')
+        print(f'  {"↓ RX":<18} {GREEN}{fmt_bytes(agg_rx):>10}{RESET}  {DIM}(tráfico útil del túnel){RESET}')
+        print(f'  {"↑ TX":<18} {CYAN}{fmt_bytes(agg_tx):>10}{RESET}  {DIM}(tráfico útil del túnel){RESET}')
     else:
         print(f'  {RED}TÚNEL mlvpn  ✗  No activo — ejecuta ./04-conectar.sh{RESET}')
     print()
@@ -222,14 +231,16 @@ def draw(interfaces, prev_stats, curr_stats, interval, links_status, utun, itera
 
     print(f'  {bonding_str}', end='')
     if utun:
+        # Suma de físicas = tráfico encapsulado (con overhead UDP ~2-3%).
+        # La diferencia con el agregado del túnel = overhead de protocolo.
         sum_rx = sum_tx = 0
-        for iface in ['en8', 'en12', 'en0']:
+        for _, (_, iface) in link_names.items():
             if get_interface_ip(iface):
                 p2 = prev_stats.get(iface, (0, 0))
                 c2 = curr_stats.get(iface, (0, 0))
                 sum_rx += max(0, c2[0] - p2[0]) / interval
                 sum_tx += max(0, c2[1] - p2[1]) / interval
-        print(f'  •  Agregado {GREEN}↓{fmt_bytes(sum_rx)}{RESET} {CYAN}↑{fmt_bytes(sum_tx)}{RESET}')
+        print(f'  •  Encapsulado {DIM}↓{fmt_bytes(sum_rx)} ↑{fmt_bytes(sum_tx)}{RESET}')
     else:
         print()
     print()

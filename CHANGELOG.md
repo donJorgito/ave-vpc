@@ -5,6 +5,34 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.13.0] — 2026-05-19
+
+### Corregido
+- `08-monitor.py` — `get_interface_stats()` parseaba mal las interfaces sin
+  MAC (utun, lo0). Las físicas tienen 11 columnas en `netstat -ibn` (con MAC
+  en `parts[3]`) y los utun tienen 10 (sin MAC). El parser usaba offsets
+  fijos `parts[6]`/`parts[9]` que solo funcionan con MAC, así que para utun
+  leía Opkts/Coll en vez de Ibytes/Obytes. Ahora detecta la presencia de MAC
+  y aplica el offset correcto.
+- `08-monitor.py` — el agregado del túnel se calculaba como SUMA de las
+  interfaces físicas (con overhead UDP del bonding ~2-3% incluido). Ahora se
+  lee directamente del utun de mlvpn → tráfico útil real. Validado en vivo
+  contra utun6 (Cisco AnyConnect): 5.6 GB Ibytes / 2.4 GB Obytes correctos.
+- `08-monitor.py` — eliminada la lista hardcoded `['en8', 'en12', 'en0']` en
+  el cálculo del agregado encapsulado; ahora itera sobre `link_names` que ya
+  refleja la configuración del bonding.
+
+### Cambiado
+- El bloque `TÚNEL mlvpn` ahora muestra el throughput útil real del túnel
+  (sin overhead). Se añade una línea `Encapsulado` al final con la suma de
+  físicas para que sea visible la diferencia (overhead del protocolo).
+
+### Notas
+- Esto corrige una afirmación incorrecta del proyecto: el comentario en
+  versiones anteriores decía que `netstat -ibn` no captura TX de interfaces
+  TUN en macOS. Era un bug de parsing en `get_interface_stats()`, no una
+  limitación de macOS. `REQ-MAC-02` actualizado.
+
 ## [0.12.0] — 2026-05-19
 
 ### Añadido
