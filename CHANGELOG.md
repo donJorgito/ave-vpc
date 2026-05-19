@@ -5,6 +5,42 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.12.0] — 2026-05-19
+
+### Añadido
+- Tercer enlace WiFi en mlvpn (`[links.wifi]`, puerto UDP 5082). El bonding
+  ahora puede usar 3 enlaces simultáneamente: iPhone USB, Pixel USB y WiFi
+  nativo del Mac.
+- `04-conectar.sh` — pre-flight checks que evalúan automáticamente si la WiFi
+  actual es elegible como 3er enlace antes de añadirla al bonding:
+  - Sin IP en `IFACE_WIFI` → se omite con aviso
+  - Mac en la subred del RPi y el RPi local responde → se omite (evita
+    hairpin NAT cuando se está en la red de casa)
+  - Captive portal detectado vía `captive.apple.com/hotspot-detect.html` →
+    se omite con mensaje "autentica en el navegador y reejecuta"
+  - Si pasa todos los checks, anexa `[links.wifi]` dinámicamente al
+    `mlvpn_active.conf` con la IP real de la WiFi actual
+- Flag `--sin-wifi` en `04-conectar.sh` para forzar bonding solo con móviles
+  aunque la WiFi sea elegible.
+- `MLVPN_PORT_3` (default `5082`) e `IFACE_WIFI` (default `en0`) en
+  `config/env.example`. Compatibilidad hacia atrás: si no están definidas en
+  un `config/env` antiguo, los scripts usan los defaults.
+- `02-setup-vps.sh` y `07-setup-rpi.sh` — apertura automática de UDP 5082 en
+  el firewall del servidor (ufw/firewall-cmd) y bloque `[links.wifi]` en la
+  configuración mlvpn del servidor.
+- `tests/verificar-setup.sh` — comprobación informativa de `IFACE_WIFI` (no
+  falla si no tiene IP, es opcional).
+- `requirements/REQ.md` — REQ-NET-06 sobre el 3er enlace y referencia desde
+  REQ-NET-05.
+- `README.md` — sección "Tercer enlace WiFi (automático)" con matriz de
+  comportamiento por escenario (casa, captive, oficina, hotel, AVE).
+- `docs/rpi-setup.md` — diagrama actualizado con el 3er enlace WiFi opcional.
+
+### Corregido
+- `04-conectar.sh` — eliminada duplicación de la /32 anti-loop al VPS que se
+  añadía dos veces (en el paso 2 y otra vez tras crear utun). Ahora se añade
+  una sola vez con preferencia móvil → WiFi como fallback.
+
 ## [0.11.0] — 2026-05-19
 
 ### Añadido

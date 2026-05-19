@@ -25,12 +25,17 @@ abiertos en el router y sale a internet a través de la fibra óptica.
    Mac                          RPi 4 ── router fibra ── internet
     │ iPhone (UDP 5080)            │         │
     │ Pixel  (UDP 5081)            │    port forwarding
-    └──────── internet ────────────┘    UDP 5080, 5081 → RPi
-                                        DDNS: tu-hostname.dedyn.io
+    │ WiFi   (UDP 5082, opcional)  │    UDP 5080–5082 → RPi
+    └──────── internet ────────────┘    DDNS: tu-hostname.dedyn.io
 ```
 
 El Mac en el AVE se conecta al hostname DDNS que siempre apunta a la IP
 pública de casa. El router reenvía los paquetes UDP a la RPi.
+
+El 3er enlace WiFi (UDP 5082) es opcional y se activa automáticamente cuando
+el WiFi del Mac pasa los pre-flight checks (ver README → "Tercer enlace WiFi").
+El RPi siempre tiene el puerto 5082 abierto y escucha allí; es el cliente quien
+decide si usarlo.
 
 > ⚠️ **Requisito previo: IP pública sin CGNAT**
 > Muchos ISPs residenciales usan CGNAT (la IP WAN del router empieza por `100.x.x.x`).

@@ -44,7 +44,8 @@
 | REQ-NET-02 | Android compartiendo red por USB tethering | Interfaz `en12` o similar |
 | REQ-NET-03 | Los dos enlaces activos simultáneamente al conectar | Para bonding real |
 | REQ-NET-04 | IP pública sin CGNAT en el servidor doméstico | Opción B (RPi): verificar que IP WAN no empieza por `100.x` |
-| REQ-NET-05 | WiFi corporativa o captive portal | Tercer enlace opcional — detección automática pendiente (Fase 2) |
+| REQ-NET-05 | WiFi corporativa o captive portal | Tercer enlace opcional — implementado por REQ-NET-06 |
+| REQ-NET-06 | Tercer enlace WiFi con pre-flight checks | `04-conectar.sh` evalúa IP, red de casa y captive portal antes de añadir el WiFi al bonding. Opt-out con `--sin-wifi`. Si UDP al puerto 5082 está bloqueado, mlvpn deja el link en `AUTH_PENDING` (visible en `08-monitor.py`) sin romper los otros enlaces. |
 
 ## macOS — Restricciones conocidas
 

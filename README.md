@@ -23,7 +23,7 @@ El servidor mlvpn puede ser **un VPS gratuito en Oracle Cloud** o **una Raspberr
 - [Uso diario](#uso-diario)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Configuración](#configuración)
-- [Opción: tres enlaces](#opción-tres-enlaces)
+- [Tercer enlace WiFi (automático)](#tercer-enlace-wifi-automático)
 - [Solución de problemas](#solución-de-problemas)
 - [Contribuir](#contribuir)
 - [Licencia](#licencia)
@@ -353,28 +353,51 @@ Todas las variables viven en `config/env` (creado a partir de `config/env.exampl
 | `VPS_SSH_PORT` | Puerto SSH | `22` |
 | `MLVPN_PORT_1` | Puerto UDP enlace 1 (iPhone) | `5080` |
 | `MLVPN_PORT_2` | Puerto UDP enlace 2 (Android) | `5081` |
+| `MLVPN_PORT_3` | Puerto UDP enlace 3 (WiFi opcional) | `5082` |
 | `TUN_VPS_IP` | IP del servidor en el túnel | `10.10.10.1` |
 | `TUN_MAC_IP` | IP del Mac en el túnel | `10.10.10.2` |
 | `TUN_MTU` | MTU del túnel | `1440` |
-| `IFACE_IPHONE` | Interfaz WiFi (hotspot iPhone) | `en0` |
-| `IFACE_PIXEL` | Interfaz USB Android | `en5` |
+| `IFACE_IPHONE` | Interfaz USB iPhone (tethering) | `en8` |
+| `IFACE_PIXEL` | Interfaz USB Android | `en12` |
+| `IFACE_WIFI` | Interfaz WiFi nativa del Mac (3er enlace) | `en0` |
 | `RPi_IP` | IP local de la RPi (solo opción B, para el setup) | *(rellenar)* |
 | `RPi_USER` | Usuario SSH de la RPi (solo opción B) | `ubuntu` |
 
 ---
 
-## Opción: tres enlaces
+## Tercer enlace WiFi (automático)
 
-Para máxima redundancia, conecta iPhone por USB, Android por USB, y el WiFi del Mac al WiFi del tren:
+`04-conectar.sh` evalúa el WiFi del Mac (`IFACE_WIFI`, por defecto `en0`) en cada arranque y lo añade al bonding **solo si pasa los pre-flight checks**. Si no, sigue con los 2 móviles sin error.
 
-1. Conecta ambos móviles por USB con tethering activo
-2. Conecta el WiFi del Mac al WiFi del tren
-3. Añade en `config/env`:
-   ```bash
-   MLVPN_PORT_3="5082"
-   IFACE_TREN="en0"   # o la interfaz WiFi del tren
-   ```
-4. Añade un tercer enlace en la config de mlvpn (Mac y VPS)
+### Pre-flight checks
+
+En orden:
+
+1. **Flag `--sin-wifi`** → se omite siempre
+2. **Sin IP en `IFACE_WIFI`** → no hay WiFi conectada, se omite
+3. **Red de casa** → si la IP del Mac está en la subred de `RPi_IP` y el RPi local responde a ping, se omite con aviso (evita el viaje absurdo Mac→router→WAN→router→RPi)
+4. **Captive portal** → HTTP a `captive.apple.com/hotspot-detect.html`; si la respuesta no es exactamente `<TITLE>Success</TITLE>` se asume captive y se omite con mensaje "autentica en el navegador y reejecuta"
+5. **Si todos OK** → se anexa `[links.wifi]` al bonding con `bindhost = IP_WIFI` y `remoteport = MLVPN_PORT_3`
+
+### Matriz de comportamiento
+
+| Escenario | IP | Captive | UDP | Resultado |
+|---|---|---|---|---|
+| WiFi apagada | ✗ | – | – | 2 enlaces, sin error |
+| Casa (subred RPi) | ✓ | – | – | 2 enlaces, aviso "red de casa" |
+| Captive pre-auth (hotel/AVE) | ✓ | ✓ | – | 2 enlaces, aviso "autentica y reejecuta" |
+| Hotel/AVE post-auth, UDP libre | ✓ | ✗ | ✓ | **3 enlaces activos** |
+| Hotel/oficina, UDP filtrado | ✓ | ✗ | ✗ | 3 enlaces, WiFi en `AUTH_PENDING` (visible en monitor) |
+
+### Forzar 2 enlaces
+
+```bash
+sudo ./04-conectar.sh --sin-wifi
+```
+
+### Requisitos en el servidor
+
+`07-setup-rpi.sh` (o `02-setup-vps.sh`) abren el puerto UDP `MLVPN_PORT_3` en el firewall y añaden `[links.wifi]` con `bindport = ${MLVPN_PORT_3}` a la configuración de mlvpn. Si actualizas `MLVPN_PORT_3` en `config/env`, vuelve a ejecutar `07-setup-rpi.sh` para propagar los cambios.
 
 ---
 

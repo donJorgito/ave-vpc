@@ -49,6 +49,7 @@ if [[ -n "${VPS_IP:-}" ]]; then
     # Borrar rutas con -ifscope (una por interfaz) y la ruta genérica
     sudo route -n delete -host "${VPS_IP}" -ifscope "${IFACE_IPHONE:-en8}" 2>/dev/null || true
     sudo route -n delete -host "${VPS_IP}" -ifscope "${IFACE_PIXEL:-en12}" 2>/dev/null || true
+    sudo route -n delete -host "${VPS_IP}" -ifscope "${IFACE_WIFI:-en0}" 2>/dev/null || true
     sudo route -n delete -host "${VPS_IP}" 2>/dev/null || true
     echo "  Rutas a ${VPS_IP} eliminadas"
 fi

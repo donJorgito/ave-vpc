@@ -52,8 +52,24 @@ if [[ "${EUID}" -ne 0 ]]; then
     echo "  Desde Terminal.app:  sudo ./04-conectar.sh"
     echo "  Desde Claude Code:   SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A ./04-conectar.sh"
     echo "  (el askpass lo crea 03-setup-mac.sh automáticamente)"
+    echo ""
+    echo "Flags:"
+    echo "  --sin-wifi   No usar el WiFi del Mac como 3er enlace (forzar 2 enlaces móviles)"
     exit 1
 fi
+
+# --- Parser de flags ---
+SIN_WIFI=false
+for arg in "$@"; do
+    case "${arg}" in
+        --sin-wifi) SIN_WIFI=true ;;
+        *)
+            echo "ERROR: argumento desconocido: ${arg}"
+            echo "Uso: $0 [--sin-wifi]"
+            exit 1
+            ;;
+    esac
+done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/config/env"
@@ -71,6 +87,10 @@ fi
 # shellcheck source=/dev/null
 source "${CONFIG_FILE}"
 
+# Defaults para variables nuevas (compat con configs anteriores)
+IFACE_WIFI="${IFACE_WIFI:-en0}"
+MLVPN_PORT_3="${MLVPN_PORT_3:-5082}"
+
 # =====================================================================
 # Paso 1: Detectar IPs actuales de cada interfaz
 #
@@ -81,21 +101,75 @@ echo "=> Detectando interfaces..."
 
 IP_IPHONE="$(ipconfig getifaddr "${IFACE_IPHONE}" 2>/dev/null || true)"
 IP_PIXEL="$(ipconfig getifaddr "${IFACE_PIXEL}" 2>/dev/null || true)"
+IP_WIFI="$(ipconfig getifaddr "${IFACE_WIFI}" 2>/dev/null || true)"
 
 echo "  iPhone (${IFACE_IPHONE}): ${IP_IPHONE:-NO DETECTADO}"
 echo "  Pixel  (${IFACE_PIXEL}):  ${IP_PIXEL:-NO DETECTADO}"
+echo "  WiFi   (${IFACE_WIFI}):   ${IP_WIFI:-sin IP}"
 
 if [[ -z "${IP_IPHONE}" && -z "${IP_PIXEL}" ]]; then
     echo ""
-    echo "ERROR: Ninguna interfaz tiene IP. Verifica:"
-    echo "  - iPhone: hotspot activo y Mac conectado al Wi-Fi del iPhone"
+    echo "ERROR: Ningún enlace móvil tiene IP. Verifica:"
+    echo "  - iPhone: tethering USB activo y cable conectado"
     echo "  - Pixel:  tethering USB activo y cable conectado"
+    echo "  (el WiFi por sí solo no es suficiente — necesitas al menos 1 móvil)"
     exit 1
+fi
+
+# =====================================================================
+# Paso 1b: ¿Es elegible el WiFi como 3er enlace?
+#
+# Pre-flight checks (en orden):
+#   1. --sin-wifi → skip
+#   2. Sin IP en IFACE_WIFI → skip
+#   3. Mac en la subred del RPi y RPi local responde → skip (estamos en casa)
+#   4. Captive portal (HTTP a captive.apple.com) → skip
+# Si todos pasan, el WiFi se añade como 3er enlace en el paso 3.
+# =====================================================================
+WIFI_ELIGIBLE=false
+
+check_wifi_eligibility() {
+    if "${SIN_WIFI}"; then
+        echo "  WiFi descartado por --sin-wifi"
+        return 1
+    fi
+    if [[ -z "${IP_WIFI}" ]]; then
+        echo "  WiFi sin IP en ${IFACE_WIFI} — bonding solo con móviles"
+        return 1
+    fi
+    # ¿Estamos en la red de casa? (subred del RPi + RPi local responde)
+    if [[ -n "${RPi_IP:-}" ]]; then
+        local rpi_subnet="${RPi_IP%.*}"
+        local wifi_subnet="${IP_WIFI%.*}"
+        if [[ "${rpi_subnet}" == "${wifi_subnet}" ]]; then
+            if ping -c 1 -t 1 -S "${IP_WIFI}" "${RPi_IP}" &>/dev/null; then
+                echo "  WiFi en red de casa (${IP_WIFI} → ${RPi_IP}) — saltando 3er enlace para evitar hairpin NAT"
+                return 1
+            fi
+        fi
+    fi
+    # Captive portal: la página de Apple devuelve EXACTAMENTE "Success" en el body.
+    # Si vemos otra cosa o timeout, asumimos captive o sin Internet.
+    if ! curl --interface "${IFACE_WIFI}" -s --max-time 2 \
+            "http://captive.apple.com/hotspot-detect.html" 2>/dev/null | \
+            grep -q "<TITLE>Success</TITLE>"; then
+        echo "  WiFi en captive portal — autentica en el navegador y reejecuta este script"
+        return 1
+    fi
+    return 0
+}
+
+echo ""
+echo "=> Evaluando WiFi como 3er enlace..."
+if check_wifi_eligibility; then
+    WIFI_ELIGIBLE=true
+    echo "  WiFi elegible: ${IP_WIFI} via ${IFACE_WIFI}"
 fi
 
 ACTIVE_LINKS=0
 [[ -n "${IP_IPHONE}" ]] && ACTIVE_LINKS=$((ACTIVE_LINKS + 1))
 [[ -n "${IP_PIXEL}" ]] && ACTIVE_LINKS=$((ACTIVE_LINKS + 1))
+"${WIFI_ELIGIBLE}" && ACTIVE_LINKS=$((ACTIVE_LINKS + 1))
 echo "  Enlaces activos: ${ACTIVE_LINKS}"
 
 # =====================================================================
@@ -119,23 +193,28 @@ get_gateway() {
 # Limpiar rutas previas (ifscope y regulares)
 sudo route -n delete "${VPS_IP}/32" 2>/dev/null || true
 sudo route -n delete -host "${VPS_IP}" 2>/dev/null || true
+sudo route -n delete -host "${VPS_IP}" -ifscope "${IFACE_IPHONE}" 2>/dev/null || true
+sudo route -n delete -host "${VPS_IP}" -ifscope "${IFACE_PIXEL}" 2>/dev/null || true
+sudo route -n delete -host "${VPS_IP}" -ifscope "${IFACE_WIFI}" 2>/dev/null || true
 
 # Detectar gateways de cada interfaz
-if [[ -n "${IP_IPHONE}" ]]; then
-    GW_IPHONE="$(get_gateway "${IFACE_IPHONE}")"
-fi
-if [[ -n "${IP_PIXEL}" ]]; then
-    GW_PIXEL="$(get_gateway "${IFACE_PIXEL}")"
-fi
+GW_IPHONE=""
+GW_PIXEL=""
+GW_WIFI=""
+[[ -n "${IP_IPHONE}" ]] && GW_IPHONE="$(get_gateway "${IFACE_IPHONE}")"
+[[ -n "${IP_PIXEL}" ]] && GW_PIXEL="$(get_gateway "${IFACE_PIXEL}")"
+"${WIFI_ELIGIBLE}" && GW_WIFI="$(get_gateway "${IFACE_WIFI}")"
 
 # Añadir rutas ifscope para el tráfico de mlvpn (se usa cuando IP_BOUND_IF está activo)
 [[ -n "${GW_IPHONE}" ]] && sudo route -n add -host "${VPS_IP}" "${GW_IPHONE}" -ifscope "${IFACE_IPHONE}" && echo "  Ruta iPhone ifscope: ${VPS_IP} -> ${GW_IPHONE} (${IFACE_IPHONE})"
 [[ -n "${GW_PIXEL}" ]]  && sudo route -n add -host "${VPS_IP}" "${GW_PIXEL}"  -ifscope "${IFACE_PIXEL}"  && echo "  Ruta Pixel  ifscope: ${VPS_IP} -> ${GW_PIXEL}  (${IFACE_PIXEL})"
+[[ -n "${GW_WIFI}" ]]   && sudo route -n add -host "${VPS_IP}" "${GW_WIFI}"   -ifscope "${IFACE_WIFI}"   && echo "  Ruta WiFi   ifscope: ${VPS_IP} -> ${GW_WIFI}   (${IFACE_WIFI})"
 
-# Añadir ruta regular /32 al VPS via Pixel (o iPhone si no hay Pixel).
+# Añadir ruta regular /32 al VPS — preferencia: Pixel > iPhone > WiFi.
 # Esta ruta /32 vence a la /1 del tunel en la tabla global — evita el loop
 # cuando macOS consulta la ruta sin scoping (sockets no-IP_BOUND_IF).
-VPS_GW="${GW_PIXEL:-${GW_IPHONE}}"
+# Preferimos móviles porque son enlaces dedicados y estables.
+VPS_GW="${GW_PIXEL:-${GW_IPHONE:-${GW_WIFI}}}"
 if [[ -n "${VPS_GW}" ]]; then
     sudo route -n add -host "${VPS_IP}" "${VPS_GW}" 2>/dev/null || true
     echo "  Ruta VPS global: ${VPS_IP} -> ${VPS_GW} (anti-loop para 0/1)"
@@ -157,6 +236,21 @@ chmod 600 "${GENERATED_DIR}/mlvpn_active.conf"
 
 sed -i '' "s/PLACEHOLDER_IPHONE_IP/${IP_IPHONE:-0.0.0.0}/" "${GENERATED_DIR}/mlvpn_active.conf"
 sed -i '' "s/PLACEHOLDER_PIXEL_IP/${IP_PIXEL:-0.0.0.0}/" "${GENERATED_DIR}/mlvpn_active.conf"
+
+# Si el WiFi pasó los pre-flight checks, anexar el bloque [links.wifi].
+# No se mete en la plantilla generada por 03-setup-mac.sh porque solo
+# se sabe en tiempo de conexión si la WiFi actual es elegible.
+if "${WIFI_ELIGIBLE}"; then
+    cat >> "${GENERATED_DIR}/mlvpn_active.conf" <<EOF
+
+[links.wifi]
+bindhost = "${IP_WIFI}"
+remotehost = "${VPS_IP}"
+remoteport = ${MLVPN_PORT_3}
+bandwidth_upload = 5000000
+EOF
+    echo "  Bloque [links.wifi] añadido a la config (puerto ${MLVPN_PORT_3})"
+fi
 
 # =====================================================================
 # Paso 4: Arrancar mlvpn
@@ -211,18 +305,9 @@ if [[ -n "${UTUN_IFACE}" ]]; then
     echo "  Configurando ${UTUN_IFACE} con IP del tunel..."
     ifconfig "${UTUN_IFACE}" "${TUN_MAC_IP}" "${TUN_VPS_IP}" mtu "${TUN_MTU}" up 2>/dev/null || true
     # Rutas de default via tunel (0/1 + 128/1 = más específicas que la ruta default
-    # existente, sin borrarla). Las rutas específicas al VPS (/32 via móviles, añadidas
-    # en el paso 2) tienen prioridad sobre estas, evitando el loop de enrutamiento.
-    # Añadir ruta regular (sin ifscope) al VPS para que mlvpn la use
-    # incluso cuando existen rutas 0/1. Las rutas /32 son más específicas que /1.
-    # Tomamos el Pixel como ruta principal al VPS (suele tener datos móviles).
-    if [[ -n "${GW_PIXEL}" ]]; then
-        sudo route -n add -host "${VPS_IP}" "${GW_PIXEL}" 2>/dev/null || true
-    elif [[ -n "${GW_IPHONE}" ]]; then
-        sudo route -n add -host "${VPS_IP}" "${GW_IPHONE}" 2>/dev/null || true
-    fi
-
-    # Rutas de default via tunel — todo el tráfico pasa por mlvpn
+    # existente, sin borrarla). La /32 anti-loop al VPS_IP ya se añadió en el paso 2,
+    # con preferencia móvil → WiFi como fallback. Esa /32 vence a las /1 del tunel
+    # y evita el loop de enrutamiento.
     route -n add -net 0.0.0.0/1   -interface "${UTUN_IFACE}" 2>/dev/null || true
     route -n add -net 128.0.0.0/1 -interface "${UTUN_IFACE}" 2>/dev/null || true
     echo "  Tunel configurado en ${UTUN_IFACE} (bonding activo)"
@@ -254,12 +339,13 @@ echo "  Tunel:   ${TUN_MAC_IP} <-> ${TUN_VPS_IP}"
 echo "  Enlaces: ${ACTIVE_LINKS} activos"
 [[ -n "${IP_IPHONE}" ]] && echo "    - iPhone (${IFACE_IPHONE}): ${IP_IPHONE} -> VPS:${MLVPN_PORT_1}"
 [[ -n "${IP_PIXEL}" ]]  && echo "    - Pixel  (${IFACE_PIXEL}):  ${IP_PIXEL}  -> VPS:${MLVPN_PORT_2}"
+"${WIFI_ELIGIBLE}"      && echo "    - WiFi   (${IFACE_WIFI}):   ${IP_WIFI}  -> VPS:${MLVPN_PORT_3}"
 echo ""
 echo "  PID:     ${MLVPN_PID}"
 echo "  Log:     ${GENERATED_DIR}/mlvpn.log"
 echo ""
 echo "Todo tu trafico (VPN, videollamadas, navegacion) ahora pasa por"
-echo "AMBOS moviles a la vez. Si uno se cae, el otro absorbe sin corte."
+echo "los ${ACTIVE_LINKS} enlaces a la vez. Si uno se cae, los demás absorben sin corte."
 echo ""
 echo "Para ver el log en tiempo real:"
 echo "  tail -f ${GENERATED_DIR}/mlvpn.log"

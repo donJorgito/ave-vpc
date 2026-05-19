@@ -143,6 +143,19 @@ if [[ -n "${IFACE_PIXEL:-}" ]]; then
   fi
 fi
 
+# IFACE_WIFI es opcional (3er enlace). Si falta o no tiene IP, no es error.
+IFACE_WIFI_VAL="${IFACE_WIFI:-en0}"
+if ifconfig "${IFACE_WIFI_VAL}" &>/dev/null 2>&1; then
+  IP_WF=$(ifconfig "${IFACE_WIFI_VAL}" | awk '/inet /{print $2}')
+  if [[ -n "${IP_WF}" ]]; then
+    ok "IFACE_WIFI (${IFACE_WIFI_VAL}) activa con IP ${IP_WF} — candidata a 3er enlace"
+  else
+    warn "IFACE_WIFI (${IFACE_WIFI_VAL}) sin IP — el 3er enlace WiFi se omitirá"
+  fi
+else
+  warn "IFACE_WIFI (${IFACE_WIFI_VAL}) no existe — el 3er enlace WiFi se omitirá"
+fi
+
 # ─── Resumen ──────────────────────────────────────────────────────────────────
 echo ""
 if [[ ${FAILED} -eq 0 ]]; then

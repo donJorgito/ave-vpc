@@ -69,6 +69,7 @@ echo "${MLVPN_SECRET}" | ssh -p "${VPS_SSH_PORT}" "${VPS_USER}@${VPS_IP}" "sudo 
 ssh -p "${VPS_SSH_PORT}" "${VPS_USER}@${VPS_IP}" \
     MLVPN_PORT_1="${MLVPN_PORT_1}" \
     MLVPN_PORT_2="${MLVPN_PORT_2}" \
+    MLVPN_PORT_3="${MLVPN_PORT_3:-5082}" \
     TUN_VPS_IP="${TUN_VPS_IP}" \
     TUN_MAC_IP="${TUN_MAC_IP}" \
     TUN_NETMASK="${TUN_NETMASK}" \
@@ -158,12 +159,21 @@ statuscommand = "/etc/mlvpn/mlvpn_updown.sh"
 [filters.fifo]
 
 # ---- Enlace 1: recibe paquetes que el Mac envia por el iPhone ----
+# bindhost = "0.0.0.0" obligatorio para que mlvpn escuche en todas las
+# interfaces (fix de un bug donde sin él los puertos no quedaban en escucha).
 [links.iphone]
+bindhost = "0.0.0.0"
 bindport = ${MLVPN_PORT_1}
 
 # ---- Enlace 2: recibe paquetes que el Mac envia por el Pixel ----
 [links.pixel]
+bindhost = "0.0.0.0"
 bindport = ${MLVPN_PORT_2}
+
+# ---- Enlace 3: 3er enlace WiFi opcional (cliente decide si conecta) ----
+[links.wifi]
+bindhost = "0.0.0.0"
+bindport = ${MLVPN_PORT_3}
 EOF
 
 sudo chmod 600 /etc/mlvpn/mlvpn.conf
@@ -225,10 +235,12 @@ echo "  [VPS] Configurando firewall..."
 if command -v ufw &>/dev/null; then
     sudo ufw allow "${MLVPN_PORT_1}/udp" 2>/dev/null || true
     sudo ufw allow "${MLVPN_PORT_2}/udp" 2>/dev/null || true
+    sudo ufw allow "${MLVPN_PORT_3}/udp" 2>/dev/null || true
     sudo ufw reload 2>/dev/null || true
 elif command -v firewall-cmd &>/dev/null; then
     sudo firewall-cmd --permanent --add-port="${MLVPN_PORT_1}/udp" 2>/dev/null || true
     sudo firewall-cmd --permanent --add-port="${MLVPN_PORT_2}/udp" 2>/dev/null || true
+    sudo firewall-cmd --permanent --add-port="${MLVPN_PORT_3}/udp" 2>/dev/null || true
     sudo firewall-cmd --reload 2>/dev/null || true
 fi
 

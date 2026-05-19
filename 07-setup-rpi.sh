@@ -81,6 +81,7 @@ echo "${MLVPN_SECRET}" | ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
 ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     MLVPN_PORT_1="${MLVPN_PORT_1}" \
     MLVPN_PORT_2="${MLVPN_PORT_2}" \
+    MLVPN_PORT_3="${MLVPN_PORT_3:-5082}" \
     TUN_VPS_IP="${TUN_VPS_IP}" \
     TUN_MAC_IP="${TUN_MAC_IP}" \
     TUN_MTU="${TUN_MTU}" \
@@ -139,10 +140,16 @@ statuscommand = "/etc/mlvpn/mlvpn_updown.sh"
 [filters.fifo]
 
 [links.iphone]
+bindhost = "0.0.0.0"
 bindport = ${MLVPN_PORT_1}
 
 [links.pixel]
+bindhost = "0.0.0.0"
 bindport = ${MLVPN_PORT_2}
+
+[links.wifi]
+bindhost = "0.0.0.0"
+bindport = ${MLVPN_PORT_3}
 EOF
 
 sudo chmod 600 /etc/mlvpn/mlvpn.conf
@@ -154,7 +161,7 @@ echo "  [RPi] Escribiendo /etc/mlvpn/mlvpn_updown.sh..."
 
 sudo tee /etc/mlvpn/mlvpn_updown.sh > /dev/null <<'UPDOWN'
 #!/bin/bash
-# mlvpn statuscommand — firma: script <device> <evento> [link]
+# mlvpn statuscommand - firma: script <device> <evento> [link]
 # Env: IP4, IP4_GATEWAY, MTU, DEVICE
 IFACE="$1"
 EVENT="$2"
@@ -209,6 +216,7 @@ sudo ufw --force enable
 sudo ufw allow ssh
 sudo ufw allow "${MLVPN_PORT_1}/udp"
 sudo ufw allow "${MLVPN_PORT_2}/udp"
+sudo ufw allow "${MLVPN_PORT_3}/udp"
 sudo ufw reload
 
 # =====================================================================
