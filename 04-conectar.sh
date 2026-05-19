@@ -116,23 +116,29 @@ get_gateway() {
     netstat -rn -f inet | awk -v iface="${iface}" '$1 == "default" && $NF == iface {print $2; exit}'
 }
 
-# Limpiar rutas previas
+# Limpiar rutas previas (ifscope y regulares)
 sudo route -n delete "${VPS_IP}/32" 2>/dev/null || true
+sudo route -n delete -host "${VPS_IP}" 2>/dev/null || true
 
+# Detectar gateways de cada interfaz
 if [[ -n "${IP_IPHONE}" ]]; then
     GW_IPHONE="$(get_gateway "${IFACE_IPHONE}")"
-    if [[ -n "${GW_IPHONE}" ]]; then
-        sudo route -n add -host "${VPS_IP}" "${GW_IPHONE}" -ifscope "${IFACE_IPHONE}"
-        echo "  Ruta iPhone: ${VPS_IP} -> gw ${GW_IPHONE} (${IFACE_IPHONE})"
-    fi
 fi
-
 if [[ -n "${IP_PIXEL}" ]]; then
     GW_PIXEL="$(get_gateway "${IFACE_PIXEL}")"
-    if [[ -n "${GW_PIXEL}" ]]; then
-        sudo route -n add -host "${VPS_IP}" "${GW_PIXEL}" -ifscope "${IFACE_PIXEL}"
-        echo "  Ruta Pixel:  ${VPS_IP} -> gw ${GW_PIXEL} (${IFACE_PIXEL})"
-    fi
+fi
+
+# Añadir rutas ifscope para el tráfico de mlvpn (se usa cuando IP_BOUND_IF está activo)
+[[ -n "${GW_IPHONE}" ]] && sudo route -n add -host "${VPS_IP}" "${GW_IPHONE}" -ifscope "${IFACE_IPHONE}" && echo "  Ruta iPhone ifscope: ${VPS_IP} -> ${GW_IPHONE} (${IFACE_IPHONE})"
+[[ -n "${GW_PIXEL}" ]]  && sudo route -n add -host "${VPS_IP}" "${GW_PIXEL}"  -ifscope "${IFACE_PIXEL}"  && echo "  Ruta Pixel  ifscope: ${VPS_IP} -> ${GW_PIXEL}  (${IFACE_PIXEL})"
+
+# Añadir ruta regular /32 al VPS via Pixel (o iPhone si no hay Pixel).
+# Esta ruta /32 vence a la /1 del tunel en la tabla global — evita el loop
+# cuando macOS consulta la ruta sin scoping (sockets no-IP_BOUND_IF).
+VPS_GW="${GW_PIXEL:-${GW_IPHONE}}"
+if [[ -n "${VPS_GW}" ]]; then
+    sudo route -n add -host "${VPS_IP}" "${VPS_GW}" 2>/dev/null || true
+    echo "  Ruta VPS global: ${VPS_IP} -> ${VPS_GW} (anti-loop para 0/1)"
 fi
 
 # =====================================================================
@@ -204,10 +210,22 @@ done
 if [[ -n "${UTUN_IFACE}" ]]; then
     echo "  Configurando ${UTUN_IFACE} con IP del tunel..."
     ifconfig "${UTUN_IFACE}" "${TUN_MAC_IP}" "${TUN_VPS_IP}" mtu "${TUN_MTU}" up 2>/dev/null || true
-    # NOTA: NO añadimos rutas 0/1 y 128/1 aquí — causarían loop si el tunel
-    # no reenvía correctamente. El tráfico al VPS (10.10.10.1) funciona
-    # via la ruta host P2P automática de utunX.
-    echo "  Tunel configurado en ${UTUN_IFACE}"
+    # Rutas de default via tunel (0/1 + 128/1 = más específicas que la ruta default
+    # existente, sin borrarla). Las rutas específicas al VPS (/32 via móviles, añadidas
+    # en el paso 2) tienen prioridad sobre estas, evitando el loop de enrutamiento.
+    # Añadir ruta regular (sin ifscope) al VPS para que mlvpn la use
+    # incluso cuando existen rutas 0/1. Las rutas /32 son más específicas que /1.
+    # Tomamos el Pixel como ruta principal al VPS (suele tener datos móviles).
+    if [[ -n "${GW_PIXEL}" ]]; then
+        sudo route -n add -host "${VPS_IP}" "${GW_PIXEL}" 2>/dev/null || true
+    elif [[ -n "${GW_IPHONE}" ]]; then
+        sudo route -n add -host "${VPS_IP}" "${GW_IPHONE}" 2>/dev/null || true
+    fi
+
+    # Rutas de default via tunel — todo el tráfico pasa por mlvpn
+    route -n add -net 0.0.0.0/1   -interface "${UTUN_IFACE}" 2>/dev/null || true
+    route -n add -net 128.0.0.0/1 -interface "${UTUN_IFACE}" 2>/dev/null || true
+    echo "  Tunel configurado en ${UTUN_IFACE} (bonding activo)"
 else
     echo "  AVISO: No se pudo detectar la interfaz utun de mlvpn"
 fi
