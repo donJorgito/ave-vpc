@@ -133,7 +133,7 @@ ip4_gateway = "${TUN_MAC_IP}"
 mtu = ${TUN_MTU}
 password = "${MLVPN_SECRET}"
 timeout = 30
-ip4_updns = "/etc/mlvpn/mlvpn_updown.sh"
+statuscommand = "/etc/mlvpn/mlvpn_updown.sh"
 
 [filters]
 [filters.fifo]
@@ -154,25 +154,32 @@ echo "  [RPi] Escribiendo /etc/mlvpn/mlvpn_updown.sh..."
 
 sudo tee /etc/mlvpn/mlvpn_updown.sh > /dev/null <<'UPDOWN'
 #!/bin/bash
+# mlvpn statuscommand — firma: script <device> <evento> [link]
+# Env: IP4, IP4_GATEWAY, MTU, DEVICE
+IFACE="$1"
+EVENT="$2"
 DEFAULT_IFACE=$(ip route show default | awk '{print $5; exit}')
 
-case "$1" in
-    up)
-        ip addr add "${MLVPN_IPADDR}/24" dev "${MLVPN_INTERFACE}"
-        ip link set "${MLVPN_INTERFACE}" up mtu "${MLVPN_MTU}"
-        iptables -t nat -A POSTROUTING -s "${MLVPN_IPADDR%.*}.0/24" -o "${DEFAULT_IFACE}" -j MASQUERADE
-        iptables -A FORWARD -i "${MLVPN_INTERFACE}" -j ACCEPT
-        iptables -A FORWARD -o "${MLVPN_INTERFACE}" -j ACCEPT
+case "${EVENT}" in
+    tuntap_up)
+        ip addr add "${IP4}/24" dev "${IFACE}"
+        ip link set "${IFACE}" up mtu "${MTU}"
+        iptables -t nat -A POSTROUTING -s "${IP4%.*}.0/24" -o "${DEFAULT_IFACE}" -j MASQUERADE
+        iptables -A FORWARD -i "${IFACE}" -j ACCEPT
+        iptables -A FORWARD -o "${IFACE}" -j ACCEPT
         ;;
-    down)
-        iptables -t nat -D POSTROUTING -s "${MLVPN_IPADDR%.*}.0/24" -o "${DEFAULT_IFACE}" -j MASQUERADE 2>/dev/null || true
-        iptables -D FORWARD -i "${MLVPN_INTERFACE}" -j ACCEPT 2>/dev/null || true
-        iptables -D FORWARD -o "${MLVPN_INTERFACE}" -j ACCEPT 2>/dev/null || true
+    tuntap_down)
+        iptables -t nat -D POSTROUTING -s "${IP4%.*}.0/24" -o "${DEFAULT_IFACE}" -j MASQUERADE 2>/dev/null || true
+        iptables -D FORWARD -i "${IFACE}" -j ACCEPT 2>/dev/null || true
+        iptables -D FORWARD -o "${IFACE}" -j ACCEPT 2>/dev/null || true
+        ;;
+    rtun_up|rtun_down)
         ;;
 esac
 UPDOWN
 
-sudo chmod 755 /etc/mlvpn/mlvpn_updown.sh
+# 700: mlvpn rechaza ejecutar scripts accesibles por grupo/otros
+sudo chmod 700 /etc/mlvpn/mlvpn_updown.sh
 
 # =====================================================================
 # Paso 5: Usuario dedicado mlvpn y directorio de chroot

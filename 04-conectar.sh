@@ -179,14 +179,34 @@ touch "${GENERATED_DIR}/mlvpn.log"
 MLVPN_PID=$!
 echo "${MLVPN_PID}" > "${GENERATED_DIR}/mlvpn.pid"
 
-# Esperar a que la interfaz tun se levante
-echo "  Esperando a que el tunel se establezca..."
-for _ in $(seq 1 15); do
-    if ifconfig mlvpn0 &>/dev/null 2>&1 || ifconfig utun* 2>/dev/null | grep -q "${TUN_MAC_IP}"; then
-        break
+# Esperar a que mlvpn autentique los enlaces y asignar IP al tunel
+# mlvpn no llama al statuscommand de forma fiable en macOS (limitación del
+# mecanismo priv_run_script en el contexto utun). Lo hacemos directamente.
+echo "  Esperando autenticación de enlaces..."
+UTUN_IFACE=""
+for _ in $(seq 1 20); do
+    # Detectar el utun que mlvpn creó buscando el proceso [priv]
+    UTUN_IFACE=$(ps aux | grep "mlvpn: mlvpn0 \[priv\]" | grep -v grep | head -1 | \
+        awk '{print $NF}' | xargs -I{} sh -c 'true' 2>/dev/null || true)
+    # Buscar directamente en ifconfig el utun sin IP asignada (el de mlvpn)
+    if pgrep -f "mlvpn: mlvpn0 @" &>/dev/null; then
+        # Links autenticados — buscar utun sin IP configurada
+        UTUN_IFACE=$(ifconfig | grep -B1 "nd6 options" | grep "utun" | tail -1 | cut -d: -f1)
+        [[ -n "${UTUN_IFACE}" ]] && break
     fi
     sleep 1
 done
+
+if [[ -n "${UTUN_IFACE}" ]]; then
+    echo "  Configurando ${UTUN_IFACE} con IP del tunel..."
+    ifconfig "${UTUN_IFACE}" "${TUN_MAC_IP}" "${TUN_VPS_IP}" mtu "${TUN_MTU}" up 2>/dev/null || true
+    # NOTA: NO añadimos rutas 0/1 y 128/1 aquí — causarían loop si el tunel
+    # no reenvía correctamente. El tráfico al VPS (10.10.10.1) funciona
+    # via la ruta host P2P automática de utunX.
+    echo "  Tunel configurado en ${UTUN_IFACE}"
+else
+    echo "  AVISO: No se pudo detectar la interfaz utun de mlvpn"
+fi
 
 # =====================================================================
 # Paso 5: Verificar conectividad

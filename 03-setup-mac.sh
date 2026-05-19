@@ -221,7 +221,7 @@ password = "${MLVPN_SECRET}"
 timeout = 30
 
 # Script para configurar la interfaz tun y las rutas
-ip4_updns = "${GENERATED_DIR}/mlvpn_updown_mac.sh"
+statuscommand = "${GENERATED_DIR}/mlvpn_updown_mac.sh"
 
 [filters]
 [filters.fifo]
@@ -252,28 +252,35 @@ chmod 600 "${GENERATED_DIR}/mlvpn.conf"
 # =====================================================================
 cat > "${GENERATED_DIR}/mlvpn_updown_mac.sh" <<'UPDOWN'
 #!/bin/bash
-# Script que mlvpn ejecuta al levantar/bajar la interfaz tun en macOS.
+# Script que mlvpn ejecuta al cambiar el estado del tunel en macOS.
+#
+# Firma: script <interfaz> <evento> [nombre_enlace]
+#   $1 = DEVICE   — nombre de interfaz utun asignado por el kernel (ej. utun7)
+#   $2 = evento   — tuntap_up | tuntap_down | rtun_up | rtun_down
+#   $3 = (solo en rtun_*) nombre del enlace
+#
 # Variables de entorno que mlvpn pasa:
-#   MLVPN_INTERFACE: nombre de la interfaz (mlvpn0 -> utunX en macOS)
-#   MLVPN_IPADDR: IP local del tunel (10.10.10.2)
-#   MLVPN_REMOTEADDR: IP remota del tunel (10.10.10.1)
-#   MLVPN_MTU: MTU del tunel
+#   IP4         — IP local del tunel (ej. 10.10.10.2)
+#   IP4_GATEWAY — IP remota del tunel/gateway (ej. 10.10.10.1)
+#   MTU         — MTU del tunel
+#   DEVICE      — mismo que $1
 
-case "$1" in
-    up)
-        # Asignar IP a la interfaz tun
-        ifconfig "${MLVPN_INTERFACE}" "${MLVPN_IPADDR}" "${MLVPN_REMOTEADDR}" netmask 255.255.255.0 mtu "${MLVPN_MTU}" up
+IFACE="$1"
+EVENT="$2"
+LOG="/tmp/mlvpn_updown.log"
+echo "$(date) called: iface=$IFACE event=$EVENT IP4=$IP4 IP4_GW=$IP4_GATEWAY MTU=$MTU" >> "$LOG"
 
-        # Ruta por defecto: todo el trafico va por el tunel
-        # Usamos dos rutas /1 en vez de una /0 para que tengan prioridad
-        # sobre la default existente sin borrarla (truco estandar de VPN)
-        route -n add -net 0.0.0.0/1 "${MLVPN_REMOTEADDR}"
-        route -n add -net 128.0.0.0/1 "${MLVPN_REMOTEADDR}"
+case "${EVENT}" in
+    tuntap_up)
+        # Asignar IP a la interfaz utun
+        # Las rutas 0/1 y 128/1 se gestionan desde 04-conectar.sh
+        # solo cuando el tunel está realmente operativo.
+        ifconfig "${IFACE}" "${IP4}" "${IP4_GATEWAY}" mtu "${MTU}" up
         ;;
-    down)
-        # Limpiar rutas
-        route -n delete -net 0.0.0.0/1 "${MLVPN_REMOTEADDR}" 2>/dev/null || true
-        route -n delete -net 128.0.0.0/1 "${MLVPN_REMOTEADDR}" 2>/dev/null || true
+    tuntap_down)
+        ;;
+    rtun_up|rtun_down)
+        # Evento por enlace individual — no requiere accion en macOS
         ;;
 esac
 UPDOWN

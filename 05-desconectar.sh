@@ -30,22 +30,18 @@ if [[ -f "${CONFIG_FILE}" ]]; then
 fi
 
 # --- Paso 1: Parar mlvpn ---
+# Matar todos los procesos mlvpn por nombre (el PID file apunta al tee, no al proceso mlvpn)
 echo "=> Parando mlvpn..."
-if [[ -f "${GENERATED_DIR}/mlvpn.pid" ]]; then
-    MLVPN_PID="$(cat "${GENERATED_DIR}/mlvpn.pid")"
-    if kill -0 "${MLVPN_PID}" 2>/dev/null; then
-        kill "${MLVPN_PID}" 2>/dev/null || true
-        sleep 2
-        kill -9 "${MLVPN_PID}" 2>/dev/null || true
-        echo "  mlvpn (PID ${MLVPN_PID}) parado"
-    else
-        echo "  mlvpn ya no estaba corriendo"
-    fi
-    rm -f "${GENERATED_DIR}/mlvpn.pid"
+if pgrep -f "mlvpn: mlvpn0" &>/dev/null; then
+    pkill -f "mlvpn: mlvpn0" 2>/dev/null || true
+    sleep 2
+    pkill -9 -f "mlvpn: mlvpn0" 2>/dev/null || true
+    pkill -f "tee.*mlvpn.log" 2>/dev/null || true
+    echo "  mlvpn parado"
 else
-    # Buscar por nombre de proceso como fallback
-    pkill -f "mlvpn.*mlvpn_active" 2>/dev/null && echo "  mlvpn parado (por nombre)" || echo "  No hay mlvpn activo"
+    echo "  mlvpn ya no estaba corriendo"
 fi
+rm -f "${GENERATED_DIR}/mlvpn.pid"
 
 # --- Paso 2: Limpiar rutas ---
 echo "=> Limpiando rutas..."
@@ -57,7 +53,6 @@ if [[ -n "${VPS_IP:-}" ]]; then
     echo "  Rutas a ${VPS_IP} eliminadas"
 fi
 
-# Limpiar rutas /1 del tunel (las que puso el script up/down)
 sudo route -n delete -net 0.0.0.0/1 2>/dev/null || true
 sudo route -n delete -net 128.0.0.0/1 2>/dev/null || true
 

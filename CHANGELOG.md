@@ -5,6 +5,22 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.9.0] — 2026-05-19
+
+### Corregido — TÚNEL COMPLETAMENTE FUNCIONAL
+- `07-setup-rpi.sh` / `03-setup-mac.sh` — updown script reescrito con la firma
+  correcta de mlvpn: `script <device> <evento>` + env vars `IP4`, `IP4_GATEWAY`,
+  `MTU`, `DEVICE`. La versión anterior usaba `$1=up/down` y vars `MLVPN_IPADDR`
+  etc. que corresponden a una API antigua no implementada en este mlvpn.
+- `07-setup-rpi.sh` — permisos del updown script: 700 en vez de 755. mlvpn rechaza
+  ejecutar scripts accesibles por grupo u otros (`group/other accessible` → fatal).
+- `07-setup-rpi.sh` — `ip4_updns` → `statuscommand` (nombre correcto del config key).
+  `ip4_updns` es ignorado silenciosamente; `statuscommand` es el key real.
+- `04-conectar.sh` — configura la IP del túnel directamente desde el script en macOS,
+  ya que `priv_run_script` no ejecuta el statuscommand de forma fiable en macOS/utun.
+- `05-desconectar.sh` — mata mlvpn por nombre de proceso (`mlvpn: mlvpn0`), no por
+  PID del tee que era lo que se guardaba en mlvpn.pid.
+
 ## [0.8.0] — 2026-05-19
 
 ### Corregido
