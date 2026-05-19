@@ -5,6 +5,21 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [0.8.0] — 2026-05-19
+
+### Corregido
+- `01-generar-secreto.sh` — cambiado de `openssl rand -hex 32` (64 chars) a `openssl rand -hex 16`
+  (32 chars). El parser de config de mlvpn falla silenciosamente con passwords > ~40 chars:
+  el proceso hijo hereda una clave derivada de una password diferente a la configurada.
+  Con 32 chars (128 bits de entropía) el sistema funciona correctamente.
+- Cron Oracle Cloud eliminado — RPi en casa es el servidor definitivo ✓
+- pmset standby restaurado en AC — ya no se necesita para mantener el Mac despierto
+
+### Primer viaje AVE confirmado (18/05/2026)
+- Bonding iPhone (Movistar) + Pixel (Yoigo) funcionando en Madrid-Orihuela
+- Latencia ~87-677ms (variación normal en tren), 0% pérdida de paquetes al VPS
+- El túnel sobrevive cambios de cobertura entre operadoras
+
 ## [0.7.0] — 2026-05-18
 
 ### Añadido

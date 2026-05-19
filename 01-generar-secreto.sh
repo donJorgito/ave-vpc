@@ -36,9 +36,11 @@ chmod 700 "${KEYS_DIR}"
 
 # --- Paso 2: Generar secreto aleatorio ---
 # openssl rand: genera bytes aleatorios criptograficamente seguros
-# -hex 32: 32 bytes = 64 caracteres hexadecimales
+# -hex 16: 16 bytes = 32 caracteres hexadecimales
+# NOTA: mlvpn tiene un bug con passwords > ~40 chars en su parser de config.
+# 32 chars es suficientemente seguro (128 bits de entropía) y funciona.
 echo "=> Generando secreto compartido para mlvpn..."
-openssl rand -hex 32 > "${KEYS_DIR}/mlvpn.secret"
+openssl rand -hex 16 > "${KEYS_DIR}/mlvpn.secret"
 chmod 600 "${KEYS_DIR}/mlvpn.secret"
 
 echo ""
