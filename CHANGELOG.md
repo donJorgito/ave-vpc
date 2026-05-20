@@ -5,6 +5,38 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+### Añadido
+- **REQ-NET-07**: rebind del enlace WiFi ante cambios de IP (renovación
+  DHCP tras captive portal, roaming entre APs del AVE). `04-conectar.sh`:
+  - Tras pasar el captive, espera 4 s y revalida la IP de `IFACE_WIFI`
+    antes de escribir `bindhost` (caso real visto en el AVE 20/05/2026:
+    DHCP renovó `172.18.152.114` → `172.18.152.147` segundos después de
+    autenticar y mlvpn quedaba bound a una IP inexistente con
+    `!links.wifi` permanente).
+  - Watcher en background (`generated/mlvpn_wifi_watcher.pid`) revisa
+    la IP cada 5 s; si cambia, reescribe `bindhost` y manda `SIGHUP` a
+    `mlvpn [priv]`, que recarga la config y rebindea el socket sin
+    reiniciar el túnel completo.
+  - `[links.wifi]` ahora incluye `timeout = 8`,
+    `loss_tolerence = 30` y `latency_tolerence = 800` (overrides per-
+    link agresivos sobre los 30 s globales). mlvpn saca el WiFi de la
+    agregación cuando se degrada en 8 s en vez de 30 s, sin afectar a
+    iPhone/Pixel.
+- `05-desconectar.sh` mata el watcher antes de parar mlvpn.
+- `tests/test_REQ-NET-07_wifi_ip_rebind.sh` con 7 checks de
+  trazabilidad.
+- `docs/screenshots/monitor-bonding-en-ave.png` — captura real del
+  monitor durante un trayecto Madrid → Orihuela, embebida en el
+  README.
+
+### Cambiado
+- README: la sección de monitorización ya no recomienda
+  `tail -f generated/mlvpn.log` (mlvpn manda los logs runtime a
+  syslog, el fichero solo recoge errores tempranos de arranque y los
+  rebind del watcher). En su lugar:
+  `log stream --predicate 'process == "mlvpn"' --info`.
+
+
 ## [0.14.0] — 2026-05-19
 
 ### Cambiado

@@ -290,8 +290,25 @@ Monitoriza el bonding en tiempo real:
 
 ```bash
 python3 ./08-monitor.py            # throughput por enlace + agregado
-tail -f generated/mlvpn.log        # log de mlvpn
 ```
+
+![Monitor mlvpn en el AVE](docs/screenshots/monitor-bonding-en-ave.png)
+
+*Captura real durante un trayecto en el AVE: iPhone (Movistar) y Pixel
+(Yoigo) activos sumando ~199 KB/s, WiFi del AVE en `AUTH...` (UDP 5082
+filtrado por el ISP del tren — comportamiento esperado, los otros enlaces
+no se ven afectados).*
+
+Logs de mlvpn (van a syslog, no a un fichero plano):
+
+```bash
+log stream --predicate 'process == "mlvpn"' --info   # macOS, en vivo
+log show   --predicate 'process == "mlvpn"' --info --last 5m   # últimos 5 min
+```
+
+> El fichero `generated/mlvpn.log` solo captura errores tempranos de
+> arranque (antes de que mlvpn abra syslog) y los rebind del watcher
+> de IP del WiFi. El tráfico runtime no aparece ahí; usa `log stream`.
 
 ### Al llegar
 
@@ -322,7 +339,8 @@ ave-vpc/
 │   └── env.example             # Plantilla de configuración
 ├── docs/
 │   ├── oracle-cloud-setup.md   # Guía para obtener credenciales OCI
-│   └── rpi-setup.md            # Guía Raspberry Pi: lista de compra, DDNS, router
+│   ├── rpi-setup.md            # Guía Raspberry Pi: lista de compra, DDNS, router
+│   └── screenshots/            # Capturas para README (monitor en vivo, etc.)
 ├── generated/                  # Archivos en tiempo de ejecución (gitignored)
 │   ├── mlvpn.conf              # Configuración del cliente mlvpn
 │   ├── mlvpn.log               # Log de mlvpn

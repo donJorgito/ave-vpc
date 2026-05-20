@@ -52,6 +52,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-04](ave-vpc-REQ-NET-04-requirement.md) | IP pública sin CGNAT en la conexión doméstica |
 | [REQ-NET-05](ave-vpc-REQ-NET-05-requirement.md) | Soporte de WiFi corporativa o redes con captive portal |
 | [REQ-NET-06](ave-vpc-REQ-NET-06-requirement.md) | Tercer enlace WiFi con pre-flight checks |
+| [REQ-NET-07](ave-vpc-REQ-NET-07-requirement.md) | Rebind del enlace WiFi ante cambios de IP |
 
 ## Restricciones macOS (REQ-MAC)
 

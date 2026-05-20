@@ -32,6 +32,12 @@ fi
 # --- Paso 1: Parar mlvpn ---
 # Matar todos los procesos mlvpn por nombre (el PID file apunta al tee, no al proceso mlvpn)
 echo "=> Parando mlvpn..."
+# Matar primero el watcher de IP del WiFi (si 04-conectar.sh lo arrancó)
+if [[ -f "${GENERATED_DIR}/mlvpn_wifi_watcher.pid" ]]; then
+    WATCHER_PID="$(cat "${GENERATED_DIR}/mlvpn_wifi_watcher.pid")"
+    kill "${WATCHER_PID}" 2>/dev/null || true
+    rm -f "${GENERATED_DIR}/mlvpn_wifi_watcher.pid"
+fi
 if pgrep -f "mlvpn: mlvpn0" &>/dev/null; then
     pkill -f "mlvpn: mlvpn0" 2>/dev/null || true
     sleep 2

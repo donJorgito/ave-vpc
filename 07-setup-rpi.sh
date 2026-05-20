@@ -150,6 +150,9 @@ bindport = ${MLVPN_PORT_2}
 [links.wifi]
 bindhost = "0.0.0.0"
 bindport = ${MLVPN_PORT_3}
+timeout = 8
+loss_tolerence = 30
+latency_tolerence = 800
 EOF
 
 sudo chmod 600 /etc/mlvpn/mlvpn.conf

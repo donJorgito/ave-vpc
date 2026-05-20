@@ -24,9 +24,11 @@ terraform/terraform.tfvars
 # Playwright (screenshots y logs de automatización)
 .playwright-mcp/
 
-# Imágenes y capturas de trabajo
+# Imágenes y capturas de trabajo (excepción: las del README en docs/screenshots/)
 *.png
 *.jpg
+!docs/screenshots/*.png
+!docs/screenshots/*.jpg
 
 # MCP config local
 .mcp.json

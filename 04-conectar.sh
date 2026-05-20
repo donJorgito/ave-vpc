@@ -156,6 +156,22 @@ check_wifi_eligibility() {
         echo "  WiFi en captive portal — autentica en el navegador y reejecuta este script"
         return 1
     fi
+    # Anti-bind-stale: tras autenticar el captive portal, el DHCP del WiFi
+    # puede renovar y cambiar la IP en pocos segundos (visto en AVE 20/05/2026:
+    # 172.18.152.114 -> .147). Si arrancamos mlvpn antes, el socket queda
+    # bound a una IP inexistente y el link nunca autentica. Esperamos y
+    # revalidamos.
+    local ip_after
+    sleep 4
+    ip_after="$(ipconfig getifaddr "${IFACE_WIFI}" 2>/dev/null || true)"
+    if [[ -z "${ip_after}" ]]; then
+        echo "  WiFi: perdió IP tras captive — skip"
+        return 1
+    fi
+    if [[ "${ip_after}" != "${IP_WIFI}" ]]; then
+        echo "  WiFi: IP cambió tras captive (${IP_WIFI} -> ${ip_after}); refrescando"
+        IP_WIFI="${ip_after}"
+    fi
     return 0
 }
 
@@ -241,6 +257,11 @@ sed -i '' "s/PLACEHOLDER_PIXEL_IP/${IP_PIXEL:-0.0.0.0}/" "${GENERATED_DIR}/mlvpn
 # No se mete en la plantilla generada por 03-setup-mac.sh porque solo
 # se sabe en tiempo de conexión si la WiFi actual es elegible.
 if "${WIFI_ELIGIBLE}"; then
+    # timeout/loss_tolerence/latency_tolerence: per-link override sobre el
+    # global de 30s. WiFi del AVE pierde paquetes y tiene RTT alto a ratos —
+    # con estos valores mlvpn saca el WiFi de la aggregation cuando se degrada
+    # sin tirar abajo el bonding completo, y declara DOWN en 8s en vez de 30s
+    # (rebind más rápido cuando el AP roamea).
     cat >> "${GENERATED_DIR}/mlvpn_active.conf" <<EOF
 
 [links.wifi]
@@ -248,6 +269,9 @@ bindhost = "${IP_WIFI}"
 remotehost = "${VPS_IP}"
 remoteport = ${MLVPN_PORT_3}
 bandwidth_upload = 5000000
+timeout = 8
+loss_tolerence = 30
+latency_tolerence = 800
 EOF
     echo "  Bloque [links.wifi] añadido a la config (puerto ${MLVPN_PORT_3})"
 fi
@@ -273,7 +297,11 @@ fi
 MLVPN_BIN=$(command -v mlvpn 2>/dev/null || echo "/usr/local/sbin/mlvpn")
 rm -f "${GENERATED_DIR}/mlvpn.log"
 touch "${GENERATED_DIR}/mlvpn.log"
-# --user mlvpn: privilege separation — root crea utun, hijo cae a usuario mlvpn
+# --user mlvpn: privilege separation — root crea utun, hijo cae a usuario mlvpn.
+# mlvpn manda los logs a syslog (Apple Unified Log en macOS). El tee aquí solo
+# captura errores tempranos de arranque (antes de abrir syslog) y los rebind
+# del watcher de IP del WiFi añadidos por este script. Para los logs runtime:
+#   log stream --predicate 'process == "mlvpn"' --info
 "${MLVPN_BIN}" \
     --config "${GENERATED_DIR}/mlvpn_active.conf" \
     --name mlvpn0 \
@@ -313,6 +341,36 @@ if [[ -n "${UTUN_IFACE}" ]]; then
     echo "  Tunel configurado en ${UTUN_IFACE} (bonding activo)"
 else
     echo "  AVISO: No se pudo detectar la interfaz utun de mlvpn"
+fi
+
+# =====================================================================
+# Watcher de IP del WiFi: si en runtime cambia (roaming entre APs del
+# tren, DHCP renew tardío), reescribe bindhost en mlvpn_active.conf y
+# manda SIGHUP a mlvpn — éste recarga el config y rebindea el socket
+# del link wifi a la IP nueva sin reiniciar el túnel completo.
+# Solo se lanza si el WiFi pasó pre-flight; el PID se guarda para que
+# 05-desconectar.sh lo mate.
+# =====================================================================
+if "${WIFI_ELIGIBLE}"; then
+    (
+        last_ip="${IP_WIFI}"
+        # mlvpn corre como root tras el fork; el padre [priv] recibe SIGHUP
+        # y propaga la recarga al hijo unprivileged.
+        priv_pid=$(pgrep -f "mlvpn: mlvpn0 \[priv\]" | head -1)
+        while kill -0 "${priv_pid}" 2>/dev/null; do
+            sleep 5
+            now_ip="$(ipconfig getifaddr "${IFACE_WIFI}" 2>/dev/null || true)"
+            if [[ -n "${now_ip}" && "${now_ip}" != "${last_ip}" ]]; then
+                sed -i '' "s|bindhost = \"${last_ip}\"|bindhost = \"${now_ip}\"|" \
+                    "${GENERATED_DIR}/mlvpn_active.conf"
+                kill -HUP "${priv_pid}" 2>/dev/null && \
+                    echo "$(date '+%H:%M:%S') wifi rebind ${last_ip} -> ${now_ip}" \
+                        >> "${GENERATED_DIR}/mlvpn.log"
+                last_ip="${now_ip}"
+            fi
+        done
+    ) &
+    echo "$!" > "${GENERATED_DIR}/mlvpn_wifi_watcher.pid"
 fi
 
 # =====================================================================
