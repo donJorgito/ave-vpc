@@ -13,4 +13,6 @@ porque el tráfico entrante nunca llega al router del usuario.
 
 - La IP WAN del router doméstico no está en el rango `100.64.0.0/10`.
 - El port forwarding configurado en el router es alcanzable desde
-  internet (tests externos a UDP 5080-5082 llegan a la RPi).
+  internet (tests externos a UDP 5080-5082 llegan a la RPi). Si se
+  configura `MLVPN_PORT_3_REMOTE` (ver REQ-VPS-07), también el puerto
+  público mapeado (típicamente 443/UDP) debe llegar a la RPi.

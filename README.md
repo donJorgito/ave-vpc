@@ -118,7 +118,7 @@ Los scripts instalan automáticamente el resto de dependencias (libev, libsodium
 **Opción A — Oracle Cloud (gratis permanente):**
 - Cuenta en [Oracle Cloud Free Tier](https://cloud.oracle.com)
 - Ubuntu 26.04 LTS, IP pública IPv4
-- Puertos UDP 5080–5082 abiertos (Terraform los configura automáticamente)
+- Puertos UDP 5080, 5081 y 5082 abiertos (Terraform los configura automáticamente)
 
 > ⚠️ **Aviso**: Las VMs gratuitas de Oracle Cloud (especialmente las ARM A1.Flex)
 > tienen muy poca disponibilidad. Es habitual esperar días o semanas hasta que
@@ -294,10 +294,13 @@ python3 ./08-monitor.py            # throughput por enlace + agregado
 
 ![Monitor mlvpn en el AVE](docs/screenshots/monitor-bonding-en-ave.png)
 
-*Captura real durante un trayecto en el AVE: iPhone (Movistar) y Pixel
-(Yoigo) activos sumando ~199 KB/s, WiFi del AVE en `AUTH...` (UDP 5082
-filtrado por el ISP del tren — comportamiento esperado, los otros enlaces
-no se ven afectados).*
+*Captura real durante un trayecto en el AVE el 20/05/2026: iPhone
+(Movistar) y Pixel (Yoigo) activos sumando ~199 KB/s, WiFi del AVE en
+`AUTH...` porque el ISP del tren filtra el puerto 5082. La variable
+opcional `MLVPN_PORT_3_REMOTE="443"` permite que el cliente conecte a
+443/UDP (QUIC, casi siempre permitido) y el router de casa rewrite el
+paquete al 5082 interno donde mlvpn escucha — ver sección [Tercer
+enlace WiFi](#tercer-enlace-wifi-automático).*
 
 Logs de mlvpn (van a syslog, no a un fichero plano):
 
@@ -371,7 +374,8 @@ Todas las variables viven en `config/env` (creado a partir de `config/env.exampl
 | `VPS_SSH_PORT` | Puerto SSH | `22` |
 | `MLVPN_PORT_1` | Puerto UDP enlace 1 (iPhone) | `5080` |
 | `MLVPN_PORT_2` | Puerto UDP enlace 2 (Android) | `5081` |
-| `MLVPN_PORT_3` | Puerto UDP enlace 3 (WiFi opcional) | `5082` |
+| `MLVPN_PORT_3` | Puerto UDP enlace 3 (WiFi opcional, bindport servidor) | `5082` |
+| `MLVPN_PORT_3_REMOTE` | Puerto UDP público al que conecta el cliente (si difiere de `MLVPN_PORT_3` el router hace mapeo) | *(igual a `MLVPN_PORT_3`)* |
 | `TUN_VPS_IP` | IP del servidor en el túnel | `10.10.10.1` |
 | `TUN_MAC_IP` | IP del Mac en el túnel | `10.10.10.2` |
 | `TUN_MTU` | MTU del túnel | `1440` |
@@ -395,7 +399,7 @@ En orden:
 2. **Sin IP en `IFACE_WIFI`** → no hay WiFi conectada, se omite
 3. **Red de casa** → si la IP del Mac está en la subred de `RPi_IP` y el RPi local responde a ping, se omite con aviso (evita el viaje absurdo Mac→router→WAN→router→RPi)
 4. **Captive portal** → HTTP a `captive.apple.com/hotspot-detect.html`; si la respuesta no es exactamente `<TITLE>Success</TITLE>` se asume captive y se omite con mensaje "autentica en el navegador y reejecuta"
-5. **Si todos OK** → se anexa `[links.wifi]` al bonding con `bindhost = IP_WIFI` y `remoteport = MLVPN_PORT_3`
+5. **Si todos OK** → se anexa `[links.wifi]` al bonding con `bindhost = IP_WIFI` y `remoteport = MLVPN_PORT_3_REMOTE` (que por defecto es igual a `MLVPN_PORT_3`, ver más abajo "Puerto público alternativo")
 
 ### Matriz de comportamiento
 
@@ -412,6 +416,22 @@ En orden:
 ```bash
 sudo ./04-conectar.sh --sin-wifi
 ```
+
+### Puerto público alternativo (`MLVPN_PORT_3_REMOTE`)
+
+Las redes WiFi públicas restrictivas (AVE, aeropuertos, hoteles, redes corporativas) suelen filtrar puertos altos arbitrarios como 5082 pero dejan pasar **443/UDP (QUIC)**. Para vencer ese filtro sin tocar el core de mlvpn:
+
+1. Define en `config/env`:
+   ```bash
+   MLVPN_PORT_3_REMOTE="443"
+   ```
+2. En el router de casa, añade una regla extra de port forwarding:
+   ```
+   WAN 443/UDP  →  IP_LOCAL_RPi 5082/UDP
+   ```
+   Mantén también la regla `5082/UDP → 5082/UDP` para conservar el flujo directo.
+
+El cliente conecta a `200bares.dedyn.io:443/UDP`, el router rewrite a `192.168.1.101:5082`, y el `mlvpn` server (que sigue escuchando en 5082) ni se entera. Reversible cambiando `MLVPN_PORT_3_REMOTE` (o quitándolo).
 
 ### Requisitos en el servidor
 

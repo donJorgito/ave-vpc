@@ -35,7 +35,10 @@ pública de casa. El router reenvía los paquetes UDP a la RPi.
 El 3er enlace WiFi (UDP 5082) es opcional y se activa automáticamente cuando
 el WiFi del Mac pasa los pre-flight checks (ver README → "Tercer enlace WiFi").
 El RPi siempre tiene el puerto 5082 abierto y escucha allí; es el cliente quien
-decide si usarlo.
+decide si usarlo. Para WiFi públicos restrictivos (AVE, aeropuertos) que
+filtran puertos altos, el cliente puede conectar a 443/UDP y el router mapea
+a 5082 internamente — ver `MLVPN_PORT_3_REMOTE` y la regla opcional
+`mlvpn-443` más abajo.
 
 > ⚠️ **Requisito previo: IP pública sin CGNAT**
 > Muchos ISPs residenciales usan CGNAT (la IP WAN del router empieza por `100.x.x.x`).
@@ -89,8 +92,16 @@ Añade tres reglas:
 | mlvpn-5080 | UDP | 5080 | IP_LOCAL_RPi | 5080 |
 | mlvpn-5081 | UDP | 5081 | IP_LOCAL_RPi | 5081 |
 | mlvpn-5082 | UDP | 5082 | IP_LOCAL_RPi | 5082 |
+| mlvpn-443 (opcional) | UDP | 443 | IP_LOCAL_RPi | **5082** |
 
 > Sustituye `IP_LOCAL_RPi` por la IP fija que hayas asignado (ej. `192.168.1.101`).
+>
+> La regla **`mlvpn-443`** es **opcional** pero muy recomendable. Mapea el
+> puerto público 443/UDP (que casi ninguna red filtra al ser QUIC) al
+> 5082/UDP interno donde mlvpn escucha. Para activarla en el cliente,
+> define `MLVPN_PORT_3_REMOTE="443"` en `config/env`.
+> El router ZTE F6640 admite port translation (puerto externo distinto
+> del interno) sin problema.
 
 ## Paso 4: DDNS
 

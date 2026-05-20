@@ -38,7 +38,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-VPS-04](ave-vpc-REQ-VPS-04-requirement.md) | Disco mínimo 10 GB |
 | [REQ-VPS-05](ave-vpc-REQ-VPS-05-requirement.md) | IP pública IPv4 estática (o DDNS) |
 | [REQ-VPS-06](ave-vpc-REQ-VPS-06-requirement.md) | Puerto TCP 22 abierto para SSH |
-| [REQ-VPS-07](ave-vpc-REQ-VPS-07-requirement.md) | Puertos UDP 5080-5082 abiertos |
+| [REQ-VPS-07](ave-vpc-REQ-VPS-07-requirement.md) | Puertos UDP del bonding abiertos en el servidor (5080, 5081, 5082) |
 | [REQ-VPS-08](ave-vpc-REQ-VPS-08-requirement.md) | IP forwarding habilitado |
 | [REQ-VPS-09](ave-vpc-REQ-VPS-09-requirement.md) | Latencia al trayecto inferior a 50 ms |
 

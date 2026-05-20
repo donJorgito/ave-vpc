@@ -6,6 +6,28 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 ## [Sin publicar]
 
 ### Añadido
+- **`MLVPN_PORT_3_REMOTE`**: variable opcional con el puerto público al
+  que conecta el cliente para el 3er enlace WiFi. Si difiere de
+  `MLVPN_PORT_3` (puerto interno donde escucha el servidor), se asume
+  que el router hace mapeo de puertos. Caso de uso: las redes WiFi
+  públicas restrictivas (AVE, aeropuertos, hoteles) filtran puertos
+  altos como 5082 pero dejan pasar 443/UDP (QUIC). Configurando
+  `MLVPN_PORT_3_REMOTE="443"` y un mapeo `WAN:443/UDP → RPi:5082` en
+  el router, el cliente atraviesa los filtros sin tocar el core de
+  mlvpn (que sigue en 5082). Reversible cambiando una variable.
+- `04-conectar.sh`: usa `MLVPN_PORT_3_REMOTE` para `remoteport` del
+  link wifi y muestra el mapeo en pantalla cuando difiere del interno.
+- README: nueva sección "Puerto público alternativo
+  (`MLVPN_PORT_3_REMOTE`)" con instrucciones del router.
+- `docs/rpi-setup.md`: regla `mlvpn-443` opcional añadida a la tabla
+  de port forwarding.
+- REQ-VPS-07 actualizado para describir el mapeo público opcional.
+
+### Cambiado (sin publicar antes, parte del cambio anterior)
+- `requirements/REQ.md`: título de REQ-VPS-07 ahora especifica que los
+  puertos son los del servidor.
+
+### Añadido (commit anterior, ya publicado)
 - **REQ-NET-07**: rebind del enlace WiFi ante cambios de IP (renovación
   DHCP tras captive portal, roaming entre APs del AVE). `04-conectar.sh`:
   - Tras pasar el captive, espera 4 s y revalida la IP de `IFACE_WIFI`

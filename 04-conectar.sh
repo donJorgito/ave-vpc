@@ -90,6 +90,10 @@ source "${CONFIG_FILE}"
 # Defaults para variables nuevas (compat con configs anteriores)
 IFACE_WIFI="${IFACE_WIFI:-en0}"
 MLVPN_PORT_3="${MLVPN_PORT_3:-5082}"
+# Puerto público al que conecta el cliente (puede ser distinto al
+# bindport del servidor si el router hace mapeo, ej. WAN:443→RPi:5082).
+# Si no se define, se asume mapeo directo (mismo puerto).
+MLVPN_PORT_3_REMOTE="${MLVPN_PORT_3_REMOTE:-${MLVPN_PORT_3}}"
 
 # =====================================================================
 # Paso 1: Detectar IPs actuales de cada interfaz
@@ -267,13 +271,17 @@ if "${WIFI_ELIGIBLE}"; then
 [links.wifi]
 bindhost = "${IP_WIFI}"
 remotehost = "${VPS_IP}"
-remoteport = ${MLVPN_PORT_3}
+remoteport = ${MLVPN_PORT_3_REMOTE}
 bandwidth_upload = 5000000
 timeout = 8
 loss_tolerence = 30
 latency_tolerence = 800
 EOF
-    echo "  Bloque [links.wifi] añadido a la config (puerto ${MLVPN_PORT_3})"
+    if [[ "${MLVPN_PORT_3_REMOTE}" != "${MLVPN_PORT_3}" ]]; then
+        echo "  Bloque [links.wifi] añadido (cliente conecta a :${MLVPN_PORT_3_REMOTE} → router mapea a :${MLVPN_PORT_3})"
+    else
+        echo "  Bloque [links.wifi] añadido a la config (puerto ${MLVPN_PORT_3})"
+    fi
 fi
 
 # =====================================================================
@@ -397,7 +405,7 @@ echo "  Tunel:   ${TUN_MAC_IP} <-> ${TUN_VPS_IP}"
 echo "  Enlaces: ${ACTIVE_LINKS} activos"
 [[ -n "${IP_IPHONE}" ]] && echo "    - iPhone (${IFACE_IPHONE}): ${IP_IPHONE} -> VPS:${MLVPN_PORT_1}"
 [[ -n "${IP_PIXEL}" ]]  && echo "    - Pixel  (${IFACE_PIXEL}):  ${IP_PIXEL}  -> VPS:${MLVPN_PORT_2}"
-"${WIFI_ELIGIBLE}"      && echo "    - WiFi   (${IFACE_WIFI}):   ${IP_WIFI}  -> VPS:${MLVPN_PORT_3}"
+"${WIFI_ELIGIBLE}"      && echo "    - WiFi   (${IFACE_WIFI}):   ${IP_WIFI}  -> VPS:${MLVPN_PORT_3_REMOTE}"
 echo ""
 echo "  PID:     ${MLVPN_PID}"
 echo "  Log:     ${GENERATED_DIR}/mlvpn.log"

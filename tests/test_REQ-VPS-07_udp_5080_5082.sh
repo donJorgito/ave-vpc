@@ -1,5 +1,5 @@
 #!/bin/sh
-# Validates ave-vpc.REQ-VPS-07: Puertos UDP 5080-5082 abiertos.
+# Validates ave-vpc.REQ-VPS-07: Puertos UDP del bonding abiertos en el servidor (5080, 5081, 5082).
 # shellcheck disable=SC1091
 . "$(dirname "$0")/_lib_junit.sh"
 junit_init "REQ-VPS-07_udp_5080_5082"
