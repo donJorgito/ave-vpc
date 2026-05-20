@@ -15,7 +15,7 @@ Gracias por querer mejorar este proyecto. Aquí están las reglas del juego.
 ### Shell scripts
 - Bash únicamente (`#!/usr/bin/env bash`)
 - `set -euo pipefail` al inicio de cada script
-- Compatibles con macOS y Linux (Ubuntu 24.04)
+- Compatibles con macOS y Linux (Ubuntu 26.04 LTS)
 - Sin código hardcodeado — todo en `config/env`
 - Pasar [ShellCheck](https://www.shellcheck.net/) sin warnings
 
