@@ -28,35 +28,43 @@ else
     junit_fail "tun_mtu_comment_missing" "falta comentario explicando el cálculo de TUN_MTU"
 fi
 
-# Check 3: 03-setup-mac.sh emite loss_tolerence=30 y latency_tolerence=800 en [general]
-if grep -q "^loss_tolerence = 30$" "${SETUP_MAC}" \
+# Check 3: 03-setup-mac.sh emite loss_tolerence=15 y latency_tolerence=800 en [general]
+if grep -q "^loss_tolerence = 15$" "${SETUP_MAC}" \
    && grep -q "^latency_tolerence = 800$" "${SETUP_MAC}"; then
     junit_pass "mac_global_tolerences"
 else
-    junit_fail "mac_global_tolerences_missing" "loss/latency_tolerence globales ausentes en 03-setup-mac.sh"
+    junit_fail "mac_global_tolerences_missing" "loss=15/latency=800 globales ausentes en 03-setup-mac.sh"
 fi
 
-# Check 4: 03-setup-mac.sh NO emite bandwidth_upload en los links
-if grep -q "^bandwidth_upload" "${SETUP_MAC}"; then
-    junit_fail "bandwidth_upload_present" "bandwidth_upload sigue presente en 03-setup-mac.sh — debe eliminarse para auto-balanceo"
+# Check 4: 03-setup-mac.sh emite bandwidth_upload en TODOS los links
+# (esencial para que mlvpn_rtun_recalc_weight() recalcule pesos WRR)
+if [ "$(grep -c '^bandwidth_upload = ' "${SETUP_MAC}")" -ge 2 ]; then
+    junit_pass "bandwidth_upload_in_all_links"
 else
-    junit_pass "bandwidth_upload_removed"
+    junit_fail "bandwidth_upload_missing" "falta bandwidth_upload en algún link — mlvpn no recalcula pesos WRR"
 fi
 
-# Check 5: 07-setup-rpi.sh emite loss_tolerence=30 y latency_tolerence=800 en [general]
-if grep -q "^loss_tolerence = 30$" "${SETUP_RPI}" \
+# Check 5: 07-setup-rpi.sh emite loss_tolerence=15 y latency_tolerence=800 en [general]
+if grep -q "^loss_tolerence = 15$" "${SETUP_RPI}" \
    && grep -q "^latency_tolerence = 800$" "${SETUP_RPI}"; then
     junit_pass "rpi_global_tolerences"
 else
-    junit_fail "rpi_global_tolerences_missing" "loss/latency_tolerence globales ausentes en 07-setup-rpi.sh"
+    junit_fail "rpi_global_tolerences_missing" "loss=15/latency=800 globales ausentes en 07-setup-rpi.sh"
 fi
 
-# Check 6: el config generado documenta cuándo subir reorder_buffer_size
-if grep -q "reorder_buffer_size" "${SETUP_MAC}" \
-   && grep -q "freebuffer full" "${SETUP_MAC}"; then
-    junit_pass "reorder_buffer_documented"
+# Check 6: ambos lados activan reorder_buffer_size = 64
+if grep -q "^reorder_buffer_size = 64$" "${SETUP_MAC}" \
+   && grep -q "^reorder_buffer_size = 64$" "${SETUP_RPI}"; then
+    junit_pass "reorder_buffer_active"
 else
-    junit_fail "reorder_buffer_undocumented" "falta guía de reorder_buffer_size en 03-setup-mac.sh"
+    junit_fail "reorder_buffer_inactive" "reorder_buffer_size = 64 ausente en cliente o servidor"
+fi
+
+# Check 7: bandwidth_upload presente en los links del servidor también
+if [ "$(grep -c '^bandwidth_upload = ' "${SETUP_RPI}")" -ge 3 ]; then
+    junit_pass "bandwidth_upload_rpi_links"
+else
+    junit_fail "bandwidth_upload_rpi_missing" "faltan bandwidth_upload en links del servidor"
 fi
 
 junit_finalize

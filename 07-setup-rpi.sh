@@ -135,11 +135,18 @@ mtu = ${TUN_MTU}
 password = "${MLVPN_SECRET}"
 timeout = 30
 # Tolerancias globales agresivas (REQ-NET-09): un enlace que pierde
-# >30% de paquetes o supera 800 ms de RTT se saca de la agregación
+# >15% de paquetes o supera 800 ms de RTT se saca de la agregación
 # en lugar de arrastrar al resto. Defaults (100%/1000ms) son demasiado
 # permisivos para móvil 4G en tren.
-loss_tolerence = 30
+loss_tolerence = 15
 latency_tolerence = 800
+# reorder_buffer_size = 64: el servidor reordena paquetes que llegan
+# desordenados (típico cuando los 2 enlaces tienen latencias dispares)
+# antes de inyectarlos al kernel TCP. Sin esto el TCP cliente toma
+# los out-of-order como pérdida y entra en congestion control, lo
+# que limita throughput a 100-500 KB/s aunque la suma física sea
+# Mbps. Subir si logs muestran "freebuffer full".
+reorder_buffer_size = 64
 statuscommand = "/etc/mlvpn/mlvpn_updown.sh"
 
 [filters]
@@ -148,16 +155,19 @@ statuscommand = "/etc/mlvpn/mlvpn_updown.sh"
 [links.iphone]
 bindhost = "0.0.0.0"
 bindport = ${MLVPN_PORT_1}
+bandwidth_upload = 10000000
 
 [links.pixel]
 bindhost = "0.0.0.0"
 bindport = ${MLVPN_PORT_2}
+bandwidth_upload = 10000000
 
 [links.wifi]
 bindhost = "0.0.0.0"
 bindport = ${MLVPN_PORT_3}
+bandwidth_upload = 50000000
 timeout = 8
-loss_tolerence = 30
+loss_tolerence = 15
 latency_tolerence = 800
 EOF
 

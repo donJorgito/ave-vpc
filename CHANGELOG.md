@@ -25,26 +25,36 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
   - `tests/test_REQ-MAC-05_defensive_cleanup.sh` (5 checks).
 - **REQ-NET-09 — Tuning de mlvpn para móvil 4G/5G**. Los defaults
   estaban pensados para enlaces simétricos estables y producían lag
-  alto y throughput por debajo de la suma teórica:
+  alto y throughput por debajo de la suma teórica. Diagnóstico real
+  observado: ~400 KB/s vía túnel con 2 enlaces 4G que deberían dar
+  Mbps. La causa raíz fue una mala interpretación inicial del
+  comportamiento de mlvpn — corregida en este commit:
   - `TUN_MTU` baja de 1440 a 1400. Móvil 4G suele tener MTU 1500;
     encapsulado mlvpn = ~76 B (UDP+IPv4 28 + ChaCha20 nonce+tag 32 +
     header mlvpn 16). Margen seguro 1500-76 = 1424; usamos 1400 para
     absorber variaciones de PMTU del camino (tren, hairpin del
     operador). Un MTU demasiado alto provoca fragmentación o
     black-hole de PMTUD.
-  - Añadidas `loss_tolerence = 30` y `latency_tolerence = 800` en
+  - `loss_tolerence = 15` y `latency_tolerence = 800` globales en
     `[general]` (cliente y servidor). Defaults son 100% / 1000 ms,
     demasiado permisivos: un enlace medio-roto arrastra al resto.
-  - Eliminado `bandwidth_upload = 10000000` de los `[links.X]` en
-    `03-setup-mac.sh`. Era arbitrario y forzaba un reparto
-    proporcional incorrecto cuando el ancho de banda real difería
-    entre operadoras (Movistar vs Yoigo varían mucho según
-    cobertura). Sin la directiva, mlvpn auto-balancea por throughput
-    observado.
-  - `reorder_buffer_size` se documenta en el config generado: subir
-    a 64-256 sólo si los logs muestran "freebuffer full". Para
-    videoconf UDP/RTP, un buffer en mlvpn solo añade latencia.
-  - `tests/test_REQ-NET-09_mlvpn_tuning.sh` (6 checks).
+    Reducido de 30 a 15 tras observar Pixel con 20 % pérdida que
+    seguía dentro del bonding y bajaba el throughput agregado.
+  - **`bandwidth_upload` OBLIGATORIO en TODOS los `[links.X]`**. La
+    función `mlvpn_rtun_recalc_weight()` solo recalcula los pesos
+    del Weighted Round Robin si TODOS los tunnels tienen `bandwidth`
+    definido. Si falta en alguno, no recalcula → reparto colapsado.
+    Restaurado a `10000000` en iphone/pixel y `50000000` en
+    `[links.wifi]`. (Una versión inicial de este REQ los eliminó
+    creyendo que mlvpn auto-balancearía sin ellos — lectura
+    incorrecta del código; revertido.)
+  - **`reorder_buffer_size = 64` global** en `[general]` (cliente y
+    servidor). Con 2 enlaces de latencias dispares los paquetes
+    alternados llegan desordenados; sin reorder buffer el TCP cliente
+    trata los out-of-order como pérdida → entra en congestion control
+    → throughput colapsa. 64 es el compromiso latencia/orden estándar
+    para móvil. Subir si los logs muestran `freebuffer full`.
+  - `tests/test_REQ-NET-09_mlvpn_tuning.sh` (7 checks).
 - **REQ-NET-08 — Detección de "red de casa" por IP pública en lugar de
   subred local**. La detección anterior (`rpi_subnet == wifi_subnet`
   + ping a `RPi_IP`) daba falsos positivos en cualquier WiFi con el

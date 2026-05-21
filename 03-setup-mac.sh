@@ -237,20 +237,23 @@ password = "${MLVPN_SECRET}"
 timeout = 30
 
 # Tolerancias globales agresivas para móvil (REQ-NET-09):
-# - loss_tolerence = 30: saca un enlace de la agregación si pierde >30%
-#   de paquetes (default 100% = nunca lo saca)
+# - loss_tolerence = 15: saca un enlace de la agregación si pierde >15%
+#   de paquetes (default 100% = nunca lo saca). 30% original era aún
+#   demasiado permisivo en 4G/5G.
 # - latency_tolerence = 800: saca un enlace si su RTT >800 ms (default
 #   1000 ms es demasiado permisivo en 4G congestionado)
-# Sin esto, un enlace medio-roto arrastra al resto y la videoconf
-# cojea pese a tener otro enlace sano.
-loss_tolerence = 30
+loss_tolerence = 15
 latency_tolerence = 800
 
-# reorder_buffer_size: 0 = sin reorder (paquetes se entregan tal como
-# llegan). Solo subirlo (a 64-256) si los logs muestran:
-#   "freebuffer full: reorder_buffer_size must be increased"
-# Para videoconf UDP/RTP es preferible 0: la app ya tiene su jitter
-# buffer y un reorder buffer en mlvpn solo añade latencia.
+# reorder_buffer_size = 64: el servidor reordena paquetes que llegan
+# desordenados antes de inyectarlos al kernel TCP. CRÍTICO para
+# throughput agregado: con 2 enlaces de latencias dispares (50ms vs
+# 100ms), los paquetes alternados llegan out-of-order; sin reorder
+# buffer el TCP los toma como pérdida → activa congestion control →
+# throughput colapsa a 100-500 KB/s aunque la suma física sea Mbps.
+# 64 es un compromiso latencia/orden razonable para móvil; subir si
+# logs muestran "freebuffer full: reorder_buffer_size must be increased".
+reorder_buffer_size = 64
 
 # Script para configurar la interfaz tun y las rutas
 statuscommand = "${GENERATED_DIR}/mlvpn_updown_mac.sh"
@@ -259,20 +262,25 @@ statuscommand = "${GENERATED_DIR}/mlvpn_updown_mac.sh"
 [filters.fifo]
 
 # ---- Enlace 1: iPhone (Wi-Fi hotspot / USB) ----
-# bindhost se rellena en 04-conectar.sh con la IP real del momento
-# Sin bandwidth_upload: mlvpn auto-balancea por throughput observado
-# (REQ-NET-09). El valor antiguo 10 Mbps fijo distorsionaba el
-# reparto cuando el ancho de banda real era distinto.
+# bindhost se rellena en 04-conectar.sh con la IP real del momento.
+# bandwidth_upload OBLIGATORIO en TODOS los links: mlvpn solo
+# recalcula pesos WRR cuando todos los tunnels tienen bandwidth
+# definido. Si falta en alguno, mlvpn_rtun_recalc_weight() detecta
+# warned>0 y NO recalcula → reparto colapsado → throughput cae a
+# cientos de KB/s aunque la suma física sea Mbps. 10 Mbps es una
+# subida razonable para 4G/5G en España (Movistar/Yoigo).
 [links.iphone]
 bindhost = "PLACEHOLDER_IPHONE_IP"
 remotehost = "${VPS_IP}"
 remoteport = ${MLVPN_PORT_1}
+bandwidth_upload = 10000000
 
 # ---- Enlace 2: Pixel (USB) ----
 [links.pixel]
 bindhost = "PLACEHOLDER_PIXEL_IP"
 remotehost = "${VPS_IP}"
 remoteport = ${MLVPN_PORT_2}
+bandwidth_upload = 10000000
 EOF
 
 chmod 600 "${GENERATED_DIR}/mlvpn.conf"
