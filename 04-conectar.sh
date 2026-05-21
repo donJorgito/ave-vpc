@@ -37,8 +37,11 @@
 #
 # REQUISITOS:
 #   - Scripts 01, 02, 03 ejecutados
-#   - iPhone compartiendo internet (Wi-Fi hotspot o USB)
-#   - Pixel compartiendo internet por USB
+#   - iPhone con Personal Hotspot activo conectado por cable USB
+#   - Pixel con USB tethering activo conectado por cable USB
+#   - (Opcional) Wi-Fi del Mac conectado al Wi-Fi del AVE/hotel/oficina:
+#     se evalúa como 3er enlace en runtime; si no es elegible, se omite
+#     sin romper el bonding. Forzar 2 enlaces: --sin-wifi
 ###############################################################################
 set -euo pipefail
 

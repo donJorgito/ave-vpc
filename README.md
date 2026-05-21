@@ -56,7 +56,7 @@ mlvpn distribuye los paquetes entre los dos enlaces activos simultáneamente. El
                        \── UDP:5081 ────│  mlvpn0         │
                             │           └─────────────────┘
                    ┌────────┴────────┐
-              iPhone (WiFi)   Pixel (USB)
+              iPhone (USB)    Pixel (USB)
               Movistar          Yoigo
 ```
 
@@ -70,9 +70,13 @@ mlvpn distribuye los paquetes entre los dos enlaces activos simultáneamente. El
                        ─ UDP:5081 ──│→ port forward │ 10.10.10.1  │   (fibra)
                             │       │               └─────────────│
                    ┌────────┴────────┐  tu-hostname.dedyn.io   │
-              iPhone (WiFi)   Pixel (USB)   (DDNS → IP dinámica)  │
+              iPhone (USB)    Pixel (USB)   (DDNS → IP dinámica) │
               Movistar          Yoigo  └──────────────────────────┘
 ```
+
+Ambos móviles van por cable USB. Eso libera el Wi-Fi del Mac para conectarlo al
+Wi-Fi del AVE como **3er enlace opcional** (ver [Tercer enlace
+WiFi](#tercer-enlace-wifi-automático)).
 
 El Mac se conecta al hostname DDNS (siempre actualizado por el router), que apunta a tu IP pública dinámica de casa. El router reenvía los puertos UDP a la RPi.
 
@@ -96,9 +100,10 @@ El Mac se conecta al hostname DDNS (siempre actualizado por el router), que apun
 | Dispositivo | Función | Notas |
 |-------------|---------|-------|
 | Mac (macOS 13+) | Cliente, ejecuta los scripts | Apple Silicon o Intel |
-| iPhone con SIM | Enlace 1 — hotspot WiFi | Cualquier operadora |
+| iPhone con SIM | Enlace 1 — Personal Hotspot por USB | Cualquier operadora |
 | Android con SIM | Enlace 2 — tethering USB | Mejor si es operadora distinta |
-| Cable USB-A/C | Conectar el Android al Mac | |
+| 2 cables USB de datos | Conectar ambos móviles al Mac | USB-C / Lightning según móvil; cables solo de carga **no** valen |
+| Wi-Fi del Mac (opcional) | Enlace 3 — Wi-Fi del AVE / hotel / oficina | Se evalúa en runtime; ver [Tercer enlace WiFi](#tercer-enlace-wifi-automático) |
 
 ### Software en el Mac
 
@@ -208,11 +213,15 @@ Instala dependencias con Homebrew, compila mlvpn y genera `generated/mlvpn.conf`
 ### 7. Detectar interfaces (una vez, con los móviles conectados)
 
 ```bash
-# Con el iPhone en hotspot WiFi y el Android conectado por USB con tethering activo:
+# Conecta ambos móviles por USB con su tethering activo:
+#   - iPhone: Configuración → Compartir Internet → "Sólo USB" o ambos
+#   - Android (Pixel): Ajustes → Red e internet → Anclaje a red → USB
 ./00-detectar-interfaces.sh
 ```
 
-Detecta automáticamente las interfaces de red y actualiza `config/env`.
+Detecta automáticamente las interfaces USB de cada móvil (por el rango DHCP
+asignado: `172.20.10.x` para el iPhone, `192.168.42.x`/`192.168.43.x` para el
+Pixel) y la Wi-Fi del Mac (3er enlace opcional). Actualiza `config/env`.
 
 ### 8. Verificar el setup
 
@@ -264,8 +273,12 @@ A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con Oracle 
 
 ### Antes de subir al tren
 
-1. Activa el hotspot WiFi del iPhone y conéctate desde el Mac
-2. Conecta el Android por USB y activa el tethering
+1. Conecta el iPhone al Mac por cable USB y activa Personal Hotspot
+2. Conecta el Android al Mac por cable USB y activa USB tethering
+3. (Opcional) Conecta el Wi-Fi del Mac al Wi-Fi del AVE — `04-conectar.sh` lo
+   evaluará como 3er enlace; si el portal cautivo está sin autenticar o si la
+   red filtra el puerto, se ignora sin romper el bonding (ver
+   [Tercer enlace WiFi](#tercer-enlace-wifi-automático))
 
 ### En el tren
 

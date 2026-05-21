@@ -5,6 +5,27 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+### Cambiado
+- **iPhone por cable USB en lugar de Wi-Fi hotspot**: docs y defaults
+  pasan a asumir que **ambos móviles van por USB** (iPhone con Personal
+  Hotspot por cable, Android con USB tethering). Esto libera el Wi-Fi
+  del Mac para el 3er enlace (Wi-Fi del AVE / hotel / oficina), que ya
+  estaba implementado pero requería un cable extra para el iPhone.
+  Cambios:
+  - `config/env.example`: `IFACE_IPHONE` por defecto pasa de `en0`
+    (Wi-Fi) a `en8` (USB típica del iPhone). `IFACE_PIXEL` de `en5`
+    a `en12`. Comentarios reescritos para describir los rangos DHCP de
+    cada móvil (`172.20.10.x` iPhone, `192.168.42.x`/`43.x` Android).
+  - `00-detectar-interfaces.sh` reescrito: detecta cada móvil por su
+    rango DHCP característico en lugar de asumir el iPhone en la Wi-Fi
+    del Mac. La Wi-Fi se detecta como `IFACE_WIFI` (3er enlace).
+  - `README.md`: diagramas de arquitectura, tabla de hardware y "Antes
+    de subir al tren" actualizados. Tabla de hardware ahora incluye
+    fila explícita de "2 cables USB de datos" y avisa de que cables
+    solo de carga no valen.
+  - `REQ-HW-04` ampliado: ya no es solo del cable del Android, ahora
+    cubre ambos móviles. Parent pasa a `REQ-HW-02, REQ-HW-03`.
+
 ### Añadido
 - **`MLVPN_PORT_3_REMOTE`**: variable opcional con el puerto público al
   que conecta el cliente para el 3er enlace WiFi. Si difiere de

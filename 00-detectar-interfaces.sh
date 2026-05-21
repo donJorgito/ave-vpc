@@ -2,14 +2,21 @@
 ###############################################################################
 # 00-detectar-interfaces.sh
 #
-# Detecta automáticamente las interfaces de red del iPhone (hotspot WiFi)
-# y del Pixel (tethering USB) y actualiza config/env.
+# Detecta automáticamente las interfaces de red de:
+#   - iPhone (Personal Hotspot por USB)  → IP DHCP 172.20.10.x
+#   - Pixel  (USB tethering Android)     → IP DHCP 192.168.42.x / 192.168.43.x
+#   - Wi-Fi nativa del Mac (3er enlace)  → la marcada como "Wi-Fi" en networksetup
+#
+# Y actualiza config/env con IFACE_IPHONE, IFACE_PIXEL e IFACE_WIFI.
 #
 # Uso:
-#   1. Conecta el Pixel por USB y activa su tethering
-#   2. Conecta al hotspot WiFi del iPhone
+#   1. Conecta el iPhone por USB y activa "Compartir Internet" (USB)
+#   2. Conecta el Pixel por USB y activa "Anclaje USB"
 #   3. Ejecuta este script
 #   4. Verifica que config/env tiene los valores correctos
+#
+# El Wi-Fi del Mac no necesita estar conectado a nada para detectarlo;
+# 04-conectar.sh evalúa en runtime si es elegible como 3er enlace.
 ###############################################################################
 
 set -euo pipefail
@@ -27,91 +34,100 @@ echo ""
 echo "=== Detectando interfaces de red ==="
 echo ""
 
-# ─── 1. Interfaz WiFi (iPhone hotspot) ───────────────────────────────────────
-# La interfaz WiFi del Mac es siempre la marcada como "Wi-Fi" en networksetup
+# ─── 1. Interfaz USB iPhone (Personal Hotspot por cable) ─────────────────────
+# El iPhone con "Compartir Internet" activo y conectado por USB asigna al Mac
+# una IP en el rango 172.20.10.x (siempre, independientemente del operador).
 
-IFACE_WIFI=$(networksetup -listallhardwareports \
-  | awk '/Wi-Fi|AirPort/{found=1} found && /Device:/{print $2; exit}')
-
-if [[ -n "${IFACE_WIFI}" ]]; then
-  ok "Interfaz WiFi encontrada: ${IFACE_WIFI}"
-  # Verificar si está activa (tiene IP asignada)
-  if ifconfig "${IFACE_WIFI}" 2>/dev/null | grep -q "inet "; then
-    IP_WIFI=$(ifconfig "${IFACE_WIFI}" | awk '/inet /{print $2}')
-    ok "  WiFi activa con IP: ${IP_WIFI}"
-  else
-    warn "  WiFi (${IFACE_WIFI}) sin IP — ¿está conectada al hotspot del iPhone?"
+IFACE_IPHONE_DETECTED=""
+while IFS= read -r iface; do
+  ip=$(ifconfig "${iface}" 2>/dev/null | awk '/inet /{print $2}')
+  if [[ "${ip}" =~ ^172\.20\.10\. ]]; then
+    IFACE_IPHONE_DETECTED="${iface}"
+    ok "iPhone encontrado por IP Personal Hotspot (${ip}): ${IFACE_IPHONE_DETECTED}"
+    break
   fi
-else
-  fail "No se encontró interfaz WiFi. ¿Tiene WiFi este Mac?"
-  IFACE_WIFI="en0"
-  warn "Usando valor por defecto: en0"
+done < <(ifconfig -l | tr ' ' '\n')
+
+if [[ -z "${IFACE_IPHONE_DETECTED}" ]]; then
+  warn "iPhone no detectado por IP."
+  echo "    Verifica:"
+  echo "      - Cable USB de datos conectado (no solo de carga)"
+  echo "      - Personal Hotspot activo en el iPhone"
+  echo "      - 'Confiar en este ordenador' aceptado en el iPhone"
+  echo ""
+  echo -n "    Introduce manualmente la interfaz del iPhone (Enter para 'en8'): "
+  read -r IFACE_IPHONE_DETECTED
+  IFACE_IPHONE_DETECTED="${IFACE_IPHONE_DETECTED:-en8}"
+  warn "Usando: ${IFACE_IPHONE_DETECTED}"
 fi
 
 echo ""
 
 # ─── 2. Interfaz USB Pixel (Android tethering) ───────────────────────────────
-# Android USB tethering asigna una IP en el rango 192.168.42.x al Mac.
-# También puede aparecer como 192.168.43.x en algunos modelos.
-# El nombre del hardware port suele contener "Android", "RNDIS" o "Google".
+# Android USB tethering asigna al Mac una IP en 192.168.42.x o 192.168.43.x.
 
-IFACE_USB=""
-
-# Método 1: buscar por IP de Android tethering (192.168.42.x o 192.168.43.x)
+IFACE_PIXEL_DETECTED=""
 while IFS= read -r iface; do
+  # No queremos volver a coger la del iPhone aunque por error coincida
+  [[ "${iface}" == "${IFACE_IPHONE_DETECTED}" ]] && continue
   ip=$(ifconfig "${iface}" 2>/dev/null | awk '/inet /{print $2}')
   if [[ "${ip}" =~ ^192\.168\.4[23]\. ]]; then
-    IFACE_USB="${iface}"
-    ok "Pixel encontrado por IP Android (${ip}): ${IFACE_USB}"
+    IFACE_PIXEL_DETECTED="${iface}"
+    ok "Pixel encontrado por IP Android (${ip}): ${IFACE_PIXEL_DETECTED}"
     break
   fi
 done < <(ifconfig -l | tr ' ' '\n')
 
-# Método 2: buscar por nombre del hardware port
-if [[ -z "${IFACE_USB}" ]]; then
-  IFACE_USB=$(networksetup -listallhardwareports \
-    | grep -i -A1 "Android\|RNDIS\|Google\|USB Ethernet\|Tethering" \
-    | awk '/Device:/{print $2}' | head -1)
-  if [[ -n "${IFACE_USB}" ]]; then
-    ok "Pixel encontrado por nombre de hardware: ${IFACE_USB}"
-  fi
-fi
-
-# Método 3: buscar interfaces USB activas que no sean WiFi ni Bluetooth
-if [[ -z "${IFACE_USB}" ]]; then
-  warn "No se encontró el Pixel automáticamente."
+if [[ -z "${IFACE_PIXEL_DETECTED}" ]]; then
+  warn "Pixel no detectado por IP. Listado de hardware ports:"
   echo ""
-  echo "  Interfaces de red disponibles en tu Mac:"
   networksetup -listallhardwareports | awk '
     /Hardware Port:/ { port=$0 }
     /Device:/        { print "    " $2 " → " port }
   ' | sed 's/Hardware Port: //'
   echo ""
-  echo -n "  Introduce manualmente la interfaz del Pixel (o Enter para saltar): "
-  read -r IFACE_USB
-fi
-
-if [[ -z "${IFACE_USB}" ]]; then
-  warn "Sin interfaz Pixel — deberás ajustarla en config/env antes de conectar"
-  IFACE_USB="en5"
-  warn "Usando valor por defecto: en5"
-else
-  ok "Interfaz Pixel: ${IFACE_USB}"
+  echo -n "    Introduce manualmente la interfaz del Pixel (Enter para 'en12'): "
+  read -r IFACE_PIXEL_DETECTED
+  IFACE_PIXEL_DETECTED="${IFACE_PIXEL_DETECTED:-en12}"
+  warn "Usando: ${IFACE_PIXEL_DETECTED}"
 fi
 
 echo ""
 
-# ─── 3. Actualizar config/env ─────────────────────────────────────────────────
+# ─── 3. Interfaz Wi-Fi del Mac (3er enlace opcional) ─────────────────────────
+# La interfaz Wi-Fi del Mac es siempre la marcada como "Wi-Fi" en networksetup.
+# 04-conectar.sh decide en runtime si es elegible (sin IP / red de casa /
+# captive portal → se omite sin romper el bonding).
+
+IFACE_WIFI_DETECTED=$(networksetup -listallhardwareports \
+  | awk '/Wi-Fi|AirPort/{found=1} found && /Device:/{print $2; exit}')
+
+if [[ -n "${IFACE_WIFI_DETECTED}" ]]; then
+  ok "Wi-Fi del Mac (3er enlace opcional): ${IFACE_WIFI_DETECTED}"
+  if ifconfig "${IFACE_WIFI_DETECTED}" 2>/dev/null | grep -q "inet "; then
+    IP_WIFI=$(ifconfig "${IFACE_WIFI_DETECTED}" | awk '/inet /{print $2}')
+    ok "  Wi-Fi conectada con IP: ${IP_WIFI}"
+  else
+    warn "  Wi-Fi sin IP — normal si no estás en una red ahora; se evalúa en runtime"
+  fi
+else
+  fail "No se encontró interfaz Wi-Fi en este Mac"
+  IFACE_WIFI_DETECTED="en0"
+  warn "Usando valor por defecto: en0"
+fi
+
+echo ""
+
+# ─── 4. Actualizar config/env ─────────────────────────────────────────────────
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   warn "config/env no existe — copiando desde env.example"
   cp "${SCRIPT_DIR}/config/env.example" "${ENV_FILE}"
 fi
 
-# Actualizar IFACE_IPHONE
-sed -i '' "s|^IFACE_IPHONE=.*|IFACE_IPHONE=\"${IFACE_WIFI}\"|" "${ENV_FILE}"
-# Actualizar IFACE_PIXEL
-sed -i '' "s|^IFACE_PIXEL=.*|IFACE_PIXEL=\"${IFACE_USB}\"|" "${ENV_FILE}"
+sed -i '' "s|^IFACE_IPHONE=.*|IFACE_IPHONE=\"${IFACE_IPHONE_DETECTED}\"|" "${ENV_FILE}"
+sed -i '' "s|^IFACE_PIXEL=.*|IFACE_PIXEL=\"${IFACE_PIXEL_DETECTED}\"|" "${ENV_FILE}"
+sed -i '' "s|^IFACE_WIFI=.*|IFACE_WIFI=\"${IFACE_WIFI_DETECTED}\"|" "${ENV_FILE}"
 
 echo "=== config/env actualizado ==="
 echo ""
