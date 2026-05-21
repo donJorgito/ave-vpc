@@ -43,7 +43,14 @@ if pgrep -f "mlvpn: mlvpn0" &>/dev/null; then
     sleep 2
     pkill -9 -f "mlvpn: mlvpn0" 2>/dev/null || true
     pkill -f "tee.*mlvpn.log" 2>/dev/null || true
-    echo "  mlvpn parado"
+    # Verificar que ningún proceso sobrevivió (evita zombies acumulados
+    # que provocan duplicación de paquetes en arranques siguientes)
+    if pgrep -f "mlvpn: mlvpn0" &>/dev/null; then
+        echo "  AVISO: quedan procesos mlvpn vivos tras pkill -9:"
+        pgrep -f "mlvpn: mlvpn0" -lf | sed 's/^/    /'
+    else
+        echo "  mlvpn parado (todas las instancias)"
+    fi
 else
     echo "  mlvpn ya no estaba corriendo"
 fi

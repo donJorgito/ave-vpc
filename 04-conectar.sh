@@ -340,6 +340,22 @@ if [[ -f "${GENERATED_DIR}/mlvpn.pid" ]]; then
 fi
 
 MLVPN_BIN=$(command -v mlvpn 2>/dev/null || echo "/usr/local/sbin/mlvpn")
+
+# Defensive cleanup: si quedaron instancias mlvpn de arranques previos
+# (típico cuando el usuario reconecta sin pasar por 05-desconectar.sh),
+# hay que matarlas antes de arrancar la nueva. Si no, varios mlvpn
+# encapsulan los mismos paquetes en paralelo, la RPi recibe streams
+# duplicados, el reordering colapsa y la latencia se dispara —
+# síntoma típico: videoconf con lag descomunal pese a ver "todo OK".
+if pgrep -f "mlvpn: mlvpn0" &>/dev/null; then
+    echo "  Detectadas instancias mlvpn previas — matando antes de arrancar la nueva"
+    pkill -f "mlvpn: mlvpn0" 2>/dev/null || true
+    sleep 1
+    pkill -9 -f "mlvpn: mlvpn0" 2>/dev/null || true
+    pkill -f "tee.*mlvpn.log" 2>/dev/null || true
+    sleep 1
+fi
+
 rm -f "${GENERATED_DIR}/mlvpn.log"
 touch "${GENERATED_DIR}/mlvpn.log"
 # --user mlvpn: privilege separation — root crea utun, hijo cae a usuario mlvpn.

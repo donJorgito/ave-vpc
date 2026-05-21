@@ -6,6 +6,45 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 ## [Sin publicar]
 
 ### Corregido
+- **REQ-MAC-05 — Limpieza defensiva de instancias mlvpn previas al
+  reconectar**. Caso real observado en runtime: hasta 4 procesos
+  `mlvpn: mlvpn0 @links.pixel @links.iphone` corriendo a la vez
+  (51 min, 31 min, 7 min, 3 min de antigüedad), todos encapsulando
+  los mismos paquetes en paralelo, la RPi recibiendo streams
+  duplicados y la videoconferencia con lag descomunal. Causa:
+  `04-conectar.sh` arrancaba mlvpn sin verificar si ya había uno
+  vivo de un arranque anterior — típico cuando el usuario reconecta
+  sin pasar por `05-desconectar.sh`. Fix:
+  - `04-conectar.sh` hace `pgrep -f "mlvpn: mlvpn0"` al inicio y, si
+    encuentra procesos, los mata con `pkill -f` + `pkill -9 -f` antes
+    de arrancar el nuevo. Mensaje explícito al usuario.
+  - `05-desconectar.sh` verifica con `pgrep -f` tras `pkill -9` que
+    no quedan supervivientes; si los hubiera, los lista para
+    diagnóstico. Mensaje cambiado a "mlvpn parado (todas las
+    instancias)" para distinguirlo del caso anterior.
+  - `tests/test_REQ-MAC-05_defensive_cleanup.sh` (5 checks).
+- **REQ-NET-09 — Tuning de mlvpn para móvil 4G/5G**. Los defaults
+  estaban pensados para enlaces simétricos estables y producían lag
+  alto y throughput por debajo de la suma teórica:
+  - `TUN_MTU` baja de 1440 a 1400. Móvil 4G suele tener MTU 1500;
+    encapsulado mlvpn = ~76 B (UDP+IPv4 28 + ChaCha20 nonce+tag 32 +
+    header mlvpn 16). Margen seguro 1500-76 = 1424; usamos 1400 para
+    absorber variaciones de PMTU del camino (tren, hairpin del
+    operador). Un MTU demasiado alto provoca fragmentación o
+    black-hole de PMTUD.
+  - Añadidas `loss_tolerence = 30` y `latency_tolerence = 800` en
+    `[general]` (cliente y servidor). Defaults son 100% / 1000 ms,
+    demasiado permisivos: un enlace medio-roto arrastra al resto.
+  - Eliminado `bandwidth_upload = 10000000` de los `[links.X]` en
+    `03-setup-mac.sh`. Era arbitrario y forzaba un reparto
+    proporcional incorrecto cuando el ancho de banda real difería
+    entre operadoras (Movistar vs Yoigo varían mucho según
+    cobertura). Sin la directiva, mlvpn auto-balancea por throughput
+    observado.
+  - `reorder_buffer_size` se documenta en el config generado: subir
+    a 64-256 sólo si los logs muestran "freebuffer full". Para
+    videoconf UDP/RTP, un buffer en mlvpn solo añade latencia.
+  - `tests/test_REQ-NET-09_mlvpn_tuning.sh` (6 checks).
 - **REQ-NET-08 — Detección de "red de casa" por IP pública en lugar de
   subred local**. La detección anterior (`rpi_subnet == wifi_subnet`
   + ping a `RPi_IP`) daba falsos positivos en cualquier WiFi con el

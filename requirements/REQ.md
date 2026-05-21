@@ -54,6 +54,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-06](ave-vpc-REQ-NET-06-requirement.md) | Tercer enlace WiFi con pre-flight checks |
 | [REQ-NET-07](ave-vpc-REQ-NET-07-requirement.md) | Rebind del enlace WiFi ante cambios de IP |
 | [REQ-NET-08](ave-vpc-REQ-NET-08-requirement.md) | Detección de "red de casa" por IP pública |
+| [REQ-NET-09](ave-vpc-REQ-NET-09-requirement.md) | Tuning de mlvpn para móvil 4G/5G |
 
 ## Restricciones macOS (REQ-MAC)
 
@@ -63,3 +64,4 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-MAC-02](ave-vpc-REQ-MAC-02-requirement.md) | Lectura correcta de counters de utun via netstat -ibn |
 | [REQ-MAC-03](ave-vpc-REQ-MAC-03-requirement.md) | Ruta /32 anti-loop al VPS preferiendo enlaces móviles |
 | [REQ-MAC-04](ave-vpc-REQ-MAC-04-requirement.md) | Configuración del utun directamente desde 04-conectar.sh |
+| [REQ-MAC-05](ave-vpc-REQ-MAC-05-requirement.md) | Limpieza de instancias mlvpn previas al reconectar |

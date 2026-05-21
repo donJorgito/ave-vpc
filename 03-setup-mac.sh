@@ -236,6 +236,22 @@ password = "${MLVPN_SECRET}"
 # Si no recibe nada en 30s, considera el enlace muerto
 timeout = 30
 
+# Tolerancias globales agresivas para móvil (REQ-NET-09):
+# - loss_tolerence = 30: saca un enlace de la agregación si pierde >30%
+#   de paquetes (default 100% = nunca lo saca)
+# - latency_tolerence = 800: saca un enlace si su RTT >800 ms (default
+#   1000 ms es demasiado permisivo en 4G congestionado)
+# Sin esto, un enlace medio-roto arrastra al resto y la videoconf
+# cojea pese a tener otro enlace sano.
+loss_tolerence = 30
+latency_tolerence = 800
+
+# reorder_buffer_size: 0 = sin reorder (paquetes se entregan tal como
+# llegan). Solo subirlo (a 64-256) si los logs muestran:
+#   "freebuffer full: reorder_buffer_size must be increased"
+# Para videoconf UDP/RTP es preferible 0: la app ya tiene su jitter
+# buffer y un reorder buffer en mlvpn solo añade latencia.
+
 # Script para configurar la interfaz tun y las rutas
 statuscommand = "${GENERATED_DIR}/mlvpn_updown_mac.sh"
 
@@ -244,18 +260,19 @@ statuscommand = "${GENERATED_DIR}/mlvpn_updown_mac.sh"
 
 # ---- Enlace 1: iPhone (Wi-Fi hotspot / USB) ----
 # bindhost se rellena en 04-conectar.sh con la IP real del momento
+# Sin bandwidth_upload: mlvpn auto-balancea por throughput observado
+# (REQ-NET-09). El valor antiguo 10 Mbps fijo distorsionaba el
+# reparto cuando el ancho de banda real era distinto.
 [links.iphone]
 bindhost = "PLACEHOLDER_IPHONE_IP"
 remotehost = "${VPS_IP}"
 remoteport = ${MLVPN_PORT_1}
-bandwidth_upload = 10000000
 
 # ---- Enlace 2: Pixel (USB) ----
 [links.pixel]
 bindhost = "PLACEHOLDER_PIXEL_IP"
 remotehost = "${VPS_IP}"
 remoteport = ${MLVPN_PORT_2}
-bandwidth_upload = 10000000
 EOF
 
 chmod 600 "${GENERATED_DIR}/mlvpn.conf"

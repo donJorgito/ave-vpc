@@ -452,6 +452,37 @@ El cliente conecta a `200bares.dedyn.io:443/UDP`, el router rewrite a `192.168.1
 
 ---
 
+## Tuning para móvil (REQ-NET-09)
+
+Los defaults de mlvpn están pensados para enlaces simétricos estables (dos fibras DSL, p.ej.). En 4G/5G sobre tren los valores afinados son:
+
+| Parámetro | Default mlvpn | Este proyecto | Por qué |
+|---|---|---|---|
+| `mtu` (`TUN_MTU` en `config/env`) | — | **1400** | Móvil 4G ofrece MTU 1500. Overhead mlvpn ≈ 76 B (UDP+IPv4 28 + ChaCha20 nonce+tag 32 + header mlvpn ~16). Margen seguro 1424. Bajamos a 1400 para absorber PMTU variable (tren, hairpin operador). MTU alto = fragmentación o black-hole PMTUD = lag. |
+| `loss_tolerence` (`[general]`) | 100% | **30** | mlvpn saca un enlace de la agregación si pierde >30 % en lugar de no sacarlo nunca. |
+| `latency_tolerence` (`[general]`) | 1000 ms | **800** | Mismo principio para RTT > 800 ms. |
+| `bandwidth_upload` (`[links.X]`) | (sin valor = auto) | **sin valor** | Antes forzábamos `10000000` (10 Mbps) por enlace; era arbitrario y desbalanceaba el reparto. Sin directiva, mlvpn auto-balancea por throughput observado. |
+| `reorder_buffer_size` | 0 | **0 (default)** | Subir a 64-256 sólo si los logs muestran `freebuffer full: reorder_buffer_size must be increased`. Para UDP/RTP (videoconf) un buffer en mlvpn sólo añade latencia — la app ya tiene su propio jitter buffer. |
+
+Estos valores se aplican generándolos en `03-setup-mac.sh` (cliente) y `07-setup-rpi.sh` (servidor). Si cambias `TUN_MTU`, regenera ambos lados y reinicia mlvpn en cada uno.
+
+### Si la videoconf cojea pese a tener cobertura
+
+Síntoma típico de **instancias mlvpn duplicadas** acumuladas tras varias reconexiones sin desconectar. Diagnóstico:
+
+```bash
+ps aux | grep "mlvpn: mlvpn0" | grep -v grep
+```
+
+Si ves más de 2 procesos (1 `[priv]` + 1 worker), tienes zombies. Desde la versión actual `04-conectar.sh` los mata defensivamente al inicio (REQ-MAC-05), pero si arrancaste con una versión vieja:
+
+```bash
+sudo pkill -9 -f "mlvpn: mlvpn0"
+sudo ./04-conectar.sh
+```
+
+---
+
 ## Solución de problemas
 
 **El túnel se crea pero no hay internet**

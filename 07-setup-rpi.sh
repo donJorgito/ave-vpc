@@ -134,6 +134,12 @@ ip4_gateway = "${TUN_MAC_IP}"
 mtu = ${TUN_MTU}
 password = "${MLVPN_SECRET}"
 timeout = 30
+# Tolerancias globales agresivas (REQ-NET-09): un enlace que pierde
+# >30% de paquetes o supera 800 ms de RTT se saca de la agregación
+# en lugar de arrastrar al resto. Defaults (100%/1000ms) son demasiado
+# permisivos para móvil 4G en tren.
+loss_tolerence = 30
+latency_tolerence = 800
 statuscommand = "/etc/mlvpn/mlvpn_updown.sh"
 
 [filters]
