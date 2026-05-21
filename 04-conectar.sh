@@ -129,11 +129,45 @@ fi
 # Pre-flight checks (en orden):
 #   1. --sin-wifi → skip
 #   2. Sin IP en IFACE_WIFI → skip
-#   3. Mac en la subred del RPi y RPi local responde → skip (estamos en casa)
-#   4. Captive portal (HTTP a captive.apple.com) → skip
+#   3. Captive portal (HTTP a captive.apple.com) → skip
+#   4. La IP pública saliendo por el WiFi == IP pública del DDNS de la
+#      RPi → skip (estamos en casa, evita hairpin NAT). Esto sustituye
+#      la heurística de subred local: en hoteles/cafés con la misma
+#      192.168.1.x y un dispositivo cualquiera en .101, el ping al RPi
+#      respondía y daba falso positivo. Ahora "casa" = "el WiFi y la
+#      RPi salen al mundo por la misma IP pública", que es exactamente
+#      la condición que causa hairpin NAT.
 # Si todos pasan, el WiFi se añade como 3er enlace en el paso 3.
 # =====================================================================
 WIFI_ELIGIBLE=false
+
+# Devuelve la IP pública vista al salir por una interfaz concreta.
+# Prueba 3 servicios HTTP con timeout corto. Devuelve string vacío si
+# ninguno responde (por ejemplo captive portal o sin internet).
+get_public_ip_via_iface() {
+    local iface="$1"
+    local url ip
+    for url in "https://api.ipify.org" "https://ifconfig.me/ip" "https://icanhazip.com"; do
+        ip="$(curl --interface "${iface}" -s --max-time 2 "${url}" 2>/dev/null | tr -d '[:space:]')"
+        if [[ "${ip}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "${ip}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Resuelve VPS_IP (DDNS) a IPv4. Si VPS_IP ya es una IP literal, la
+# devuelve tal cual. Si la resolución falla, devuelve string vacío.
+resolve_vps_public_ip() {
+    if [[ "${VPS_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "${VPS_IP}"
+        return 0
+    fi
+    dig +short +time=2 +tries=1 "${VPS_IP}" A 2>/dev/null \
+        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' \
+        | tail -1
+}
 
 check_wifi_eligibility() {
     if "${SIN_WIFI}"; then
@@ -144,23 +178,23 @@ check_wifi_eligibility() {
         echo "  WiFi sin IP en ${IFACE_WIFI} — bonding solo con móviles"
         return 1
     fi
-    # ¿Estamos en la red de casa? (subred del RPi + RPi local responde)
-    if [[ -n "${RPi_IP:-}" ]]; then
-        local rpi_subnet="${RPi_IP%.*}"
-        local wifi_subnet="${IP_WIFI%.*}"
-        if [[ "${rpi_subnet}" == "${wifi_subnet}" ]]; then
-            if ping -c 1 -t 1 -S "${IP_WIFI}" "${RPi_IP}" &>/dev/null; then
-                echo "  WiFi en red de casa (${IP_WIFI} → ${RPi_IP}) — saltando 3er enlace para evitar hairpin NAT"
-                return 1
-            fi
-        fi
-    fi
     # Captive portal: la página de Apple devuelve EXACTAMENTE "Success" en el body.
     # Si vemos otra cosa o timeout, asumimos captive o sin Internet.
     if ! curl --interface "${IFACE_WIFI}" -s --max-time 2 \
             "http://captive.apple.com/hotspot-detect.html" 2>/dev/null | \
             grep -q "<TITLE>Success</TITLE>"; then
         echo "  WiFi en captive portal — autentica en el navegador y reejecuta este script"
+        return 1
+    fi
+    # ¿Estamos en casa? Comparamos la IP pública saliendo por el WiFi
+    # con la IP pública del DDNS de la RPi. Si coinciden, los paquetes
+    # del WiFi cruzarían el mismo NAT que la RPi (hairpin) — skip.
+    local wifi_public rpi_public
+    wifi_public="$(get_public_ip_via_iface "${IFACE_WIFI}" || true)"
+    rpi_public="$(resolve_vps_public_ip || true)"
+    if [[ -n "${wifi_public}" && -n "${rpi_public}" \
+          && "${wifi_public}" == "${rpi_public}" ]]; then
+        echo "  WiFi sale por ${wifi_public} = IP pública RPi → red de casa, saltando 3er enlace para evitar hairpin NAT"
         return 1
     fi
     # Anti-bind-stale: tras autenticar el captive portal, el DHCP del WiFi

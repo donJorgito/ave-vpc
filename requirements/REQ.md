@@ -53,6 +53,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-05](ave-vpc-REQ-NET-05-requirement.md) | Soporte de WiFi corporativa o redes con captive portal |
 | [REQ-NET-06](ave-vpc-REQ-NET-06-requirement.md) | Tercer enlace WiFi con pre-flight checks |
 | [REQ-NET-07](ave-vpc-REQ-NET-07-requirement.md) | Rebind del enlace WiFi ante cambios de IP |
+| [REQ-NET-08](ave-vpc-REQ-NET-08-requirement.md) | Detección de "red de casa" por IP pública |
 
 ## Restricciones macOS (REQ-MAC)
 

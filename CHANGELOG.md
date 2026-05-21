@@ -5,6 +5,25 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+### Corregido
+- **REQ-NET-08 — Detección de "red de casa" por IP pública en lugar de
+  subred local**. La detección anterior (`rpi_subnet == wifi_subnet`
+  + ping a `RPi_IP`) daba falsos positivos en cualquier WiFi con el
+  mismo `192.168.1.x` por defecto (la mayoría de routers ISP, hoteles
+  y cafés) si algún dispositivo respondía como `.101`. Caso real:
+  WiFi ajena con subred coincidente → script asumía "casa" y saltaba
+  el 3er enlace sin necesidad. Reemplazada por comparación de IP
+  pública: el Mac consulta su IP pública saliendo por `IFACE_WIFI`
+  con 3 servicios HTTP de fallback (`api.ipify.org`, `ifconfig.me/ip`,
+  `icanhazip.com`, `--max-time 2`) y la compara con la IP que
+  resuelve el DDNS de la RPi (`VPS_IP`). Si coinciden, los paquetes
+  cruzarían el mismo NAT → casa real. Independiente de la subred
+  local. La comprobación va después del check de captive portal
+  (necesita salida HTTPS funcional). Sin variables nuevas en
+  `config/env`.
+- `tests/test_REQ-NET-08_home_via_public_ip.sh` (8 checks). Test de
+  REQ-NET-06 actualizado para reconocer la nueva detección.
+
 ### Cambiado
 - **iPhone por cable USB en lugar de Wi-Fi hotspot**: docs y defaults
   pasan a asumir que **ambos móviles van por USB** (iPhone con Personal

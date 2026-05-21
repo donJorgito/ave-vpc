@@ -410,8 +410,8 @@ En orden:
 
 1. **Flag `--sin-wifi`** → se omite siempre
 2. **Sin IP en `IFACE_WIFI`** → no hay WiFi conectada, se omite
-3. **Red de casa** → si la IP del Mac está en la subred de `RPi_IP` y el RPi local responde a ping, se omite con aviso (evita el viaje absurdo Mac→router→WAN→router→RPi)
-4. **Captive portal** → HTTP a `captive.apple.com/hotspot-detect.html`; si la respuesta no es exactamente `<TITLE>Success</TITLE>` se asume captive y se omite con mensaje "autentica en el navegador y reejecuta"
+3. **Captive portal** → HTTP a `captive.apple.com/hotspot-detect.html`; si la respuesta no es exactamente `<TITLE>Success</TITLE>` se asume captive y se omite con mensaje "autentica en el navegador y reejecuta"
+4. **Red de casa por IP pública** → consulta la IP pública saliendo por `IFACE_WIFI` (3 servicios HTTP con fallback) y la compara con la IP que resuelve `VPS_IP` (DDNS de la RPi). Si coinciden, el Mac y la RPi están detrás del mismo NAT → se omite con aviso para evitar hairpin. Independiente de la subred local: ya no da falsos positivos en hoteles/cafés con `192.168.1.x`
 5. **Si todos OK** → se anexa `[links.wifi]` al bonding con `bindhost = IP_WIFI` y `remoteport = MLVPN_PORT_3_REMOTE` (que por defecto es igual a `MLVPN_PORT_3`, ver más abajo "Puerto público alternativo")
 
 ### Matriz de comportamiento
@@ -419,7 +419,7 @@ En orden:
 | Escenario | IP | Captive | UDP | Resultado |
 |---|---|---|---|---|
 | WiFi apagada | ✗ | – | – | 2 enlaces, sin error |
-| Casa (subred RPi) | ✓ | – | – | 2 enlaces, aviso "red de casa" |
+| Casa (mismo NAT que RPi) | ✓ | – | – | 2 enlaces, aviso "red de casa" |
 | Captive pre-auth (hotel/AVE) | ✓ | ✓ | – | 2 enlaces, aviso "autentica y reejecuta" |
 | Hotel/AVE post-auth, UDP libre | ✓ | ✗ | ✓ | **3 enlaces activos** |
 | Hotel/oficina, UDP filtrado | ✓ | ✗ | ✗ | 3 enlaces, WiFi en `AUTH_PENDING` (visible en monitor) |

@@ -17,11 +17,12 @@ if grep -q -- "--sin-wifi" "${SCRIPT}"; then
 else
     junit_fail "flag_missing" "flag --sin-wifi no implementado"
 fi
-# Check 3: detección red de casa (compara subnet RPi)
-if grep -q "RPi_IP" "${SCRIPT}" && grep -q "rpi_subnet" "${SCRIPT}"; then
+# Check 3: detección red de casa (REQ-NET-08: comparar IP pública WiFi vs DDNS RPi)
+if grep -q "get_public_ip_via_iface" "${SCRIPT}" \
+   && grep -q "resolve_vps_public_ip" "${SCRIPT}"; then
     junit_pass "home_network_detection"
 else
-    junit_fail "home_network_missing" "detección de red de casa no implementada"
+    junit_fail "home_network_missing" "detección de red de casa por IP pública no implementada (REQ-NET-08)"
 fi
 # Check 4: detección captive portal
 if grep -q "captive.apple.com" "${SCRIPT}"; then
