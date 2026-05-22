@@ -26,15 +26,14 @@ else
     junit_fail "ip_wifi_refresh_missing" "IP_WIFI no se refresca tras cambio post-captive"
 fi
 
-# Check 3: per-link timeout/loss/latency en [links.wifi]
-# loss_tolerence se redujo de 30 a 15 (REQ-NET-09): aceptamos cualquier
-# valor entero en el rango razonable. El que cuenta es que esté presente.
-if grep -q "^timeout = 8" "${CONNECT}" \
-   && grep -qE "^loss_tolerence = [0-9]+" "${CONNECT}" \
-   && grep -q "^latency_tolerence = 800" "${CONNECT}"; then
-    junit_pass "per_link_timeout_loss_latency"
+# Check 3: timeout per-link en [links.wifi] (rebind rápido del WiFi)
+# Tras rollback 2026-05-22: solo timeout=8 se mantiene; los
+# loss_tolerence/latency_tolerence per-link se quitaron junto con los
+# globales para volver a defaults mlvpn.
+if grep -q "^timeout = 8" "${CONNECT}"; then
+    junit_pass "per_link_timeout"
 else
-    junit_fail "per_link_overrides_missing" "faltan timeout/loss_tolerence/latency_tolerence en [links.wifi]"
+    junit_fail "per_link_timeout_missing" "falta timeout=8 en [links.wifi]"
 fi
 
 # Check 4: watcher en background con sed + SIGHUP

@@ -236,29 +236,15 @@ password = "${MLVPN_SECRET}"
 # Si no recibe nada en 30s, considera el enlace muerto
 timeout = 30
 
-# Tolerancias globales para móvil (REQ-NET-09):
-# - loss_tolerence = 25: saca un enlace si pierde >25%. Default 100%
-#   es excesivo, pero 15% causa FLAPPING en producción (visto
-#   2026-05-22: enlace iPhone oscilaba entre 12% y 21% pérdida —
-#   normal en 4G — y mlvpn lo expulsaba/readmitía cada segundo,
-#   rompiendo sesiones TCP). 25% es el sweet spot: descarta enlaces
-#   realmente rotos sin oscilar con cobertura móvil normal.
-# - latency_tolerence = 800: saca un enlace si su RTT >800 ms.
-loss_tolerence = 25
-latency_tolerence = 800
-
-# reorder_buffer_size = 512: el servidor reordena paquetes que llegan
-# desordenados antes de inyectarlos al kernel TCP. CRÍTICO para
-# throughput agregado: con 2 enlaces de latencias dispares los
-# paquetes alternados llegan out-of-order; sin reorder buffer el TCP
-# los toma como pérdida → activa congestion control → throughput
-# colapsa. Pero un buffer pequeño es aún peor: visto 2026-05-22 con
-# 64, los logs del servidor mostraban "freebuffer full" decenas de
-# veces por segundo y el throughput era PEOR que sin buffer. 512 da
-# margen para enlaces 4G/5G con bonding agresivo. Subir más si los
-# logs siguen mostrando "freebuffer full: reorder_buffer_size must
-# be increased".
-reorder_buffer_size = 512
+# Sin loss_tolerence/latency_tolerence/reorder_buffer_size globales.
+# Los defaults de mlvpn (100% / 1000 ms / 0) demostraron ser MEJORES
+# que cualquier valor agresivo en producción 2026-05-22:
+# - loss_tolerence bajo causaba flapping (enlace oscilando 12%-21%
+#   expulsado/readmitido cada segundo).
+# - reorder_buffer >0 producía "freebuffer full" repetido y
+#   throughput colapsado a 80 KB/s con bonding 4G (vs 2 MB/s solo).
+# Si en el futuro vuelven los problemas, ajustar SOLO con datos
+# medidos en el trayecto real, no a partir de la teoría.
 
 # Script para configurar la interfaz tun y las rutas
 statuscommand = "${GENERATED_DIR}/mlvpn_updown_mac.sh"

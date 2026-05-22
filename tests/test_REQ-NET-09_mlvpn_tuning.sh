@@ -28,13 +28,14 @@ else
     junit_fail "tun_mtu_comment_missing" "falta comentario explicando el cálculo de TUN_MTU"
 fi
 
-# Check 3: 03-setup-mac.sh emite loss_tolerence=25 y latency_tolerence=800 en [general]
-# (25% es el sweet spot: 15% causaba flapping en producción con 4G normal)
-if grep -q "^loss_tolerence = 25$" "${SETUP_MAC}" \
-   && grep -q "^latency_tolerence = 800$" "${SETUP_MAC}"; then
-    junit_pass "mac_global_tolerences"
+# Check 3: 03-setup-mac.sh NO emite loss_tolerence/latency_tolerence globales
+# (rollback 2026-05-22: defaults mlvpn 100%/1000ms producen mejor
+# throughput que cualquier valor agresivo en móvil 4G/5G real).
+if ! grep -qE "^loss_tolerence = " "${SETUP_MAC}" \
+   && ! grep -qE "^latency_tolerence = " "${SETUP_MAC}"; then
+    junit_pass "mac_global_tolerences_use_defaults"
 else
-    junit_fail "mac_global_tolerences_missing" "loss=25/latency=800 globales ausentes en 03-setup-mac.sh"
+    junit_fail "mac_global_tolerences_present" "loss/latency_tolerence globales presentes — usar defaults mlvpn"
 fi
 
 # Check 4: 03-setup-mac.sh emite bandwidth_upload en TODOS los links
@@ -45,21 +46,22 @@ else
     junit_fail "bandwidth_upload_missing" "falta bandwidth_upload en algún link — mlvpn no recalcula pesos WRR"
 fi
 
-# Check 5: 07-setup-rpi.sh emite loss_tolerence=25 y latency_tolerence=800 en [general]
-if grep -q "^loss_tolerence = 25$" "${SETUP_RPI}" \
-   && grep -q "^latency_tolerence = 800$" "${SETUP_RPI}"; then
-    junit_pass "rpi_global_tolerences"
+# Check 5: 07-setup-rpi.sh tampoco fuerza tolerences en NINGÚN sitio
+# (ni en [general] ni per-link). Defaults mlvpn dieron mejor resultado.
+if ! grep -qE "loss_tolerence|latency_tolerence" "${SETUP_RPI}" 2>/dev/null \
+   || ! grep -qE "^(loss_tolerence|latency_tolerence) = " "${SETUP_RPI}"; then
+    junit_pass "rpi_no_tolerences_forced"
 else
-    junit_fail "rpi_global_tolerences_missing" "loss=25/latency=800 globales ausentes en 07-setup-rpi.sh"
+    junit_fail "rpi_tolerences_forced" "loss/latency_tolerence forzados en 07-setup-rpi.sh"
 fi
 
-# Check 6: ambos lados activan reorder_buffer_size = 512
-# (64 era insuficiente — "freebuffer full" en logs y throughput peor)
-if grep -q "^reorder_buffer_size = 512$" "${SETUP_MAC}" \
-   && grep -q "^reorder_buffer_size = 512$" "${SETUP_RPI}"; then
-    junit_pass "reorder_buffer_active"
+# Check 6: NINGÚN lado fuerza reorder_buffer_size > 0
+# (cualquier valor agresivo causó throughput colapsado en producción)
+if ! grep -qE "^reorder_buffer_size = " "${SETUP_MAC}" \
+   && ! grep -qE "^reorder_buffer_size = " "${SETUP_RPI}"; then
+    junit_pass "reorder_buffer_uses_default"
 else
-    junit_fail "reorder_buffer_inactive" "reorder_buffer_size = 512 ausente en cliente o servidor"
+    junit_fail "reorder_buffer_forced" "reorder_buffer_size forzado — usar default 0"
 fi
 
 # Check 7: bandwidth_upload presente en los links del servidor también

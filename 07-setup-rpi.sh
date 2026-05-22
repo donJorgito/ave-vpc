@@ -134,17 +134,10 @@ ip4_gateway = "${TUN_MAC_IP}"
 mtu = ${TUN_MTU}
 password = "${MLVPN_SECRET}"
 timeout = 30
-# Tolerancias globales (REQ-NET-09): >25% pérdida o >800ms RTT saca
-# un enlace. 15% original causaba flapping con cobertura 4G normal
-# (oscilaciones 12%-21% expulsaban/readmitían cada segundo).
-loss_tolerence = 25
-latency_tolerence = 800
-# reorder_buffer_size = 512 (REQ-NET-09): reordena paquetes
-# desordenados del bonding antes de inyectarlos al kernel TCP. 64
-# era insuficiente — visto en producción "freebuffer full" decenas
-# de veces por segundo, throughput peor que sin buffer. 512 da
-# margen para 4G/5G con bonding agresivo.
-reorder_buffer_size = 512
+# Sin loss_tolerence/latency_tolerence/reorder_buffer_size globales.
+# Los defaults de mlvpn (100% / 1000 ms / 0) producen mejor
+# throughput que cualquier valor agresivo en producción móvil
+# 4G/5G (visto 2026-05-22).
 statuscommand = "/etc/mlvpn/mlvpn_updown.sh"
 
 [filters]
@@ -165,8 +158,6 @@ bindhost = "0.0.0.0"
 bindport = ${MLVPN_PORT_3}
 bandwidth_upload = 50000000
 timeout = 8
-loss_tolerence = 25
-latency_tolerence = 800
 EOF
 
 sudo chmod 600 /etc/mlvpn/mlvpn.conf
