@@ -38,6 +38,13 @@ if [[ -f "${GENERATED_DIR}/mlvpn_wifi_watcher.pid" ]]; then
     kill "${WATCHER_PID}" 2>/dev/null || true
     rm -f "${GENERATED_DIR}/mlvpn_wifi_watcher.pid"
 fi
+# Calibrador dinámico (REQ-NET-10) — matarlo antes de tocar mlvpn para
+# evitar que reescriba la config en mitad del shutdown.
+if [[ -f "${GENERATED_DIR}/mlvpn_calibrator.pid" ]]; then
+    CALIB_PID="$(cat "${GENERATED_DIR}/mlvpn_calibrator.pid")"
+    kill "${CALIB_PID}" 2>/dev/null || true
+    rm -f "${GENERATED_DIR}/mlvpn_calibrator.pid"
+fi
 if pgrep -f "mlvpn: mlvpn0" &>/dev/null; then
     pkill -f "mlvpn: mlvpn0" 2>/dev/null || true
     sleep 2

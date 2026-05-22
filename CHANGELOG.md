@@ -5,6 +5,31 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+### Añadido
+- **REQ-NET-10 — Calibración dinámica de pesos WRR en runtime**. Los
+  pesos estáticos quedan obsoletos en minutos: medido en producción
+  2026-05-22, el mismo Pixel pasó de 253 KB/s + timeouts a 2.9 MB/s
+  en 10 min; iPhone fluctuó entre 1.0 MB/s y 2.7 MB/s. Solución:
+  watcher en background `tools/calibrar-enlaces-dinamico.sh` que
+  cada 5 s mide RTT/pérdida de cada enlace al RPi (ping, no curl
+  para no competir con tráfico de usuario), mantiene ventana
+  deslizante de 60 s, y cada 30 s reescribe `bandwidth_upload`
+  proporcional al "score" de cada enlace + `fallback_only = 1` si
+  un enlace acumula >40 % de pérdida 60 s sostenidos. SIGHUP a
+  `mlvpn [priv]` para recargar config sin tirar el túnel (mismo
+  mecanismo que REQ-NET-07). Coste en datos: ~1.5 MB/día.
+  - `04-conectar.sh` lanza el calibrador tras autenticar enlaces
+    (solo si hay ≥2 links activos).
+  - `05-desconectar.sh` mata el calibrador ANTES que mlvpn (evita
+    que reescriba la config en mitad del shutdown).
+  - `tests/test_REQ-NET-10_dynamic_calibration.sh` (11 checks).
+- **`tools/medir-enlaces.sh` — herramienta de medición repetible**.
+  Ejecuta `./tools/medir-enlaces.sh <etiqueta>` en distintas
+  ubicaciones (estación, AVE km X, oficina, casa…) para acumular
+  un perfil de cobertura real. `./tools/medir-enlaces.sh --resumen`
+  promedia las mediciones y sugiere `bandwidth_upload` calibrado.
+  Datos en `generated/measurements/`.
+
 ### Corregido
 - **REQ-MAC-05 — Limpieza defensiva de instancias mlvpn previas al
   reconectar**. Caso real observado en runtime: hasta 4 procesos

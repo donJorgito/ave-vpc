@@ -435,6 +435,23 @@ if "${WIFI_ELIGIBLE}"; then
 fi
 
 # =====================================================================
+# Calibrador dinámico de pesos WRR (REQ-NET-10)
+# Lanza el watcher que cada 5 s mide RTT/pérdida de cada enlace al RPi
+# y reescribe `bandwidth_upload` per-link + `fallback_only` cuando un
+# enlace se rompe sostenidamente. SIGHUP a mlvpn para recargar la
+# config sin tirar el túnel.
+# Coste: 1 ping ICMP × N enlaces cada 5 s ≈ 1.5 MB/día. Despreciable.
+# Solo arranca si la config tiene >=2 enlaces (con uno solo no hay
+# nada que balancear).
+# =====================================================================
+ACTIVE_LINKS_IN_CONF=$(grep -c "^\[links\." "${GENERATED_DIR}/mlvpn_active.conf" 2>/dev/null || echo 0)
+if [[ "${ACTIVE_LINKS_IN_CONF}" -ge 2 ]] && [[ -x "${SCRIPT_DIR}/tools/calibrar-enlaces-dinamico.sh" ]]; then
+    nohup "${SCRIPT_DIR}/tools/calibrar-enlaces-dinamico.sh" \
+        >> "${GENERATED_DIR}/mlvpn.log" 2>&1 &
+    echo "  Calibrador dinámico arrancado (PID $!) — recalibra pesos cada 30 s"
+fi
+
+# =====================================================================
 # Paso 5: Verificar conectividad
 # =====================================================================
 echo ""

@@ -55,6 +55,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-07](ave-vpc-REQ-NET-07-requirement.md) | Rebind del enlace WiFi ante cambios de IP |
 | [REQ-NET-08](ave-vpc-REQ-NET-08-requirement.md) | Detección de "red de casa" por IP pública |
 | [REQ-NET-09](ave-vpc-REQ-NET-09-requirement.md) | Tuning de mlvpn para móvil 4G/5G |
+| [REQ-NET-10](ave-vpc-REQ-NET-10-requirement.md) | Calibración dinámica de pesos WRR en runtime |
 
 ## Restricciones macOS (REQ-MAC)
 

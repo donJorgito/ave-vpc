@@ -466,6 +466,32 @@ Los defaults de mlvpn están pensados para enlaces simétricos estables (dos fib
 
 Estos valores se aplican generándolos en `03-setup-mac.sh` (cliente) y `07-setup-rpi.sh` (servidor). Si cambias `TUN_MTU`, regenera ambos lados y reinicia mlvpn en cada uno.
 
+### Calibración dinámica (REQ-NET-10)
+
+Los `bandwidth_upload` estáticos quedan obsoletos en minutos: la cobertura móvil cambia drásticamente durante un trayecto. Por eso, mientras `mlvpn` está activo, **`tools/calibrar-enlaces-dinamico.sh` corre como watcher en background** (lanzado automáticamente por `04-conectar.sh`):
+
+- Cada 5 s manda 1 ping ICMP desde cada interfaz física al RPi (no curl — no compite con tu tráfico). Coste ≈ 1.5 MB/día.
+- Mantiene ventana deslizante de 60 s por enlace.
+- Cada 30 s recalcula `bandwidth_upload` proporcional al score (score ∝ 1/RTT, penalización ×0.3 si pérdida 15-40 %).
+- Si un enlace acumula >40 % pérdida 60 s, lo marca `fallback_only = 1` (queda en backup pasivo). Cuando recupera, lo reactiva.
+- Solo aplica cambios si algún peso difiere >25 % del actual o cambia un fallback (evita SIGHUP innecesarios).
+
+Cada recalibración deja una línea en `generated/mlvpn.log` con timestamp.
+
+### Medición manual repetible
+
+Para tomar perfil de tu cobertura real en varias ubicaciones:
+
+```bash
+./tools/medir-enlaces.sh estacion-orihuela
+./tools/medir-enlaces.sh ave-km150
+./tools/medir-enlaces.sh oficina
+# … repite en N sitios
+./tools/medir-enlaces.sh --resumen   # promedio + sugerencia bandwidth_upload
+```
+
+Resultados en `generated/measurements/<timestamp>_<etiqueta>.csv`.
+
 ### Si la videoconf cojea pese a tener cobertura
 
 Síntoma típico de **instancias mlvpn duplicadas** acumuladas tras varias reconexiones sin desconectar. Diagnóstico:
