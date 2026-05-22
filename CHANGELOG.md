@@ -35,11 +35,14 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
     absorber variaciones de PMTU del camino (tren, hairpin del
     operador). Un MTU demasiado alto provoca fragmentación o
     black-hole de PMTUD.
-  - `loss_tolerence = 15` y `latency_tolerence = 800` globales en
-    `[general]` (cliente y servidor). Defaults son 100% / 1000 ms,
-    demasiado permisivos: un enlace medio-roto arrastra al resto.
-    Reducido de 30 a 15 tras observar Pixel con 20 % pérdida que
-    seguía dentro del bonding y bajaba el throughput agregado.
+  - `loss_tolerence = 25` y `latency_tolerence = 800` globales en
+    `[general]` (cliente y servidor). Defaults son 100 % / 1000 ms,
+    demasiado permisivos. 25 % es el sweet spot: en una primera
+    iteración bajamos a 15 % pero causaba FLAPPING en producción
+    (enlace iPhone oscilando entre 12 % y 21 % de pérdida — normal
+    en 4G — y mlvpn lo expulsaba/readmitía cada segundo, rompiendo
+    sesiones TCP). 25 % descarta enlaces realmente rotos sin
+    oscilar con cobertura móvil normal.
   - **`bandwidth_upload` OBLIGATORIO en TODOS los `[links.X]`**. La
     función `mlvpn_rtun_recalc_weight()` solo recalcula los pesos
     del Weighted Round Robin si TODOS los tunnels tienen `bandwidth`
@@ -48,12 +51,14 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
     `[links.wifi]`. (Una versión inicial de este REQ los eliminó
     creyendo que mlvpn auto-balancearía sin ellos — lectura
     incorrecta del código; revertido.)
-  - **`reorder_buffer_size = 64` global** en `[general]` (cliente y
+  - **`reorder_buffer_size = 512` global** en `[general]` (cliente y
     servidor). Con 2 enlaces de latencias dispares los paquetes
-    alternados llegan desordenados; sin reorder buffer el TCP cliente
-    trata los out-of-order como pérdida → entra en congestion control
-    → throughput colapsa. 64 es el compromiso latencia/orden estándar
-    para móvil. Subir si los logs muestran `freebuffer full`.
+    alternados llegan desordenados; sin reorder buffer el TCP
+    cliente trata los out-of-order como pérdida → entra en
+    congestion control → throughput colapsa. Pero un buffer pequeño
+    es aún peor: con 64 los logs del servidor mostraban "freebuffer
+    full" decenas de veces por segundo y el throughput era PEOR que
+    sin buffer. 512 da margen para 4G/5G con bonding agresivo.
   - `tests/test_REQ-NET-09_mlvpn_tuning.sh` (7 checks).
 - **REQ-NET-08 — Detección de "red de casa" por IP pública en lugar de
   subred local**. La detección anterior (`rpi_subnet == wifi_subnet`

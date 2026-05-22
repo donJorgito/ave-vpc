@@ -28,12 +28,13 @@ else
     junit_fail "tun_mtu_comment_missing" "falta comentario explicando el cálculo de TUN_MTU"
 fi
 
-# Check 3: 03-setup-mac.sh emite loss_tolerence=15 y latency_tolerence=800 en [general]
-if grep -q "^loss_tolerence = 15$" "${SETUP_MAC}" \
+# Check 3: 03-setup-mac.sh emite loss_tolerence=25 y latency_tolerence=800 en [general]
+# (25% es el sweet spot: 15% causaba flapping en producción con 4G normal)
+if grep -q "^loss_tolerence = 25$" "${SETUP_MAC}" \
    && grep -q "^latency_tolerence = 800$" "${SETUP_MAC}"; then
     junit_pass "mac_global_tolerences"
 else
-    junit_fail "mac_global_tolerences_missing" "loss=15/latency=800 globales ausentes en 03-setup-mac.sh"
+    junit_fail "mac_global_tolerences_missing" "loss=25/latency=800 globales ausentes en 03-setup-mac.sh"
 fi
 
 # Check 4: 03-setup-mac.sh emite bandwidth_upload en TODOS los links
@@ -44,20 +45,21 @@ else
     junit_fail "bandwidth_upload_missing" "falta bandwidth_upload en algún link — mlvpn no recalcula pesos WRR"
 fi
 
-# Check 5: 07-setup-rpi.sh emite loss_tolerence=15 y latency_tolerence=800 en [general]
-if grep -q "^loss_tolerence = 15$" "${SETUP_RPI}" \
+# Check 5: 07-setup-rpi.sh emite loss_tolerence=25 y latency_tolerence=800 en [general]
+if grep -q "^loss_tolerence = 25$" "${SETUP_RPI}" \
    && grep -q "^latency_tolerence = 800$" "${SETUP_RPI}"; then
     junit_pass "rpi_global_tolerences"
 else
-    junit_fail "rpi_global_tolerences_missing" "loss=15/latency=800 globales ausentes en 07-setup-rpi.sh"
+    junit_fail "rpi_global_tolerences_missing" "loss=25/latency=800 globales ausentes en 07-setup-rpi.sh"
 fi
 
-# Check 6: ambos lados activan reorder_buffer_size = 64
-if grep -q "^reorder_buffer_size = 64$" "${SETUP_MAC}" \
-   && grep -q "^reorder_buffer_size = 64$" "${SETUP_RPI}"; then
+# Check 6: ambos lados activan reorder_buffer_size = 512
+# (64 era insuficiente — "freebuffer full" en logs y throughput peor)
+if grep -q "^reorder_buffer_size = 512$" "${SETUP_MAC}" \
+   && grep -q "^reorder_buffer_size = 512$" "${SETUP_RPI}"; then
     junit_pass "reorder_buffer_active"
 else
-    junit_fail "reorder_buffer_inactive" "reorder_buffer_size = 64 ausente en cliente o servidor"
+    junit_fail "reorder_buffer_inactive" "reorder_buffer_size = 512 ausente en cliente o servidor"
 fi
 
 # Check 7: bandwidth_upload presente en los links del servidor también

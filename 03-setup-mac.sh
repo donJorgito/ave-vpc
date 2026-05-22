@@ -236,24 +236,29 @@ password = "${MLVPN_SECRET}"
 # Si no recibe nada en 30s, considera el enlace muerto
 timeout = 30
 
-# Tolerancias globales agresivas para móvil (REQ-NET-09):
-# - loss_tolerence = 15: saca un enlace de la agregación si pierde >15%
-#   de paquetes (default 100% = nunca lo saca). 30% original era aún
-#   demasiado permisivo en 4G/5G.
-# - latency_tolerence = 800: saca un enlace si su RTT >800 ms (default
-#   1000 ms es demasiado permisivo en 4G congestionado)
-loss_tolerence = 15
+# Tolerancias globales para móvil (REQ-NET-09):
+# - loss_tolerence = 25: saca un enlace si pierde >25%. Default 100%
+#   es excesivo, pero 15% causa FLAPPING en producción (visto
+#   2026-05-22: enlace iPhone oscilaba entre 12% y 21% pérdida —
+#   normal en 4G — y mlvpn lo expulsaba/readmitía cada segundo,
+#   rompiendo sesiones TCP). 25% es el sweet spot: descarta enlaces
+#   realmente rotos sin oscilar con cobertura móvil normal.
+# - latency_tolerence = 800: saca un enlace si su RTT >800 ms.
+loss_tolerence = 25
 latency_tolerence = 800
 
-# reorder_buffer_size = 64: el servidor reordena paquetes que llegan
+# reorder_buffer_size = 512: el servidor reordena paquetes que llegan
 # desordenados antes de inyectarlos al kernel TCP. CRÍTICO para
-# throughput agregado: con 2 enlaces de latencias dispares (50ms vs
-# 100ms), los paquetes alternados llegan out-of-order; sin reorder
-# buffer el TCP los toma como pérdida → activa congestion control →
-# throughput colapsa a 100-500 KB/s aunque la suma física sea Mbps.
-# 64 es un compromiso latencia/orden razonable para móvil; subir si
-# logs muestran "freebuffer full: reorder_buffer_size must be increased".
-reorder_buffer_size = 64
+# throughput agregado: con 2 enlaces de latencias dispares los
+# paquetes alternados llegan out-of-order; sin reorder buffer el TCP
+# los toma como pérdida → activa congestion control → throughput
+# colapsa. Pero un buffer pequeño es aún peor: visto 2026-05-22 con
+# 64, los logs del servidor mostraban "freebuffer full" decenas de
+# veces por segundo y el throughput era PEOR que sin buffer. 512 da
+# margen para enlaces 4G/5G con bonding agresivo. Subir más si los
+# logs siguen mostrando "freebuffer full: reorder_buffer_size must
+# be increased".
+reorder_buffer_size = 512
 
 # Script para configurar la interfaz tun y las rutas
 statuscommand = "${GENERATED_DIR}/mlvpn_updown_mac.sh"

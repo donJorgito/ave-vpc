@@ -311,7 +311,7 @@ remotehost = "${VPS_IP}"
 remoteport = ${MLVPN_PORT_3_REMOTE}
 bandwidth_upload = 50000000
 timeout = 8
-loss_tolerence = 15
+loss_tolerence = 25
 latency_tolerence = 800
 EOF
     if [[ "${MLVPN_PORT_3_REMOTE}" != "${MLVPN_PORT_3}" ]]; then
