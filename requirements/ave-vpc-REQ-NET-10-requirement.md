@@ -1,51 +1,45 @@
-### ave-vpc.REQ-NET-10 - Calibración dinámica de pesos WRR en runtime
+### ave-vpc.REQ-NET-10 - Calibración dinámica de pesos WRR (DEPRECATED)
 
-**Description:**
+> **Estado: DEPRECATED 2026-05-25**. La calibración dinámica del
+> WRR vía `bandwidth_upload` desestabilizó mlvpn en producción real
+> (SIGHUP frecuente provocaba colapso de throughput). Sustituido
+> funcionalmente por REQ-NET-11 (failover dinámico vía
+> `fallback_only`, mucho más conservador). El script
+> `tools/calibrar-enlaces-dinamico.sh` se mantiene en el repo como
+> herramienta de uso manual experimental, pero **04-conectar.sh ya
+> NO lo lanza automáticamente**.
 
-Los pesos del Weighted Round Robin de mlvpn (`bandwidth_upload`) son
-estáticos en la config inicial generada por `03-setup-mac.sh`. En la
-práctica, la cobertura móvil cambia drásticamente durante un
-trayecto: medido en producción 2026-05-22, el mismo Pixel pasó de
-253 KB/s + timeouts a 2.9 MB/s en 10 minutos; iPhone fluctuó entre
-1.0 MB/s y 2.7 MB/s en el mismo periodo. Una calibración estática
-queda obsoleta en minutos.
+**Description (histórica):**
 
-`tools/calibrar-enlaces-dinamico.sh` corre como watcher en background
-(lanzado por `04-conectar.sh`, terminado por `05-desconectar.sh`) y
-recalcula los pesos WRR cada 30 s sin tirar el túnel. mlvpn soporta
-recarga de config + recalculo de pesos al recibir `SIGHUP` (visto en
-`build/MLVPN/src/config.c:384`, ya usado por el watcher de IP del
-WiFi en REQ-NET-07).
+La intención era reescribir `bandwidth_upload` per-link cada 30 s
+proporcional al "score" observado de cada enlace (RTT + pérdida) y
+hacer SIGHUP a mlvpn para que recalculara pesos WRR sin tirar el
+túnel. Validado empíricamente que **no funciona en producción real**:
+- El SIGHUP frecuente con cambios en `bandwidth_upload` causaba
+  desestabilización del bonding.
+- Combinación con `reorder_buffer_size` agresivo del REQ-NET-09 hacía
+  que el throughput colapsara a 80 KB/s y rompiera conexiones HTTP/2.
+- Visto 2026-05-22.
 
-**Coste en datos**: 1 ping ICMP × N enlaces cada 5 s ≈ 1.5 MB/día.
-No se hace medición de throughput con curl periódico porque competiría
-con el tráfico del usuario (descartado explícitamente como demasiado
-intrusivo).
+**Lo que se aprendió (aplicado en REQ-NET-11):**
+
+- Tocar pesos WRR en runtime es agresivo. Tocar solo `fallback_only`
+  per-link (cambiar el rol activo↔backup) es mucho más estable.
+- mlvpn hace failover automático con `timeout = 2` (cap mínimo) si
+  el activo cae — no hace falta calibrador para casos de caída
+  abrupta.
+- El selector de mejor enlace (REQ-NET-11) cubre la "rotación
+  proactiva" sin tocar pesos.
 
 **Parent Requirement:** ave-vpc.REQ-NET-09
 
-**Acceptance Criteria:**
+**Acceptance Criteria (estado deprecated):**
 
-- `tools/calibrar-enlaces-dinamico.sh` existe, es ejecutable, pasa
-  `bash -n` y `shellcheck`.
-- `04-conectar.sh` lanza el calibrador en background tras autenticar
-  los enlaces, solo si la config activa tiene ≥2 `[links.*]`. PID en
-  `generated/mlvpn_calibrator.pid`.
-- `05-desconectar.sh` lee el PID y mata el calibrador antes de parar
-  mlvpn, para evitar que reescriba la config en mitad del shutdown.
-- El calibrador hace `ping -S <iface_ip>` (no curl) cada 5 s desde
-  cada interfaz física al `VPS_IP` resuelto a IPv4.
-- Mantiene una ventana deslizante de 12 muestras (60 s) por enlace.
-- Cada 30 s recalcula `score = 1000 / (rtt_avg/50 + 1)` y aplica
-  penalización ×0.3 si la pérdida está entre 15-40 %. Por debajo no
-  penaliza; por encima activa fallback.
-- Si la pérdida supera 40 % sostenida 60 s, marca `fallback_only = 1`
-  para ese link. Cuando se recupera (loss <15 %), restaura
-  `fallback_only = 0`. Loguea cada transición en
-  `generated/mlvpn.log` con timestamp.
-- Solo aplica cambios (sed + SIGHUP a `mlvpn [priv]`) si algún
-  `bandwidth_upload` recalculado difiere >25 % del actual o si cambia
-  algún `fallback_only`. Evita SIGHUP excesivos.
-- Reescribe per-link en `mlvpn_active.conf`; nunca toca el config
-  generado por `03-setup-mac.sh` (`mlvpn.conf` plantilla).
-- El calibrador limpia su PID file al terminar (trap EXIT).
+- `tools/calibrar-enlaces-dinamico.sh` existe en el repo y pasa
+  `bash -n` + `shellcheck`. Es ejecutable.
+- `04-conectar.sh` **NO** lanza este script automáticamente. El
+  bloque que lo lanzaba está eliminado del flujo principal.
+- El script si se invoca manualmente envía sus trazas a syslog
+  (`logger -t mlvpn-calibrator`), no a `generated/mlvpn.log`.
+- Para casos de uso real (failover en AVE), se usa REQ-NET-11
+  (`--failover` con selector dinámico).

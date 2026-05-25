@@ -5,59 +5,78 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
-### Cambiado
-- **Logs de watchers unificados en syslog (Apple Unified Log)**.
-  El selector dinámico (REQ-NET-11) y el watcher de IP del WiFi
-  (REQ-NET-07) escribían sus trazas en `generated/mlvpn.log`
-  mientras que el binario mlvpn ya mandaba al syslog de macOS —
-  inconsistente. Ahora ambos watchers usan `logger -t
-  mlvpn-selector` / `logger -t mlvpn-wifi-watcher` y todo está en
-  un único canal. Para verlo:
-  ```
-  log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info
-  ```
-  El fichero `generated/mlvpn.log` solo recoge ya errores tempranos
-  del binario mlvpn antes de que abra syslog.
-
 ### Añadido
-- **REQ-NET-11 — Modo failover (`--failover`) para sesiones
-  interactivas**. El bonding paquete-a-paquete de mlvpn (default WRR)
-  rompe HTTP/2 streaming, WebSockets y videoconferencias por jitter
-  destructivo cuando los enlaces tienen latencias dispares. Validado
-  2026-05-22: `curl` con descarga lineal a 801 KB/s ✓ pero sesión
-  Anthropic API (HTTP/2 SSE) inutilizable mientras el túnel estaba
-  activo. Con `--failover`:
-  - Pixel marcado `fallback_only = 1` (backup pasivo).
-  - WiFi también `fallback_only = 1` si pasa los pre-flight.
-  - `timeout = 2` global (cap mínimo de mlvpn) → failover en ~2 s.
-  - Solo iPhone activo → cero jitter de bonding.
-  - Si iPhone cae, mlvpn salta a Pixel automáticamente; al volver,
-    regresa.
-  Caso de uso: meet en AVE donde la cobertura de un operador puede
-  caer pero hay otro de respaldo. Trade-off: throughput agregado =
-  al mejor enlace solo.
+- **REQ-NET-11 — Modo failover dinámico (`--failover`) para
+  videoconf y sesiones HTTP/2**. El bonding paquete-a-paquete de
+  mlvpn (default WRR) reparte cada paquete entre los enlaces; con
+  latencias dispares (típico móvil 4G: 50 vs 100 ms) los paquetes
+  alternados llegan desordenados al destino y **rompen HTTP/2
+  streaming, WebSockets y videoconferencias** aunque permitan TCP
+  largos. Validado 2026-05-22: `curl` con descarga lineal a
+  801 KB/s ✓ pero sesión Anthropic API (HTTP/2 SSE) inutilizable
+  mientras el túnel estaba activo.
+
+  Solución: `04-conectar.sh --failover` configura mlvpn en modo
+  failover en lugar de bonding paquete-a-paquete:
+  - Estado inicial: iPhone activo, Pixel y WiFi marcados
+    `fallback_only = 1` (backup pasivo).
+  - `timeout = 2` global → si el activo cae, mlvpn salta al backup
+    en 2 s (cap mínimo de mlvpn).
+  - **Selector dinámico** `tools/seleccionar-mejor-enlace.sh` en
+    background: cada 5 s ping ICMP desde cada interfaz al RPi,
+    ventana deslizante 60 s, cada 30 s evalúa
+    `score = 1000 − RTT − pérdida × 10` y, si el ganador difiere del
+    activo con margen ≥ 20 puntos, **rota** el rol activo↔backup
+    reescribiendo `fallback_only` per-link y SIGHUP. **Solo toca
+    `fallback_only`, NUNCA `bandwidth_upload`** (eso desestabilizó
+    mlvpn al intentarlo en REQ-NET-10 y se descartó).
+  - Solo considera enlaces autenticados a nivel mlvpn (`@links.X`).
+    Excluye `!links.X` (AUTH_PENDING) — defensa contra WiFi del AVE
+    con buen ping ICMP pero UDP 5082 filtrado.
+  - Coste en datos: ~1.5 MB/día.
   - Sin `--failover`: bonding clásico intacto (no regresión).
   - El RPi no necesita cambios: `fallback_only` es per-link y mlvpn
     sincroniza estado por keepalive.
-  - `tests/test_REQ-NET-11_failover_mode.sh` (8 checks).
-- **REQ-NET-10 — Calibración dinámica de pesos WRR en runtime**. Los
-  pesos estáticos quedan obsoletos en minutos: medido en producción
-  2026-05-22, el mismo Pixel pasó de 253 KB/s + timeouts a 2.9 MB/s
-  en 10 min; iPhone fluctuó entre 1.0 MB/s y 2.7 MB/s. Solución:
-  watcher en background `tools/calibrar-enlaces-dinamico.sh` que
-  cada 5 s mide RTT/pérdida de cada enlace al RPi (ping, no curl
-  para no competir con tráfico de usuario), mantiene ventana
-  deslizante de 60 s, y cada 30 s reescribe `bandwidth_upload`
-  proporcional al "score" de cada enlace + `fallback_only = 1` si
-  un enlace acumula >40 % de pérdida 60 s sostenidos. SIGHUP a
-  `mlvpn [priv]` para recargar config sin tirar el túnel (mismo
-  mecanismo que REQ-NET-07). Coste en datos: ~1.5 MB/día.
-  - `04-conectar.sh` lanza el calibrador tras autenticar enlaces
-    (solo si hay ≥2 links activos).
-  - `05-desconectar.sh` mata el calibrador ANTES que mlvpn (evita
-    que reescriba la config en mitad del shutdown).
-  - `tests/test_REQ-NET-10_dynamic_calibration.sh` (11 checks).
-- **`tools/medir-enlaces.sh` — herramienta de medición repetible**.
+  - `tests/test_REQ-NET-11_failover_mode.sh` (14 checks).
+- **`tools/medir-enlaces.sh` — herramienta de medición repetible**
+  para tomar perfil de cobertura real por ubicación. Útil para
+  comparar tramos del AVE, oficina, casa, etc. Comando
+  `--resumen` agrega mediciones acumuladas y sugiere
+  `bandwidth_upload` calibrado.
+
+### Cambiado
+- **Logs de watchers unificados en syslog** (Apple Unified Log).
+  Antes: el selector y el watcher de IP del WiFi escribían en
+  `generated/mlvpn.log` mientras el binario mlvpn ya emitía a
+  syslog — inconsistente. Ahora todos usan
+  `logger -t mlvpn-<componente>`. Para verlo:
+  ```
+  log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info
+  ```
+- **Rollback del tuning agresivo de mlvpn** (commit `8521d74`). Se
+  intentaron `loss_tolerence` 15-30 %, `latency_tolerence = 800`,
+  `reorder_buffer_size` 64-512 (commits 8fa0c56, 597891d, 76e9c59)
+  buscando mejorar throughput agregado. **Todos degradaron el
+  túnel en producción real** (validado 2026-05-22):
+  - `loss_tolerence` agresivo causaba flapping (enlaces 4G normales
+    oscilan entre 12-21 % de pérdida; expulsados/readmitidos cada
+    segundo rompían sesiones TCP).
+  - `reorder_buffer_size > 0` producía "freebuffer full" repetido y
+    retrasaba el flujo entero esperando huecos hasta timeout —
+    throughput PEOR que sin buffer.
+  Estado final: solo MTU 1400, `bandwidth_upload` per-link, REQ-MAC-05
+  cleanup zombies, REQ-NET-08 detección de casa por IP pública. El
+  resto en defaults mlvpn. Lecciones documentadas en REQ-NET-09 como
+  advertencia para futuras iteraciones.
+
+### Deprecated
+- **REQ-NET-10 — Calibración dinámica vía `bandwidth_upload`**.
+  Sustituido funcionalmente por REQ-NET-11 (failover dinámico vía
+  `fallback_only`, mucho más conservador). El SIGHUP frecuente
+  reescribiendo pesos WRR desestabilizaba mlvpn.
+  `tools/calibrar-enlaces-dinamico.sh` se mantiene en el repo como
+  herramienta experimental, pero `04-conectar.sh` ya **no lo lanza
+  automáticamente**.
   Ejecuta `./tools/medir-enlaces.sh <etiqueta>` en distintas
   ubicaciones (estación, AVE km X, oficina, casa…) para acumular
   un perfil de cobertura real. `./tools/medir-enlaces.sh --resumen`

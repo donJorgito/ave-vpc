@@ -65,5 +65,8 @@ destructivo** y con cambios suaves de ~2 s.
 - El selector solo considera enlaces autenticados a nivel mlvpn
   (proceso muestra `@links.X`). Excluye `!links.X` (AUTH_PENDING) —
   defensa contra WiFi del AVE con UDP 5082 filtrado.
-- El selector escribe trazas de rotación en `generated/mlvpn.log`
-  con timestamp + scores + ganador.
+- El selector emite cada rotación a syslog con
+  `logger -t mlvpn-selector "<scores y ganador>"`. Se ve con:
+  `log stream --predicate 'process == "mlvpn-selector"' --info` o
+  combinado con todo el resto:
+  `log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info`.

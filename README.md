@@ -454,39 +454,68 @@ El cliente conecta a `200bares.dedyn.io:443/UDP`, el router rewrite a `192.168.1
 
 ## Tuning para móvil (REQ-NET-09)
 
-Los defaults de mlvpn están pensados para enlaces simétricos estables (dos fibras DSL, p.ej.). En 4G/5G sobre tren los valores afinados son:
+Los defaults de mlvpn están pensados para enlaces simétricos estables (dos fibras DSL, p. ej.). En 4G/5G móvil se ajustan **solo los mínimos imprescindibles**, manteniendo el resto en defaults — cualquier "tuning agresivo" de tolerancias o buffers que se intentó (commits 8fa0c56, 597891d, 76e9c59) degradaba el túnel en producción real y se revirtió en `8521d74`.
 
 | Parámetro | Default mlvpn | Este proyecto | Por qué |
 |---|---|---|---|
-| `mtu` (`TUN_MTU` en `config/env`) | — | **1400** | Móvil 4G ofrece MTU 1500. Overhead mlvpn ≈ 76 B (UDP+IPv4 28 + ChaCha20 nonce+tag 32 + header mlvpn ~16). Margen seguro 1424. Bajamos a 1400 para absorber PMTU variable (tren, hairpin operador). MTU alto = fragmentación o black-hole PMTUD = lag. |
-| `loss_tolerence` (`[general]`) | 100 % | **25** | mlvpn saca un enlace si pierde >25 %. Valores más bajos (15 %) causan flapping con cobertura 4G normal: enlace oscilando entre 12 % y 21 % expulsado/readmitido cada segundo, rompiendo sesiones TCP. |
-| `latency_tolerence` (`[general]`) | 1000 ms | **800** | Mismo principio para RTT > 800 ms. |
-| `bandwidth_upload` (`[links.X]`) | — | **`10000000` móvil / `50000000` wifi** | **OBLIGATORIO en TODOS los links**: la función `mlvpn_rtun_recalc_weight()` solo recalcula pesos WRR cuando todos los tunnels tienen `bandwidth` definido. Si falta en alguno, no recalcula → reparto colapsado → throughput cae a cientos de KB/s aunque la suma física sea Mbps. |
-| `reorder_buffer_size` (`[general]`) | 0 | **512** | Con 2 enlaces de latencias dispares los paquetes alternados llegan out-of-order. Sin buffer, TCP los trata como pérdida → entra en congestion control → throughput colapsa. Un buffer pequeño (64) es PEOR: visto en producción "freebuffer full" decenas de veces/segundo. 512 da margen real para bonding 4G/5G. |
+| `mtu` (`TUN_MTU` en `config/env`) | — | **1400** | Móvil 4G ofrece MTU 1500. Overhead mlvpn ≈ 76 B. Margen seguro 1424; usamos 1400 para absorber PMTU variable (tren, hairpin operador). MTU alto = fragmentación o black-hole PMTUD = lag. |
+| `bandwidth_upload` (`[links.X]`) | — | **10 Mbps móvil / 50 Mbps wifi** | **OBLIGATORIO en TODOS los links**: `mlvpn_rtun_recalc_weight()` solo recalcula pesos WRR cuando todos los tunnels tienen `bandwidth` definido. Si falta en alguno, no recalcula → reparto colapsa → throughput cae a cientos de KB/s. |
+| `loss_tolerence`, `latency_tolerence`, `reorder_buffer_size` | defaults | **defaults (no se fuerzan)** | Cualquier valor agresivo causaba **flapping** (enlaces 4G oscilando entre 12-21 % de pérdida expulsados/readmitidos cada segundo) o **freebuffer full** repetido (throughput PEOR que sin buffer). Validado 2026-05-22 en producción real. No reactivar sin datos del trayecto AVE. |
 
-Estos valores se aplican generándolos en `03-setup-mac.sh` (cliente) y `07-setup-rpi.sh` (servidor). Si cambias `TUN_MTU`, regenera ambos lados y reinicia mlvpn en cada uno.
+El problema que esos params intentaban resolver (jitter destructivo del bonding paquete-a-paquete en sesiones HTTP/2 / videoconf) se resuelve en cambio con el modo failover dinámico — ver `--failover` más abajo.
 
-### Calibración dinámica (REQ-NET-10)
+### Modo failover dinámico para videoconf — `--failover` (REQ-NET-11)
 
-Los `bandwidth_upload` estáticos quedan obsoletos en minutos: la cobertura móvil cambia drásticamente durante un trayecto. Por eso, mientras `mlvpn` está activo, **`tools/calibrar-enlaces-dinamico.sh` corre como watcher en background** (lanzado automáticamente por `04-conectar.sh`):
+El bonding paquete-a-paquete (default) reparte cada paquete entre los enlaces; con latencias dispares (típico móvil 4G: iPhone ~50 ms vs Pixel ~100 ms) los paquetes llegan desordenados al destino. Aunque TCP los reordena, eso destruye sesiones HTTP/2 streaming, WebSockets y videoconferencias en tiempo real (Zoom, Teams, Meet, Anthropic API). Validado 2026-05-22: `curl` con descarga lineal a 801 KB/s ✓ pero sesión HTTP/2 SSE inutilizable mientras el túnel estaba activo.
 
-- Cada 5 s manda 1 ping ICMP desde cada interfaz física al RPi (no curl — no compite con tu tráfico). Coste ≈ 1.5 MB/día.
-- Mantiene ventana deslizante de 60 s por enlace.
-- Cada 30 s recalcula `bandwidth_upload` proporcional al score (score ∝ 1/RTT, penalización ×0.3 si pérdida 15-40 %).
-- Si un enlace acumula >40 % pérdida 60 s, lo marca `fallback_only = 1` (queda en backup pasivo). Cuando recupera, lo reactiva.
-- Solo aplica cambios si algún peso difiere >25 % del actual o cambia un fallback (evita SIGHUP innecesarios).
+```bash
+sudo ./04-conectar.sh --failover
+```
 
-Cada recalibración queda en syslog (Apple Unified Log). Para ver en tiempo real:
+**Qué hace:**
+
+1. **Estado inicial**: iPhone activo, Pixel y WiFi (si pasa pre-flight) marcados `fallback_only = 1` (backup pasivo). `timeout = 2` global → si el activo deja de responder en 2 s, mlvpn salta automáticamente al backup.
+
+2. **Selector dinámico** (`tools/seleccionar-mejor-enlace.sh`) en background:
+   - Cada 5 s ping ICMP desde cada interfaz física al RPi (~1.5 MB/día, no curl para no competir con tráfico).
+   - Ventana deslizante de 60 s por enlace.
+   - Cada 30 s evalúa `score = 1000 − RTT − pérdida × 10` para cada enlace **autenticado a nivel mlvpn** (proceso muestra `@links.X`; excluye `!links.X` AUTH_PENDING — defensa contra WiFi del AVE con buen ping ICMP pero UDP 5082 filtrado).
+   - Si el ganador cambia con margen ≥ 20 puntos (histeresis), reescribe `fallback_only` per-link y SIGHUP a mlvpn. **Solo toca `fallback_only`, NUNCA `bandwidth_upload`** (esto último desestabiliza mlvpn — es lo que se intentó en REQ-NET-10 y se descartó).
+
+3. Cuando el activo se recupera, el selector lo elige de vuelta automáticamente.
+
+| | Bonding (default) | `--failover` (dinámico) |
+|---|---|---|
+| Reparto | Cada paquete alterna entre enlaces | Solo el "mejor" activo en cada momento |
+| Throughput | Suma teórica de enlaces | Igual al mejor enlace solo |
+| Jitter | Alto (alternancia + reorder) | Bajo (un solo camino) |
+| Cambios de enlace | No, todos siempre activos | Automáticos cuando uno mejora otro |
+| Casos uso | Descargas largas | **Videoconf, HTTP/2, sesiones interactivas** |
+
+### Logs unificados en syslog
+
+Tanto el binario mlvpn como los watchers (selector, wifi-watcher) emiten a syslog (Apple Unified Log). Para ver todo en tiempo real:
 
 ```bash
 log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info
 ```
 
-(captura el binario mlvpn + watchers como `mlvpn-selector` y `mlvpn-wifi-watcher`)
+Captura entradas como:
+- `mlvpn0[…]: links.iphone authenticated` (el binario)
+- `mlvpn-selector[…]: rotando activo iphone → wifi (iphone:rtt=120ms loss=15% score=730; …)` (selector)
+- `mlvpn-wifi-watcher[…]: wifi rebind 192.168.x.y -> 192.168.x.z` (watcher de IP del WiFi, REQ-NET-07)
+
+Para filtrar solo un componente:
+
+```bash
+log stream --predicate 'process == "mlvpn-selector"' --info
+```
+
+`generated/mlvpn.log` queda solo para errores tempranos del binario antes de que abra syslog (no se elimina por seguridad).
 
 ### Medición manual repetible
 
-Para tomar perfil de tu cobertura real en varias ubicaciones:
+Para tomar perfil de tu cobertura real en varias ubicaciones (estación, AVE km X, oficina, casa…):
 
 ```bash
 ./tools/medir-enlaces.sh estacion-orihuela
@@ -497,26 +526,6 @@ Para tomar perfil de tu cobertura real en varias ubicaciones:
 ```
 
 Resultados en `generated/measurements/<timestamp>_<etiqueta>.csv`.
-
-### Modo failover para videoconf — `--failover` (REQ-NET-11)
-
-El bonding paquete-a-paquete por defecto **rompe HTTP/2 streaming y videoconferencias** cuando los 2 enlaces tienen latencias dispares (típico móvil 4G: 50 ms vs 100 ms). Para meets en AVE, Zoom/Teams y sesiones interactivas, usa el modo failover:
-
-```bash
-sudo ./04-conectar.sh --failover
-```
-
-Lo que cambia:
-
-| | Bonding (default) | `--failover` |
-|---|---|---|
-| Reparto | Cada paquete alterna entre enlaces | Solo iPhone activo, Pixel y WiFi en backup |
-| Throughput | Suma de enlaces (teóricamente) | Solo el del enlace activo |
-| Jitter | Alto (alternancia + reorder) | Bajo (un solo camino) |
-| Failover si cae enlace activo | Inmediato (sigue el resto) | ~2 s (`timeout = 2` global) |
-| Casos uso | Descargas grandes, AVE sin meets | **Videoconf, HTTP/2, sesiones interactivas** |
-
-Cuando iPhone vuelve a estar disponible tras una caída, mlvpn regresa a él automáticamente. El RPi no necesita configuración extra — `fallback_only` se sincroniza por keepalive.
 
 ### Si la videoconf cojea pese a tener cobertura
 

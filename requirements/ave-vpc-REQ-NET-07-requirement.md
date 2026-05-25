@@ -35,6 +35,9 @@ agregación cuando se degrada sin tirar abajo el resto.
   mlvpn declara DOWN el WiFi en 8 s en vez de los 30 s globales y lo
   saca de la agregación si la pérdida supera 30 % o el RTT 800 ms,
   manteniendo iPhone y Pixel intactos.
-- Cada rebind del watcher escribe una línea
-  `HH:MM:SS wifi rebind <ip_vieja> -> <ip_nueva>` en
-  `generated/mlvpn.log` para trazabilidad.
+- Cada rebind del watcher emite a syslog con
+  `logger -t mlvpn-wifi-watcher "wifi rebind <ip_vieja> -> <ip_nueva>"`
+  para trazabilidad. Se ve con
+  `log stream --predicate 'process == "mlvpn-wifi-watcher"' --info`
+  o mezclado con el resto:
+  `log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info`.
