@@ -23,7 +23,6 @@ GENERATED_DIR="${SCRIPT_DIR}/generated"
 CONFIG_FILE="${SCRIPT_DIR}/config/env"
 ACTIVE_CONF="${GENERATED_DIR}/mlvpn_active.conf"
 PID_FILE="${GENERATED_DIR}/mlvpn_failover_selector.pid"
-LOG_FILE="${GENERATED_DIR}/mlvpn.log"
 
 # shellcheck source=/dev/null
 source "${CONFIG_FILE}"
@@ -47,7 +46,10 @@ TICK_INTERVAL=5
 MIN_SCORE_GAP=20     # diferencia mínima de score para rotar (histeresis)
 
 log() {
-    printf '%s selector: %s\n' "$(date '+%H:%M:%S')" "$*" >> "${LOG_FILE}"
+    # Mandamos a syslog (Apple Unified Log) en lugar de a un fichero
+    # propio. Consistencia: mlvpn ya manda sus logs ahí. Se ve con:
+    #   log stream --predicate 'process == "mlvpn-selector"' --info
+    logger -t mlvpn-selector "$*"
 }
 
 ping_iface() {

@@ -59,11 +59,12 @@ else
     junit_fail "disconnect_watcher_cleanup_missing" "05-desconectar.sh no limpia el watcher"
 fi
 
-# Check 7: traza de rebind escrita al log
-if grep -q "wifi rebind" "${CONNECT}"; then
-    junit_pass "rebind_log_trace"
+# Check 7: traza de rebind enviada a syslog (logger -t mlvpn-wifi-watcher)
+if grep -q "logger -t mlvpn-wifi-watcher" "${CONNECT}" \
+   && grep -q "wifi rebind" "${CONNECT}"; then
+    junit_pass "rebind_log_trace_syslog"
 else
-    junit_fail "rebind_log_missing" "no se escribe traza de rebind en mlvpn.log"
+    junit_fail "rebind_log_missing" "no se escribe traza de rebind en syslog"
 fi
 
 junit_finalize

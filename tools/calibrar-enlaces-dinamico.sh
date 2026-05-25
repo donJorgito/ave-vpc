@@ -39,7 +39,6 @@ GENERATED_DIR="${SCRIPT_DIR}/generated"
 CONFIG_FILE="${SCRIPT_DIR}/config/env"
 ACTIVE_CONF="${GENERATED_DIR}/mlvpn_active.conf"
 PID_FILE="${GENERATED_DIR}/mlvpn_calibrator.pid"
-LOG_FILE="${GENERATED_DIR}/mlvpn.log"
 
 # shellcheck source=/dev/null
 source "${CONFIG_FILE}"
@@ -77,7 +76,7 @@ SUSTAINED_FAIL_S=60       # tiempo en estado malo antes de marcar fallback
 # para 60 s de ventana — añade complejidad sin beneficio observable.
 
 log() {
-    printf '%s calibrador: %s\n' "$(date '+%H:%M:%S')" "$*" >> "${LOG_FILE}"
+    logger -t mlvpn-calibrator "$*"
 }
 
 # Ping 1 paquete desde una interfaz al VPS público; devuelve RTT en ms o ""

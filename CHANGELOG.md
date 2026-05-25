@@ -5,6 +5,20 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+### Cambiado
+- **Logs de watchers unificados en syslog (Apple Unified Log)**.
+  El selector dinámico (REQ-NET-11) y el watcher de IP del WiFi
+  (REQ-NET-07) escribían sus trazas en `generated/mlvpn.log`
+  mientras que el binario mlvpn ya mandaba al syslog de macOS —
+  inconsistente. Ahora ambos watchers usan `logger -t
+  mlvpn-selector` / `logger -t mlvpn-wifi-watcher` y todo está en
+  un único canal. Para verlo:
+  ```
+  log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info
+  ```
+  El fichero `generated/mlvpn.log` solo recoge ya errores tempranos
+  del binario mlvpn antes de que abra syslog.
+
 ### Añadido
 - **REQ-NET-11 — Modo failover (`--failover`) para sesiones
   interactivas**. El bonding paquete-a-paquete de mlvpn (default WRR)

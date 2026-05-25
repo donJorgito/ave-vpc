@@ -476,7 +476,13 @@ Los `bandwidth_upload` estáticos quedan obsoletos en minutos: la cobertura móv
 - Si un enlace acumula >40 % pérdida 60 s, lo marca `fallback_only = 1` (queda en backup pasivo). Cuando recupera, lo reactiva.
 - Solo aplica cambios si algún peso difiere >25 % del actual o cambia un fallback (evita SIGHUP innecesarios).
 
-Cada recalibración deja una línea en `generated/mlvpn.log` con timestamp.
+Cada recalibración queda en syslog (Apple Unified Log). Para ver en tiempo real:
+
+```bash
+log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info
+```
+
+(captura el binario mlvpn + watchers como `mlvpn-selector` y `mlvpn-wifi-watcher`)
 
 ### Medición manual repetible
 

@@ -461,8 +461,7 @@ if "${WIFI_ELIGIBLE}"; then
                 sed -i '' "s|bindhost = \"${last_ip}\"|bindhost = \"${now_ip}\"|" \
                     "${GENERATED_DIR}/mlvpn_active.conf"
                 kill -HUP "${priv_pid}" 2>/dev/null && \
-                    echo "$(date '+%H:%M:%S') wifi rebind ${last_ip} -> ${now_ip}" \
-                        >> "${GENERATED_DIR}/mlvpn.log"
+                    logger -t mlvpn-wifi-watcher "wifi rebind ${last_ip} -> ${now_ip}"
                 last_ip="${now_ip}"
             fi
         done
