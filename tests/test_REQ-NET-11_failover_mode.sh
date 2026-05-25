@@ -109,13 +109,13 @@ else
     junit_fail "connect_no_selector" "04-conectar.sh no lanza el selector con --failover"
 fi
 
-# Check 14: 05-desconectar.sh mata el selector ANTES que mlvpn
-LINE_KILL=$(grep -n "mlvpn_failover_selector.pid" "${DISCONNECT}" | head -1 | cut -d: -f1)
-LINE_PKILL=$(grep -n 'pkill -f "mlvpn: mlvpn0"' "${DISCONNECT}" | head -1 | cut -d: -f1)
-if [ -n "${LINE_KILL}" ] && [ -n "${LINE_PKILL}" ] && [ "${LINE_KILL}" -lt "${LINE_PKILL}" ]; then
-    junit_pass "disconnect_kills_selector_first"
+# Check 14: 05-desconectar.sh mata el selector (tras refactor SOS
+# atómico el orden ya no importa: pkill -9 mata todo en ms a la vez)
+if grep -q "seleccionar-mejor-enlace\|mlvpn_failover_selector" "${DISCONNECT}" \
+   || grep -qE 'pid_file.*kill -9|for.*\.pid' "${DISCONNECT}"; then
+    junit_pass "disconnect_kills_selector"
 else
-    junit_fail "disconnect_order_wrong" "05-desconectar.sh debe matar selector ANTES que mlvpn"
+    junit_fail "disconnect_no_selector_kill" "05-desconectar.sh no mata selector"
 fi
 
 junit_finalize

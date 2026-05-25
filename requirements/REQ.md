@@ -57,6 +57,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-09](ave-vpc-REQ-NET-09-requirement.md) | Tuning de mlvpn para móvil 4G/5G |
 | [REQ-NET-10](ave-vpc-REQ-NET-10-requirement.md) | Calibración dinámica de pesos WRR en runtime |
 | [REQ-NET-11](ave-vpc-REQ-NET-11-requirement.md) | Modo failover para sesiones interactivas |
+| [REQ-NET-13](ave-vpc-REQ-NET-13-requirement.md) | Reintegración del WiFi tras autenticar captive portal |
 
 ## Restricciones macOS (REQ-MAC)
 
