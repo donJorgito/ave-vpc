@@ -58,17 +58,23 @@ if [[ "${EUID}" -ne 0 ]]; then
     echo ""
     echo "Flags:"
     echo "  --sin-wifi   No usar el WiFi del Mac como 3er enlace (forzar 2 enlaces móviles)"
+    echo "  --failover   Modo failover (REQ-NET-11): Pixel como backup pasivo, timeout=2,"
+    echo "               solo iPhone activo. Para videoconf y sesiones HTTP/2 que"
+    echo "               sufren con jitter de bonding paquete-a-paquete. Si iPhone cae,"
+    echo "               mlvpn cambia a Pixel en ~2 s; cuando vuelve, regresa a iPhone."
     exit 1
 fi
 
 # --- Parser de flags ---
 SIN_WIFI=false
+FAILOVER=false
 for arg in "$@"; do
     case "${arg}" in
         --sin-wifi) SIN_WIFI=true ;;
+        --failover) FAILOVER=true ;;
         *)
             echo "ERROR: argumento desconocido: ${arg}"
-            echo "Uso: $0 [--sin-wifi]"
+            echo "Uso: $0 [--sin-wifi] [--failover]"
             exit 1
             ;;
     esac
@@ -294,6 +300,33 @@ chmod 600 "${GENERATED_DIR}/mlvpn_active.conf"
 sed -i '' "s/PLACEHOLDER_IPHONE_IP/${IP_IPHONE:-0.0.0.0}/" "${GENERATED_DIR}/mlvpn_active.conf"
 sed -i '' "s/PLACEHOLDER_PIXEL_IP/${IP_PIXEL:-0.0.0.0}/" "${GENERATED_DIR}/mlvpn_active.conf"
 
+# =====================================================================
+# Modo --failover (REQ-NET-11): Pixel como backup pasivo.
+# Para videoconf y sesiones HTTP/2 que sufren con jitter de bonding
+# paquete-a-paquete (cada paquete alterno entre 2 enlaces de latencia
+# dispar destruye HTTP/2 streaming aunque permita TCP largos). En este
+# modo solo iPhone activo; si cae, mlvpn cambia a Pixel en ~2s
+# (timeout=2 global). Cuando iPhone vuelve, regresa a él.
+# =====================================================================
+if "${FAILOVER}"; then
+    echo "=> Modo --failover activo: Pixel como backup pasivo, timeout=2s"
+    # 1) Bajar timeout global a 2s (cap mínimo de mlvpn) para failover rápido
+    sed -i '' 's/^timeout = [0-9]*$/timeout = 2/' "${GENERATED_DIR}/mlvpn_active.conf"
+    # 2) Marcar Pixel como fallback_only=1 (insertar tras bandwidth_upload)
+    awk '
+        $0 == "[links.pixel]" {in_section=1; print; next}
+        in_section && /^\[/ {
+            if (!added) print "fallback_only = 1"
+            in_section=0; added=0; print; next
+        }
+        in_section && /^bandwidth_upload/ {print; print "fallback_only = 1"; added=1; next}
+        {print}
+        END { if (in_section && !added) print "fallback_only = 1" }
+    ' "${GENERATED_DIR}/mlvpn_active.conf" > "${GENERATED_DIR}/mlvpn_active.conf.tmp" \
+        && mv "${GENERATED_DIR}/mlvpn_active.conf.tmp" "${GENERATED_DIR}/mlvpn_active.conf"
+    chmod 600 "${GENERATED_DIR}/mlvpn_active.conf"
+fi
+
 # Si el WiFi pasó los pre-flight checks, anexar el bloque [links.wifi].
 # No se mete en la plantilla generada por 03-setup-mac.sh porque solo
 # se sabe en tiempo de conexión si la WiFi actual es elegible.
@@ -312,6 +345,11 @@ remoteport = ${MLVPN_PORT_3_REMOTE}
 bandwidth_upload = 50000000
 timeout = 8
 EOF
+    # En modo --failover, el WiFi también queda como backup pasivo
+    # (igual que Pixel) — solo iPhone activo
+    if "${FAILOVER}"; then
+        echo "fallback_only = 1" >> "${GENERATED_DIR}/mlvpn_active.conf"
+    fi
     if [[ "${MLVPN_PORT_3_REMOTE}" != "${MLVPN_PORT_3}" ]]; then
         echo "  Bloque [links.wifi] añadido (cliente conecta a :${MLVPN_PORT_3_REMOTE} → router mapea a :${MLVPN_PORT_3})"
     else

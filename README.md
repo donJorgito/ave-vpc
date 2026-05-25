@@ -492,6 +492,26 @@ Para tomar perfil de tu cobertura real en varias ubicaciones:
 
 Resultados en `generated/measurements/<timestamp>_<etiqueta>.csv`.
 
+### Modo failover para videoconf — `--failover` (REQ-NET-11)
+
+El bonding paquete-a-paquete por defecto **rompe HTTP/2 streaming y videoconferencias** cuando los 2 enlaces tienen latencias dispares (típico móvil 4G: 50 ms vs 100 ms). Para meets en AVE, Zoom/Teams y sesiones interactivas, usa el modo failover:
+
+```bash
+sudo ./04-conectar.sh --failover
+```
+
+Lo que cambia:
+
+| | Bonding (default) | `--failover` |
+|---|---|---|
+| Reparto | Cada paquete alterna entre enlaces | Solo iPhone activo, Pixel y WiFi en backup |
+| Throughput | Suma de enlaces (teóricamente) | Solo el del enlace activo |
+| Jitter | Alto (alternancia + reorder) | Bajo (un solo camino) |
+| Failover si cae enlace activo | Inmediato (sigue el resto) | ~2 s (`timeout = 2` global) |
+| Casos uso | Descargas grandes, AVE sin meets | **Videoconf, HTTP/2, sesiones interactivas** |
+
+Cuando iPhone vuelve a estar disponible tras una caída, mlvpn regresa a él automáticamente. El RPi no necesita configuración extra — `fallback_only` se sincroniza por keepalive.
+
 ### Si la videoconf cojea pese a tener cobertura
 
 Síntoma típico de **instancias mlvpn duplicadas** acumuladas tras varias reconexiones sin desconectar. Diagnóstico:

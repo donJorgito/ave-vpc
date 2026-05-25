@@ -6,6 +6,26 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 ## [Sin publicar]
 
 ### Añadido
+- **REQ-NET-11 — Modo failover (`--failover`) para sesiones
+  interactivas**. El bonding paquete-a-paquete de mlvpn (default WRR)
+  rompe HTTP/2 streaming, WebSockets y videoconferencias por jitter
+  destructivo cuando los enlaces tienen latencias dispares. Validado
+  2026-05-22: `curl` con descarga lineal a 801 KB/s ✓ pero sesión
+  Anthropic API (HTTP/2 SSE) inutilizable mientras el túnel estaba
+  activo. Con `--failover`:
+  - Pixel marcado `fallback_only = 1` (backup pasivo).
+  - WiFi también `fallback_only = 1` si pasa los pre-flight.
+  - `timeout = 2` global (cap mínimo de mlvpn) → failover en ~2 s.
+  - Solo iPhone activo → cero jitter de bonding.
+  - Si iPhone cae, mlvpn salta a Pixel automáticamente; al volver,
+    regresa.
+  Caso de uso: meet en AVE donde la cobertura de un operador puede
+  caer pero hay otro de respaldo. Trade-off: throughput agregado =
+  al mejor enlace solo.
+  - Sin `--failover`: bonding clásico intacto (no regresión).
+  - El RPi no necesita cambios: `fallback_only` es per-link y mlvpn
+    sincroniza estado por keepalive.
+  - `tests/test_REQ-NET-11_failover_mode.sh` (8 checks).
 - **REQ-NET-10 — Calibración dinámica de pesos WRR en runtime**. Los
   pesos estáticos quedan obsoletos en minutos: medido en producción
   2026-05-22, el mismo Pixel pasó de 253 KB/s + timeouts a 2.9 MB/s
