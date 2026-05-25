@@ -117,8 +117,16 @@ while :; do
     new_ip="$(wifi_passes_preflight 2>/dev/null || true)"
     [[ -z "${new_ip}" ]] && continue
 
-    # Pre-flight OK y WiFi NO está en config → añadir bloque
-    log "WiFi pasa pre-flight ahora (IP=${new_ip}) — añadiendo a bonding"
+    # Pre-flight OK y WiFi NO está en config → añadir bloque.
+    # Si el túnel está en modo --failover (algún otro link tiene
+    # fallback_only=1 en config), el WiFi debe heredar ese modo
+    # — si no, mlvpn lo trataría como activo y rompería el modelo
+    # "1 activo, los demás backup" que pide REQ-NET-11.
+    failover_active=0
+    if grep -qE "^fallback_only = 1$" "${ACTIVE_CONF}" 2>/dev/null; then
+        failover_active=1
+    fi
+    log "WiFi pasa pre-flight ahora (IP=${new_ip}) — añadiendo a bonding (failover=${failover_active})"
 
     cat >> "${ACTIVE_CONF}" <<EOF
 
@@ -129,6 +137,10 @@ remoteport = ${MLVPN_PORT_3_REMOTE}
 bandwidth_upload = 50000000
 timeout = 8
 EOF
+    # Si --failover activo, marcar WiFi como backup pasivo
+    if [[ "${failover_active}" -eq 1 ]]; then
+        echo "fallback_only = 1" >> "${ACTIVE_CONF}"
+    fi
 
     # SIGHUP al proceso priv para que mlvpn recargue la config
     priv_pid="$(pgrep -f 'mlvpn: mlvpn0 \[priv\]' | head -1 || true)"

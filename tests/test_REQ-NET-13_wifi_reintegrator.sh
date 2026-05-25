@@ -93,4 +93,13 @@ else
     junit_fail "wrong_pid_path" "PID file no está en path estándar"
 fi
 
+# Check 12: hereda modo --failover (añade fallback_only=1 si otros
+# links lo tienen)
+if grep -q "failover_active" "${SCRIPT}" \
+   && grep -qE 'grep.*fallback_only = 1.*ACTIVE_CONF' "${SCRIPT}"; then
+    junit_pass "inherits_failover_mode"
+else
+    junit_fail "no_failover_inheritance" "no hereda modo --failover (REQ-NET-11)"
+fi
+
 junit_finalize

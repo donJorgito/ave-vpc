@@ -33,6 +33,10 @@ Despreciable. El watcher se para automáticamente cuando detecta que
 
 - `tools/wifi-reintegrator.sh` existe, es ejecutable, pasa `bash -n`
   y `shellcheck`.
+- Detecta el modo `--failover` consultando si algún otro link tiene
+  `fallback_only = 1` en `mlvpn_active.conf`. Si sí, añade también
+  `fallback_only = 1` al bloque `[links.wifi]` que escribe (para no
+  romper el modelo "1 activo, demás backup" de REQ-NET-11).
 - Las funciones de comprobación (`get_public_ip_via_iface`,
   `resolve_vps_public_ip`, `wifi_passes_preflight`) son
   semánticamente equivalentes a las de `04-conectar.sh` (captive
