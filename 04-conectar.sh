@@ -471,19 +471,22 @@ if "${WIFI_ELIGIBLE}"; then
 fi
 
 # =====================================================================
-# Calibrador dinámico (REQ-NET-10) — DESACTIVADO por defecto.
-# En producción 2026-05-22 los SIGHUP frecuentes desestabilizaban
-# mlvpn y el throughput agregado caía a 80 KB/s. El script sigue
-# disponible en tools/calibrar-enlaces-dinamico.sh para reactivar
-# manualmente con datos medidos en el trayecto real.
-# Para reactivar: descomentar el bloque siguiente.
+# Calibrador dinámico WRR (REQ-NET-10) — DESACTIVADO permanentemente.
+# Reescribir bandwidth_upload + SIGHUP cada 30 s desestabilizaba
+# mlvpn (visto 2026-05-22). No reactivar.
+#
+# Selector dinámico de mejor enlace (REQ-NET-11 modo --failover):
+# si el flag está activo, lanza el watcher que mide RTT/pérdida de
+# cada enlace y rota cuál es el "activo" al mejor sostenido. Solo
+# toca `fallback_only` per-link (no bandwidth_upload), mucho menos
+# agresivo. Cada 30 s evalúa, solo cambia si el ganador es claro
+# (gap ≥20 puntos de score).
 # =====================================================================
-# ACTIVE_LINKS_IN_CONF=$(grep -c "^\[links\." "${GENERATED_DIR}/mlvpn_active.conf" 2>/dev/null || echo 0)
-# if [[ "${ACTIVE_LINKS_IN_CONF}" -ge 2 ]] && [[ -x "${SCRIPT_DIR}/tools/calibrar-enlaces-dinamico.sh" ]]; then
-#     nohup "${SCRIPT_DIR}/tools/calibrar-enlaces-dinamico.sh" \
-#         >> "${GENERATED_DIR}/mlvpn.log" 2>&1 &
-#     echo "  Calibrador dinámico arrancado (PID $!) — recalibra pesos cada 30 s"
-# fi
+if "${FAILOVER}" && [[ -x "${SCRIPT_DIR}/tools/seleccionar-mejor-enlace.sh" ]]; then
+    nohup "${SCRIPT_DIR}/tools/seleccionar-mejor-enlace.sh" \
+        >> "${GENERATED_DIR}/mlvpn.log" 2>&1 &
+    echo "  Selector de mejor enlace arrancado (PID $!) — rota cada 30s al de mejor score"
+fi
 
 # =====================================================================
 # Paso 5: Verificar conectividad

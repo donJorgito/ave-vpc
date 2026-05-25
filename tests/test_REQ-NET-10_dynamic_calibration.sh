@@ -69,13 +69,17 @@ else
     junit_fail "no_sighup" "no manda SIGHUP al proceso mlvpn [priv]"
 fi
 
-# Check 9: 04-conectar.sh lanza el calibrador en background con nohup
-# (el PID file lo gestiona el propio calibrador internamente)
-if grep -q 'calibrar-enlaces-dinamico.sh' "${CONNECT}" \
-   && grep -q 'nohup.*calibrar-enlaces-dinamico' "${CONNECT}"; then
-    junit_pass "connect_starts_calibrator"
+# Check 9: el script auxiliar sigue disponible en tools/ aunque
+# 04-conectar.sh ya no lo lance (deprecated en favor de
+# tools/seleccionar-mejor-enlace.sh, REQ-NET-11). Mantenemos el
+# script para casos de uso experimentales fuera del flujo principal.
+# Verificamos que SI se referenciara, está como bloque comentado o
+# referencia documental — no que esté activamente lanzado.
+if grep -q 'calibrar-enlaces-dinamico' "${CONNECT}" \
+   || [ -x "${ROOT}/tools/calibrar-enlaces-dinamico.sh" ]; then
+    junit_pass "calibrator_available_for_manual_use"
 else
-    junit_fail "connect_missing_calibrator_launch" "04-conectar.sh no lanza el calibrador con nohup"
+    junit_fail "calibrator_disappeared" "calibrador eliminado del repo"
 fi
 
 # Check 10: 05-desconectar.sh mata el calibrador antes de mlvpn

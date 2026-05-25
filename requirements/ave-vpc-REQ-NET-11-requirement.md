@@ -13,19 +13,29 @@ producción 2026-05-22: `curl` con descarga lineal a 801 KB/s ✓ pero
 sesión Claude (HTTP/2 SSE) inutilizable mientras el túnel estaba
 activo.
 
-`04-conectar.sh --failover` configura mlvpn en modo failover en lugar
-de bonding:
-- Solo iPhone activo
-- Pixel y, si aplica, WiFi marcados con `fallback_only = 1` (backup
-  pasivo)
-- `timeout = 2` global (cap mínimo de mlvpn) → si iPhone deja de
-  responder en 2 s, mlvpn cambia automáticamente a Pixel
-- Cuando iPhone vuelve, mlvpn regresa a iPhone
+`04-conectar.sh --failover` configura mlvpn en modo failover dinámico
+en lugar de bonding:
+- Inicialmente: iPhone activo, Pixel y WiFi marcados
+  `fallback_only = 1` (backup pasivo)
+- `timeout = 2` global → failover en ~2 s ante caída del activo
+- **Selector dinámico** (`tools/seleccionar-mejor-enlace.sh`)
+  lanzado en background:
+  - Cada 5 s mide RTT y pérdida de cada enlace al RPi público.
+  - Cada 30 s evalúa scores (`score = 1000 - rtt - loss × 10`) y,
+    si el ganador difiere del activo con margen ≥ 20 puntos, **rota**
+    el rol activo↔backup reescribiendo `fallback_only` y SIGHUP.
+  - Solo considera enlaces marcados `@` (autenticados a nivel mlvpn).
+    Excluye los `!` (AUTH_PENDING): un WiFi del AVE puede tener
+    buen RTT ICMP pero filtrar UDP 5082 — sin esta salvaguarda lo
+    elegiríamos ganador y romperíamos el túnel.
+  - Solo toca `fallback_only` per-link (NUNCA bandwidth_upload):
+    cambios suaves que mlvpn asimila sin desestabilizar.
 
 Caso de uso principal: meet/videoconferencia en AVE donde la
-cobertura de un operador puede caer momentáneamente. Trade-off:
-throughput agregado = al mejor enlace solo (no suma de enlaces),
-pero **sin jitter destructivo** y con failover de ~2 s en cortes.
+cobertura cambia entre operadoras a lo largo del trayecto. El
+sistema escoge automáticamente el mejor en cada momento. Trade-off:
+throughput = al mejor enlace solo (no suma), pero **sin jitter
+destructivo** y con cambios suaves de ~2 s.
 
 **Parent Requirement:** ave-vpc.REQ-NET-09
 
@@ -48,3 +58,12 @@ pero **sin jitter destructivo** y con failover de ~2 s en cortes.
 - El RPi NO necesita cambios: `fallback_only` es per-link y mlvpn
   evalúa el estado de los links en ambos extremos por keepalive
   recíproco.
+- `tools/seleccionar-mejor-enlace.sh` se lanza en background si
+  `--failover` está activo. PID en
+  `generated/mlvpn_failover_selector.pid`. Lo mata `05-desconectar.sh`
+  ANTES de parar mlvpn (no en mitad del shutdown).
+- El selector solo considera enlaces autenticados a nivel mlvpn
+  (proceso muestra `@links.X`). Excluye `!links.X` (AUTH_PENDING) —
+  defensa contra WiFi del AVE con UDP 5082 filtrado.
+- El selector escribe trazas de rotación en `generated/mlvpn.log`
+  con timestamp + scores + ganador.

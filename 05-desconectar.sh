@@ -45,6 +45,12 @@ if [[ -f "${GENERATED_DIR}/mlvpn_calibrator.pid" ]]; then
     kill "${CALIB_PID}" 2>/dev/null || true
     rm -f "${GENERATED_DIR}/mlvpn_calibrator.pid"
 fi
+# Selector dinámico (REQ-NET-11 --failover) — mismo motivo
+if [[ -f "${GENERATED_DIR}/mlvpn_failover_selector.pid" ]]; then
+    SEL_PID="$(cat "${GENERATED_DIR}/mlvpn_failover_selector.pid")"
+    kill "${SEL_PID}" 2>/dev/null || true
+    rm -f "${GENERATED_DIR}/mlvpn_failover_selector.pid"
+fi
 if pgrep -f "mlvpn: mlvpn0" &>/dev/null; then
     pkill -f "mlvpn: mlvpn0" 2>/dev/null || true
     sleep 2
