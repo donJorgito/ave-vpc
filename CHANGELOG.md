@@ -5,6 +5,20 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+Trabajo hacia **v2.0.0** — migración a ubond con replicación selectiva
+de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
+en memoria del proyecto. Plan en 6 fases, ejecutándose
+incrementalmente sin romper la v1.0.0 actual.
+
+## [1.0.0] — 2026-05-25
+
+Primera versión **estable** del bonding mlvpn + failover dinámico.
+Validada en producción en uso doméstico y trayecto AVE
+Orihuela-Madrid. La v1.0.0 cierra el ciclo de tuning empírico
+(commits 8fa0c56 → dedd8f2) con el aprendizaje de que el bonding
+paquete-a-paquete tiene límites estructurales para sesiones
+HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
+
 ### Añadido
 - **REQ-NET-11 — Modo failover dinámico (`--failover`) para
   videoconf y sesiones HTTP/2**. El bonding paquete-a-paquete de
