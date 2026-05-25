@@ -24,7 +24,22 @@
 #
 # Coste en datos: 1 ping ICMP × N enlaces cada 5 s ≈ 1.5 MB/día.
 ###############################################################################
-set -uo pipefail
+
+# Necesita bash >=4 por los arrays asociativos (declare -A). macOS trae
+# bash 3.2 en /bin/bash por defecto. Si el bash actual es viejo,
+# relanzamos con el de Homebrew automáticamente.
+if (( BASH_VERSINFO[0] < 4 )); then
+    for try_bash in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+        if [[ -x "${try_bash}" ]]; then
+            exec "${try_bash}" "$0" "$@"
+        fi
+    done
+    echo "ERROR: necesita bash >=4. Instalar: brew install bash" >&2
+    exit 1
+fi
+# -o pipefail mantiene fallos en pipes; quitamos -u porque bash con
+# `declare -A` y `set -u` da false positives en algunos contextos.
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GENERATED_DIR="${SCRIPT_DIR}/generated"

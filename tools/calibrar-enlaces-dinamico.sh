@@ -32,7 +32,18 @@
 # - 1 ping ICMP cada 5 s × 3 enlaces ≈ 60 KB/h ≈ 1.5 MB/día. Despreciable.
 # - Sin curl de calibración (descartado por excesivo en uso real).
 ###############################################################################
-set -uo pipefail
+
+# bash >=4 (arrays asociativos)
+if (( BASH_VERSINFO[0] < 4 )); then
+    for try_bash in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+        if [[ -x "${try_bash}" ]]; then
+            exec "${try_bash}" "$0" "$@"
+        fi
+    done
+    echo "ERROR: necesita bash >=4. Instalar: brew install bash" >&2
+    exit 1
+fi
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GENERATED_DIR="${SCRIPT_DIR}/generated"

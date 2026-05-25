@@ -19,7 +19,18 @@
 # servicios IP cada 30 s ≈ 80 KB/h. Se para automáticamente cuando el
 # WiFi entra al bonding (no sigue pingando indefinidamente).
 ###############################################################################
-set -uo pipefail
+
+# bash >=4 (consistencia con resto de watchers que usan arrays asociativos)
+if (( BASH_VERSINFO[0] < 4 )); then
+    for try_bash in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+        if [[ -x "${try_bash}" ]]; then
+            exec "${try_bash}" "$0" "$@"
+        fi
+    done
+    echo "ERROR: necesita bash >=4. Instalar: brew install bash" >&2
+    exit 1
+fi
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GENERATED_DIR="${SCRIPT_DIR}/generated"
