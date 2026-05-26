@@ -10,11 +10,11 @@ DOC="$(dirname "$0")/../requirements/ave-vpc-REQ-NET-12-requirement.md"
 
 [ -f "${DOC}" ] || { junit_fail "doc_missing" "REQ-NET-12 doc no existe"; junit_finalize; }
 
-# Check 1: Marcado como design doc (Fase 2.2)
-if grep -q "design doc.*Fase 2.2" "${DOC}"; then
-    junit_pass "marked_as_design_doc"
+# Check 1: Marcado como Fase 2.2 (design doc) o Fase 3 (implementado)
+if grep -qE "(design doc.*Fase 2\.2|implementado.*Fase 3)" "${DOC}"; then
+    junit_pass "marked_as_design_or_implemented"
 else
-    junit_fail "not_marked" "no está marcado como design doc Fase 2.2"
+    junit_fail "not_marked" "no está marcado como Fase 2.2/3"
 fi
 
 # Check 2: Define la sintaxis del filtro en config
@@ -118,6 +118,80 @@ if grep -q "hpsbuf" "${DOC}"; then
     junit_pass "uses_hpsbuf"
 else
     junit_fail "no_hpsbuf" "no menciona hpsbuf como vector de inserción"
+fi
+
+# --- Checks de IMPLEMENTACIÓN (Fase 3) ---
+
+PATCH="$(dirname "$0")/../patches/ubond_replicate_filter.patch"
+
+# Check 15: patch de implementación existe
+if [ -f "${PATCH}" ]; then
+    junit_pass "implementation_patch_exists"
+else
+    junit_fail "no_patch" "patches/ubond_replicate_filter.patch no existe"
+    junit_finalize
+fi
+
+# Check 16: patch toca los 4 archivos esperados
+if grep -q '^diff --git a/src/ubond.h' "${PATCH}" \
+   && grep -q '^diff --git a/src/filters.c' "${PATCH}" \
+   && grep -q '^diff --git a/src/ubond.c' "${PATCH}" \
+   && grep -q '^diff --git a/src/config.c' "${PATCH}"; then
+    junit_pass "patch_touches_4_files"
+else
+    junit_fail "missing_files" "el patch no toca los 4 archivos esperados"
+fi
+
+# Check 17: nueva struct ubond_replicate_filters_s
+if grep -q "^+struct ubond_replicate_filters_s" "${PATCH}"; then
+    junit_pass "struct_replicate_filters_added"
+else
+    junit_fail "no_struct" "no se añade struct ubond_replicate_filters_s"
+fi
+
+# Check 18: funciones públicas implementadas
+if grep -q "^+int ubond_replicate_filter_match" "${PATCH}" \
+   && grep -q "^+int ubond_replicate_filter_add" "${PATCH}"; then
+    junit_pass "match_and_add_functions"
+else
+    junit_fail "missing_functions" "faltan _match() y/o _add()"
+fi
+
+# Check 19: dedup LRU implementado
+if grep -q "^+#define REPLICATE_DEDUP_SIZE" "${PATCH}" \
+   && grep -q "ubond_replicate_dedup_check" "${PATCH}"; then
+    junit_pass "dedup_lru_implemented"
+else
+    junit_fail "no_dedup" "dedup LRU no implementado"
+fi
+
+# Check 20: parser config para [filter.replicate]
+if grep -q "filter.replicate" "${PATCH}"; then
+    junit_pass "config_parser_added"
+else
+    junit_fail "no_config_parser" "parser de [filter.replicate] no añadido"
+fi
+
+# Check 21: clone-to-N en rtun_choose
+if grep -q "ubond_replicate_filter_match" "${PATCH}" \
+   && grep -q 'LIST_FOREACH(t, &rtuns' "${PATCH}"; then
+    junit_pass "clone_to_n_tunnels"
+else
+    junit_fail "no_clone_logic" "no se ve la lógica clone-to-N tras el match"
+fi
+
+# Check 22: dedup activo en protocol_read
+if grep -q 'ubond_replicate_dedup_check(proto->data_seq)' "${PATCH}"; then
+    junit_pass "dedup_active_in_read"
+else
+    junit_fail "no_dedup_in_read" "dedup no se invoca en protocol_read"
+fi
+
+# Check 23: respeta fallback_only (modo --failover)
+if grep -qE 'if \(t->fallback_only\)' "${PATCH}"; then
+    junit_pass "respects_fallback_only"
+else
+    junit_fail "no_fallback_check" "no se respeta fallback_only en clone loop"
 fi
 
 junit_finalize

@@ -1,7 +1,11 @@
 ### ave-vpc.REQ-NET-12 - Replicación selectiva de paquetes por 5-tupla
 
-> **Estado**: design doc (Fase 2.2 del roadmap v2). Sin implementar
-> todavía. La implementación es Fase 3.
+> **Estado**: implementado 2026-05-26 (Fase 3). Patch en
+> `patches/ubond_replicate_filter.patch` (283 líneas, 4 archivos:
+> `ubond.h`, `filters.c`, `ubond.c`, `config.c`). ubond compila
+> limpio en macOS Apple Silicon con el patch aplicado (binario
+> 164952 bytes). Pendiente: validación end-to-end con dos UDP fakes
+> (Fase 3 tests integración) + comparativa AVE real (Fase 5).
 
 **Description:**
 
