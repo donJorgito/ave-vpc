@@ -1,0 +1,40 @@
+--- a/src/ubond.c
++++ b/src/ubond.c
+@@ -1114,7 +1114,12 @@
+ ubond_rtun_bind(ubond_tunnel_t *t)
+ {
+     struct addrinfo hints, *res;
++#ifdef __linux__
++    /* struct ifreq solo se usa con SO_BINDTODEVICE (Linux). En macOS y BSD
++     * SO_BINDTODEVICE no existe y declarar la struct daría "incomplete type"
++     * porque <net/if.h> no la define completa sin headers Linux-specific. */
+     struct ifreq ifr;
++#endif
+     char bindifstr[UBOND_IFNAMSIZ+5];
+     int n, fd;
+
+@@ -1148,13 +1153,24 @@
+              t->name, t->bindaddr ? t->bindaddr : "any",
+              bindifstr);
+
++#ifdef __linux__
+     if (*t->binddev) {
+       memset(&ifr, 0, sizeof(ifr));
+       snprintf(ifr.ifr_name, sizeof(ifr.ifr_name) - 1, t->binddev);
+       if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
+         log_warn(NULL, "failed to bind on interface %s", t->binddev);
+       }
++    }
++#else
++    /* macOS / BSD no tienen SO_BINDTODEVICE. ave-vpc usa bindhost (IP)
++     * en lugar de binddev (nombre interfaz), así que esto solo es un
++     * skip silencioso documentado. Si binddev se intenta usar en
++     * macOS, queda inactivo — no rompe el túnel. */
++    if (*t->binddev) {
++      log_warnx(NULL, "binddev '%s' ignored on this platform (use bindhost instead)",
++                t->binddev);
+     }
++#endif
+     if (*t->bindaddr) {
+       n = bind(fd, res->ai_addr, res->ai_addrlen);
+       freeaddrinfo(res);

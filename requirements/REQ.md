@@ -63,6 +63,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-16](ave-vpc-REQ-NET-16-requirement.md) | Selector throughput-aware (medición pasiva) |
 | [REQ-NET-17](ave-vpc-REQ-NET-17-requirement.md) | Monitor 08-monitor.py consciente de --failover |
 | [REQ-NET-18](ave-vpc-REQ-NET-18-requirement.md) | Pre-flight: verificar-setup exige bash 4+ |
+| [REQ-NET-19](ave-vpc-REQ-NET-19-requirement.md) | Patches macOS para que ubond compile (v2) |
 
 ## Restricciones macOS (REQ-MAC)
 
