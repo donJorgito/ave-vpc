@@ -52,7 +52,9 @@ FAIL_COUNT=0
 SKIP_COUNT=0
 FAILED_TESTS=""
 
-for t in "${SCRIPT_DIR}"/test_REQ-*.sh; do
+# Coger tests REQ-* (per-requirement) Y tests transversales (no
+# asociados a un REQ concreto, ej. test_trazabilidad_idlc.sh).
+for t in "${SCRIPT_DIR}"/test_REQ-*.sh "${SCRIPT_DIR}"/test_trazabilidad_*.sh; do
     [ -f "${t}" ] || continue
     NAME="$(basename "${t}" .sh)"
     OUTPUT="$(sh "${t}" 2>&1)"

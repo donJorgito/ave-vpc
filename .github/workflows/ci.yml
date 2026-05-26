@@ -87,25 +87,27 @@ jobs:
           terraform init -backend=false -input=false
           terraform validate && echo "✓ terraform validate OK"
 
-      - name: Verificar trazabilidad IDLC — un fichero por REQ + un test por REQ
+      - name: Compilar y ejecutar test unitario C (REQ-NET-12 dedup LRU)
         run: |
-          set -e
-          missing=0
-          for req in requirements/ave-vpc-REQ-*-requirement.md; do
-            ID=$(basename "$req" | sed -E 's/^ave-vpc-(REQ-[A-Z]+-[0-9]+)-requirement\.md$/\1/')
-            if ! ls tests/test_${ID}_*.sh >/dev/null 2>&1; then
-              echo "ERROR: ${ID} no tiene un test correspondiente en tests/"
-              missing=$((missing + 1))
-            fi
-          done
-          if [ "${missing}" -gt 0 ]; then
-            echo "ERROR: ${missing} requirement(s) sin test."
+          # El test C standalone tests/unit/test_replicate_dedup.c
+          # valida la lógica del dedup circular (1024 entries) sin
+          # necesidad de compilar ubond entero. Crítico para v2:
+          # garantiza que el algoritmo de replicación dedupea bien
+          # los duplicados que llegan por N túneles.
+          if ! command -v gcc >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
+            echo "ERROR: ni gcc ni clang disponibles en runner"
             exit 1
           fi
-          echo "✓ Cada requirement tiene su test (trazabilidad IDLC v6)"
+          # Lo lanza el wrapper bash, que ya elige clang/gcc y verifica
+          # que el output contiene ALL_TESTS_PASSED.
+          ./tests/test_REQ-NET-12_unit_dedup.sh
 
-      - name: Ejecutar tests test_REQ-*.sh (orquestador)
+      - name: Ejecutar suite verificar-setup (incluye trazabilidad IDLC v6)
         run: |
+          # tests/test_trazabilidad_idlc.sh dentro de la suite valida
+          # la trazabilidad REQ↔Test (Section 5.3.3.4 IDLC v6).
+          # Se elimina el step CI dedicado que existía antes — ahora
+          # lo cubre la suite local + remota uniformemente.
           ./tests/verificar-setup.sh
 
       - name: Publicar reportes JUnit XML
