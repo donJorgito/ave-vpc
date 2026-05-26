@@ -89,16 +89,19 @@ jobs:
 
       - name: Compilar y ejecutar test unitario C (REQ-NET-12 dedup LRU)
         run: |
-          # El test C standalone tests/unit/test_replicate_dedup.c
-          # valida la lógica del dedup circular (1024 entries) sin
-          # necesidad de compilar ubond entero. Crítico para v2:
-          # garantiza que el algoritmo de replicación dedupea bien
-          # los duplicados que llegan por N túneles.
+          # El test C standalone tests/unit/test_replicate_dedup.c valida
+          # la lógica del dedup circular (1024 entries) sin compilar
+          # ubond entero. CONDICIONAL: solo existe en feat/ubond-evaluation
+          # mientras v2 esté en branch separada. En main aún no está → skip.
+          if [ ! -f ./tests/test_REQ-NET-12_unit_dedup.sh ]; then
+            echo "Skipping: test C unitario solo existe en feat/ubond-evaluation por ahora"
+            exit 0
+          fi
           if ! command -v gcc >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
             echo "ERROR: ni gcc ni clang disponibles en runner"
             exit 1
           fi
-          # Lo lanza el wrapper bash, que ya elige clang/gcc y verifica
+          # Lo lanza el wrapper bash, que elige clang/gcc y verifica
           # que el output contiene ALL_TESTS_PASSED.
           ./tests/test_REQ-NET-12_unit_dedup.sh
 
