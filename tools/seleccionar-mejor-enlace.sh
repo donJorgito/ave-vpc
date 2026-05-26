@@ -69,6 +69,12 @@ declare -A FLAP_TIMESTAMPS=( ["iphone"]="" ["pixel"]="" ["wifi"]="" )
 declare -A FLAP_EXCLUDED=( ["iphone"]=0 ["pixel"]=0 ["wifi"]=0 )
 declare -A STABLE_SINCE=( ["iphone"]=0 ["pixel"]=0 ["wifi"]=0 )
 
+# Estado para detección throughput-aware (REQ-NET-16)
+declare -A PREV_BYTES=( ["iphone"]=0 ["pixel"]=0 ["wifi"]=0 )
+declare -A DEAD_LINK_SINCE=( ["iphone"]=0 ["pixel"]=0 ["wifi"]=0 )
+declare -A DEAD_LINK_EXCLUDED=( ["iphone"]=0 ["pixel"]=0 ["wifi"]=0 )
+PREV_UTUN_BYTES=0
+
 WINDOW_SIZE=12       # 12 muestras × 5 s = 60 s de ventana RTT
 EVAL_EVERY=6         # evaluar y rotar cada 6 ticks = 30 s
 TICK_INTERVAL=5
@@ -79,7 +85,139 @@ FLAP_WINDOW_S=60     # ventana en la que contar transiciones @↔!
 FLAP_THRESHOLD=4     # nº de transiciones para considerar flapping
 FLAP_RECOVERY_S=30   # tiempo en `@` estable para reintegrar
 
+# Throughput-aware passive (REQ-NET-16)
+# Si el túnel utun fluye (>1KB/s en el tick) PERO un link específico no
+# contribuye con tráfico (<100 B/s), durante 3 ticks (15 s), ese link
+# se considera "muerto" — tiene ping pero su UDP del túnel no atraviesa.
+# Caso real visto 2026-05-25 en AVE: iPhone respondía ping pero
+# throughput=0; el selector lo elegía como activo y rompía la sesión.
+DEAD_LINK_THRESHOLD_S=15
+MIN_TUNNEL_BPS_PER_TICK=5000   # ≈ 1 KB/s sostenido = "túnel activo"
+MIN_LINK_BPS_PER_TICK=500      # ≈ 100 B/s = más que keepalives mlvpn (~30 B/s)
+# Recuperación: inmediata cuando un link excluido vuelve a tener
+# tráfico real (>=MIN_LINK_BPS_PER_TICK). No requiere ventana de
+# estabilidad porque el throughput es señal directa de utilidad.
+
 log() { logger -t mlvpn-selector "$*"; }
+
+# REQ-NET-16: lee bytes acumulados (in+out) de una interfaz desde
+# `netstat -ibn`. Devuelve número o 0 si no se pudo leer. Maneja
+# dos formatos:
+#   físicas (con MAC): name mtu <Link#N> MAC ipkts ierrs IBYTES opkts oerrs OBYTES coll
+#   utun (sin MAC):    name mtu <Link#N>     ipkts ierrs IBYTES opkts oerrs OBYTES coll
+read_iface_bytes() {
+    local iface="$1"
+    netstat -ibn 2>/dev/null \
+        | awk -v i="${iface}" '
+            $1 == i && /<Link#/ && !seen {
+                # offset 4 si parts[3] es MAC (5 dos puntos), si no offset 3
+                if ($4 ~ /^[0-9a-fA-F]+:[0-9a-fA-F]+:/) {
+                    print ($7 + $10); seen=1
+                } else {
+                    print ($6 + $9); seen=1
+                }
+            }
+        '
+}
+
+# Encuentra el utun que mlvpn está usando (el que tiene 10.10.10.x).
+# Si no lo encuentra, devuelve string vacío.
+find_mlvpn_utun() {
+    ifconfig 2>/dev/null \
+        | awk '
+            /^utun[0-9]+:/ { name=substr($1, 1, length($1)-1) }
+            name && /inet 10\.10\.10\./ { print name; exit }
+        '
+}
+
+# ¿Está el link marcado como fallback_only=1 en mlvpn_active.conf?
+# Devuelve "1" si sí, "0" si no o no se encuentra. Backups solo llevan
+# keepalives → exentos del check de "dead link" para no penalizar
+# falsamente.
+link_has_fallback_only() {
+    local link="$1"
+    awk -v sec="\\[links.${link}\\]" '
+        $0 ~ sec {in_section=1; next}
+        in_section && /^\[/ {in_section=0}
+        in_section && /^fallback_only/ {gsub(/[^0-9]/, "", $3); print $3; exit}
+    ' "${ACTIVE_CONF}" 2>/dev/null | head -1
+}
+
+# REQ-NET-16: detecta links autenticados con throughput nulo cuando el
+# túnel SÍ está fluyendo. Marca DEAD_LINK_EXCLUDED tras
+# DEAD_LINK_THRESHOLD_S sostenidos. Recupera tras
+# DEAD_LINK_RECOVERY_TICKS ticks con tráfico OK.
+update_throughput_state() {
+    local utun
+    utun="$(find_mlvpn_utun)"
+    [[ -z "${utun}" ]] && return  # sin túnel: nada que evaluar
+
+    local curr_utun_bytes
+    curr_utun_bytes="$(read_iface_bytes "${utun}")"
+    [[ -z "${curr_utun_bytes}" ]] && curr_utun_bytes=0
+    local delta_utun=$(( curr_utun_bytes - PREV_UTUN_BYTES ))
+    PREV_UTUN_BYTES=${curr_utun_bytes}
+    # Si delta es negativo (utun nuevo, contadores reseteados), saltar tick
+    [[ ${delta_utun} -lt 0 ]] && delta_utun=0
+
+    local tunnel_active=0
+    [[ ${delta_utun} -ge ${MIN_TUNNEL_BPS_PER_TICK} ]] && tunnel_active=1
+
+    local now
+    now="$(date +%s)"
+    local link
+    for link in iphone pixel wifi; do
+        if ! grep -q "^\[links.${link}\]" "${ACTIVE_CONF}" 2>/dev/null; then
+            continue
+        fi
+        local iface="${IFACE_OF[$link]}"
+        local curr_bytes
+        curr_bytes="$(read_iface_bytes "${iface}")"
+        [[ -z "${curr_bytes}" ]] && curr_bytes=0
+        local prev_bytes="${PREV_BYTES[$link]:-0}"
+        local delta_link=$(( curr_bytes - prev_bytes ))
+        PREV_BYTES[$link]=${curr_bytes}
+        [[ ${delta_link} -lt 0 ]] && delta_link=0
+
+        # Excluir backups del check (solo llevan keepalives intencionalmente)
+        local is_backup
+        is_backup="$(link_has_fallback_only "${link}")"
+        if [[ "${is_backup}" == "1" ]]; then
+            DEAD_LINK_SINCE[$link]=0
+            continue
+        fi
+
+        # Si el link no está autenticado, ya está siendo manejado por otra
+        # lógica (auth_list filter). No marcamos dead aquí.
+        local auth_list
+        auth_list="$(authenticated_links)"
+        if ! echo "${auth_list}" | grep -qx "${link}"; then
+            DEAD_LINK_SINCE[$link]=0
+            continue
+        fi
+
+        # Comprobación principal: túnel activo + link sin tráfico = sospechoso
+        if [[ ${tunnel_active} -eq 1 ]] && [[ ${delta_link} -lt ${MIN_LINK_BPS_PER_TICK} ]]; then
+            if [[ "${DEAD_LINK_SINCE[$link]:-0}" -eq 0 ]]; then
+                DEAD_LINK_SINCE[$link]=${now}
+            elif [[ "${DEAD_LINK_EXCLUDED[$link]:-0}" -eq 0 ]] \
+                 && [[ $((now - DEAD_LINK_SINCE[$link])) -ge ${DEAD_LINK_THRESHOLD_S} ]]; then
+                DEAD_LINK_EXCLUDED[$link]=1
+                log "${link} dead-link (ping OK pero throughput=0 con túnel activo ${delta_utun}B/tick) → excluido"
+            fi
+        else
+            # Tráfico OK o túnel idle → reset contador
+            if [[ "${DEAD_LINK_SINCE[$link]:-0}" -ne 0 ]]; then
+                DEAD_LINK_SINCE[$link]=0
+                # Si estaba excluido y ahora tiene tráfico real, reintegrar
+                if [[ "${DEAD_LINK_EXCLUDED[$link]:-0}" -eq 1 ]] && [[ ${delta_link} -ge ${MIN_LINK_BPS_PER_TICK} ]]; then
+                    DEAD_LINK_EXCLUDED[$link]=0
+                    log "${link} throughput recuperado (${delta_link}B/tick) → reintegrado"
+                fi
+            fi
+        fi
+    done
+}
 
 ping_iface() {
     local iface="$1"
@@ -318,6 +456,10 @@ evaluate_and_rotate() {
         if [[ "${FLAP_EXCLUDED[$link]:-0}" -eq 1 ]]; then
             continue
         fi
+        # REQ-NET-16: excluir links con ping OK pero throughput=0
+        if [[ "${DEAD_LINK_EXCLUDED[$link]:-0}" -eq 1 ]]; then
+            continue
+        fi
         # Excluir links no autenticados (a no ser que ninguno lo esté aún)
         if [[ "${consider_all}" -eq 0 ]] \
            && ! echo "${auth_list}" | grep -qx "${link}"; then
@@ -374,6 +516,7 @@ evaluate_and_rotate() {
         for link in iphone pixel wifi; do
             local marker="@"
             [[ "${FLAP_EXCLUDED[$link]:-0}" -eq 1 ]] && marker="FLAP"
+            [[ "${DEAD_LINK_EXCLUDED[$link]:-0}" -eq 1 ]] && marker="DEAD"
             if [[ -n "${SCORE[$link]:-}" ]]; then
                 summary+="${link}(${marker}):rtt=${RTT[$link]}ms loss=${LOSS[$link]}% score=${SCORE[$link]}; "
             fi
@@ -397,6 +540,8 @@ while :; do
     done
     # REQ-NET-15: actualizar estado de flapping cada tick (no solo en eval)
     update_flap_state
+    # REQ-NET-16: detectar links con ping OK pero throughput=0
+    update_throughput_state
     tick=$((tick + 1))
     if [[ $((tick % EVAL_EVERY)) -eq 0 ]]; then
         evaluate_and_rotate
