@@ -10,6 +10,28 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Hardening IDLC v6 (2026-05-26)
+
+- **Rule 2 — Defensa en profundidad de secrets**: añadido `gitleaks`
+  v8.30.1 al pre-commit. Complementa `detect-private-key`
+  (que solo cubre SSH/PGP) detectando tokens, API keys, AWS/GCP creds
+  y patrones similares.
+- **Rule 5 — CI sin lógica inline**: extraídos los 5 bloques bash
+  de `.github/workflows/ci.yml` a scripts versionables en
+  `tests/check_*.sh` (env vars, tfvars.example, IDLC files,
+  .gitignore sensibles, bash syntax). El YAML se queda con el
+  scaffolding y los `run:` apuntan a los scripts.
+- **Rule 7 — Acciones GitHub pineadas a SHA**: las 5 actions
+  (`actions/checkout`, `ludeeus/action-shellcheck`,
+  `pre-commit/action`, `hashicorp/setup-terraform`,
+  `actions/upload-artifact`) ahora referencian commit SHA inmutable
+  con comentario `# vX.Y.Z` informativo.
+- **Rule 8 — IaC linting**: añadido `terraform_tflint` (vía
+  `antonbabenko/pre-commit-terraform` v1.105.0) junto con
+  `terraform_fmt` y `terraform_validate`. Detectó y se corrigieron
+  6 warnings en `terraform/`: `required_version` ausente y 5
+  variables sin `type` declarado.
+
 ## [1.0.0] — 2026-05-25
 
 Primera versión **estable** del bonding mlvpn + failover dinámico.

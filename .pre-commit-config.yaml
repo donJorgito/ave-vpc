@@ -18,8 +18,18 @@ repos:
         args: ['--severity=warning']
         files: '\.(sh)$'
 
-  # Detección de claves privadas en el código
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+  # gitleaks — detección de secrets en código (defensa en profundidad).
+  # Complementa detect-private-key (que solo cubre SSH/PGP) con tokens,
+  # API keys, AWS/GCP creds y patrones similares.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
     hooks:
-      - id: detect-private-key
+      - id: gitleaks
+
+  # Terraform — fmt, validate y tflint (IDLC v6 Rule 8: IaC linting).
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.105.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+      - id: terraform_tflint
