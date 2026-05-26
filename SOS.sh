@@ -1,58 +1,105 @@
 #!/usr/bin/env bash
 ###############################################################################
-# SOS.sh — Script de emergencia para restaurar la red
+# SOS.sh — emergencia 1-click para restaurar la red
 #
 # CUANDO USARLO:
-#   Si despues de usar mlvpn te quedas sin internet y 05-desconectar.sh
-#   no funciona o no lo encuentras. Este script no necesita internet,
-#   no necesita config/env, no necesita nada. Solo ejecutalo.
+#   Si después de usar mlvpn te quedas sin internet y 05-desconectar.sh no
+#   responde, no funciona, o no recuerdas dónde está. Este script:
+#   - NO requiere config/env (extrae VPS_IP con awk si existe)
+#   - NO requiere internet
+#   - Se auto-relanza con sudo si no eres root (usando askpass si existe)
+#   - Termina en <2 s, tolerante a fallos (set -u, NO set -e)
 #
 # COMO EJECUTARLO:
-#   Si tienes terminal abierta:
-#     bash ~/projects/ave-vpc/SOS.sh
+#   bash ~/projects/ave-vpc/SOS.sh
+#   (te pedirá la pass en diálogo gráfico vía /tmp/sudo-askpass.sh, o por
+#    terminal si no existe)
 #
-#   Si no recuerdas el path:
-#     bash -c 'sudo route -n delete -net 0.0.0.0/1; sudo route -n delete -net 128.0.0.0/1; sudo pkill mlvpn'
-#
-#   Si ni siquiera el terminal responde:
-#     1. Reinicia el Mac (todas las rutas son in-memory, desaparecen)
-#     2. Si no quieres reiniciar: apaga Wi-Fi desde el icono del menu
-#        y vuelvelo a encender. Eso restaura la ruta por defecto.
-#
+# SI NI ESO RESPONDE:
+#   Apaga y enciende el Wi-Fi del Mac desde el icono del menú. Eso fuerza
+#   la renegociación de la default route. Reiniciar el Mac también funciona
+#   (las rutas son in-memory).
 ###############################################################################
+set -u
 
-echo "=== SOS: Restaurando red ==="
-echo ""
-
-# Paso 1: Matar mlvpn (el proceso que secuestra el trafico)
-echo "[1/4] Matando mlvpn..."
-sudo pkill -9 mlvpn 2>/dev/null && echo "  -> mlvpn matado" || echo "  -> no habia mlvpn"
-
-# Paso 2: Eliminar las rutas que capturan todo el trafico
-# mlvpn pone dos rutas /1 que "tapan" la ruta por defecto:
-#   0.0.0.0/1     -> tunel (captura la mitad inferior de internet)
-#   128.0.0.0/1   -> tunel (captura la mitad superior de internet)
-# Sin estas rutas, la ruta por defecto original vuelve a funcionar.
-echo "[2/4] Eliminando rutas del tunel..."
-sudo route -n delete -net 0.0.0.0/1 2>/dev/null && echo "  -> ruta 0.0.0.0/1 eliminada" || echo "  -> no existia"
-sudo route -n delete -net 128.0.0.0/1 2>/dev/null && echo "  -> ruta 128.0.0.0/1 eliminada" || echo "  -> no existia"
-
-# Paso 3: Eliminar ruta especifica al VPS (si existe)
-# Busca cualquier ruta /32 que no sea localhost y la elimina
-echo "[3/4] Eliminando rutas especificas..."
-netstat -rn -f inet | awk '$3 ~ /UH/ && $1 !~ /^127/ {print $1}' | while read -r host; do
-    sudo route -n delete -host "${host}" 2>/dev/null && echo "  -> ruta a ${host} eliminada"
-done
-
-# Paso 4: Verificar que hay internet
-echo "[4/4] Verificando conexion..."
-if ping -c 1 -W 3 8.8.8.8 &>/dev/null; then
-    echo "  -> Internet OK"
-else
-    echo "  -> Sin internet. Prueba:"
-    echo "     1. Apaga y enciende Wi-Fi desde el icono del menu"
-    echo "     2. Si no funciona, reinicia el Mac"
+# Auto-relanzo con sudo si no soy root.
+# Resolvemos path absoluto antes — sudo no busca en PATH y "$0" puede
+# ser relativo (`bash SOS.sh` o `./SOS.sh`).
+SCRIPT_ABS_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+if [[ "${EUID}" -ne 0 ]]; then
+    if [[ -x /tmp/sudo-askpass.sh ]]; then
+        SUDO_ASKPASS=/tmp/sudo-askpass.sh exec sudo -A bash "${SCRIPT_ABS_PATH}" "$@"
+    else
+        exec sudo bash "${SCRIPT_ABS_PATH}" "$@"
+    fi
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GENERATED_DIR="${SCRIPT_DIR}/generated"
+
+echo "=== SOS ==="
+
+# 1. Matar TODO lo del túnel — múltiples patrones porque mlvpn cambia su
+# setproctitle. Sin pkill suave + sleep: -9 directo.
+pkill -9 -f "mlvpn: mlvpn0" 2>/dev/null
+pkill -9 -f "/usr/local/sbin/mlvpn" 2>/dev/null
+pkill -9 -x "mlvpn" 2>/dev/null
+pkill -9 -f "seleccionar-mejor-enlace" 2>/dev/null
+pkill -9 -f "calibrar-enlaces-dinamico" 2>/dev/null
+pkill -9 -f "wifi-reintegrator" 2>/dev/null
+pkill -9 -f "tee.*mlvpn.log" 2>/dev/null
+
+# Defensivo: matar también por PID files (cubre watchers cuyo nombre
+# pueda variar)
+for pid_file in "${GENERATED_DIR}"/*.pid; do
+    [[ -f "${pid_file}" ]] || continue
+    pid="$(cat "${pid_file}" 2>/dev/null || true)"
+    [[ -n "${pid}" ]] && kill -9 "${pid}" 2>/dev/null
+done
+
+# 2. Borrar rutas 0/1 que tapan la default route (las añade 04-conectar)
+route -n delete -net 0.0.0.0/1 2>/dev/null
+route -n delete -net 128.0.0.0/1 2>/dev/null
+
+# 3. Borrar /32 al VPS por cada ifscope (NO borra todas las /32 como
+# hacía el SOS antiguo — eso podía romper rutas legítimas a NAS,
+# impresoras, etc.). Lee VPS_IP con awk para no hacer source de config.
+VPS_IP=""
+if [[ -f "${SCRIPT_DIR}/config/env" ]]; then
+    VPS_IP="$(awk -F'=' '/^VPS_IP=/{gsub(/["[:space:]]/,"",$2); print $2; exit}' \
+        "${SCRIPT_DIR}/config/env")"
+fi
+if [[ -n "${VPS_IP}" ]]; then
+    for iface in en0 en1 en2 en3 en4 en5 en6 en7 en8 en9 en10 en11 en12 en13 en14 en15; do
+        route -n delete -host "${VPS_IP}" -ifscope "${iface}" 2>/dev/null
+    done
+    route -n delete -host "${VPS_IP}" 2>/dev/null
+fi
+
+# 4. Limpiar artefactos del túnel (PID files, conf activa)
+[[ -d "${GENERATED_DIR}" ]] && {
+    rm -f "${GENERATED_DIR}"/*.pid 2>/dev/null
+    rm -f "${GENERATED_DIR}/mlvpn_active.conf" 2>/dev/null
+}
+
+# 5. Verificación final
 echo ""
+if pgrep -f "mlvpn: mlvpn0" >/dev/null 2>&1; then
+    echo "✗ procesos mlvpn aún vivos (raro tras pkill -9):"
+    pgrep -lf "mlvpn: mlvpn0" | sed 's/^/    /'
+else
+    echo "✓ mlvpn parado"
+fi
+
+DEF_IFACE="$(route -n get default 2>/dev/null | awk '/interface/{print $2}')"
+DEF_GW="$(route -n get default 2>/dev/null | awk '/gateway/{print $2}')"
+echo "✓ default route: ${DEF_IFACE:-?} → ${DEF_GW:-?}"
+
+# Test internet con sintaxis MACOS correcta (-t segundos, NO -W ms)
+if ping -c 1 -t 2 1.1.1.1 >/dev/null 2>&1; then
+    echo "✓ internet OK"
+else
+    echo "✗ sin internet — apaga/enciende Wi-Fi del menú o reinicia"
+fi
+
 echo "=== Listo ==="

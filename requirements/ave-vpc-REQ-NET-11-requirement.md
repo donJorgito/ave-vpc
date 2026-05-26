@@ -66,7 +66,9 @@ destructivo** y con cambios suaves de ~2 s.
   (proceso muestra `@links.X`). Excluye `!links.X` (AUTH_PENDING) —
   defensa contra WiFi del AVE con UDP 5082 filtrado.
 - El selector emite cada rotación a syslog con
-  `logger -t mlvpn-selector "<scores y ganador>"`. Se ve con:
-  `log stream --predicate 'process == "mlvpn-selector"' --info` o
-  combinado con todo el resto:
+  `logger -t mlvpn-selector "<scores y ganador>"`. macOS pone el
+  process como `logger` y el tag aparece dentro del `eventMessage`,
+  así que el predicado correcto es `eventMessage CONTAINS`:
+  `log stream --predicate 'eventMessage CONTAINS "mlvpn-selector"' --info`,
+  o combinado con todo:
   `log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info`.

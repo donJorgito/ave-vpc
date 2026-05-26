@@ -229,6 +229,20 @@ if check_wifi_eligibility; then
     echo "  WiFi elegible: ${IP_WIFI} via ${IFACE_WIFI}"
 fi
 
+# REQ-NET-13: si el WiFi NO pasó pre-flight pero TIENE IP (típico:
+# captive portal del AVE/hotel sin autenticar todavía, o SIN_WIFI=false),
+# lanzar reintegrator que reintenta cada 30 s y añade WiFi al bonding
+# en cuanto pase. Si el WiFi entra al bonding ya, el reintegrator no
+# hace falta — sale solo al detectar [links.wifi] en config.
+if ! "${WIFI_ELIGIBLE}" \
+   && ! "${SIN_WIFI}" \
+   && [[ -n "${IP_WIFI}" ]] \
+   && [[ -x "${SCRIPT_DIR}/tools/wifi-reintegrator.sh" ]]; then
+    echo "  WiFi tiene IP pero no pasó pre-flight — lanzando reintegrator (REQ-NET-13)"
+    nohup "${SCRIPT_DIR}/tools/wifi-reintegrator.sh" >/dev/null 2>&1 &
+    echo "  Reintegrator PID $! — autenticará captive y añadirá WiFi al bonding cuando esté listo"
+fi
+
 ACTIVE_LINKS=0
 [[ -n "${IP_IPHONE}" ]] && ACTIVE_LINKS=$((ACTIVE_LINKS + 1))
 [[ -n "${IP_PIXEL}" ]] && ACTIVE_LINKS=$((ACTIVE_LINKS + 1))

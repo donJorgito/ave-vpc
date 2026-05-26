@@ -505,10 +505,14 @@ Captura entradas como:
 - `mlvpn-selector[…]: rotando activo iphone → wifi (iphone:rtt=120ms loss=15% score=730; …)` (selector)
 - `mlvpn-wifi-watcher[…]: wifi rebind 192.168.x.y -> 192.168.x.z` (watcher de IP del WiFi, REQ-NET-07)
 
-Para filtrar solo un componente:
+Para filtrar solo un componente (los watchers usan `logger -t TAG`,
+así que su `process` real es `logger`; el tag aparece en
+`eventMessage`):
 
 ```bash
-log stream --predicate 'process == "mlvpn-selector"' --info
+log stream --predicate 'eventMessage CONTAINS "mlvpn-selector"' --info
+log stream --predicate 'eventMessage CONTAINS "mlvpn-wifi-watcher"' --info
+log stream --predicate 'eventMessage CONTAINS "mlvpn-wifi-reintegrator"' --info
 ```
 
 `generated/mlvpn.log` queda solo para errores tempranos del binario antes de que abra syslog (no se elimina por seguridad).

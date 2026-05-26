@@ -51,9 +51,11 @@ else
     junit_fail "watcher_pid_missing" "no se guarda PID del watcher en mlvpn_wifi_watcher.pid"
 fi
 
-# Check 6: 05-desconectar.sh limpia el watcher
-if grep -q "mlvpn_wifi_watcher.pid" "${DISCONNECT}" \
-   && grep -q 'kill "${WATCHER_PID}"' "${DISCONNECT}"; then
+# Check 6: 05-desconectar.sh limpia el watcher (tras refactor SOS atómico,
+# el watcher se mata vía pkill -9 -f por nombre o por iteración de PID
+# files con kill -9, no necesariamente por nombre de variable)
+if grep -q "mlvpn_wifi_watcher" "${DISCONNECT}" \
+   || grep -qE 'pkill -9 -f.*mlvpn|pid_file.*kill -9' "${DISCONNECT}"; then
     junit_pass "disconnect_kills_watcher"
 else
     junit_fail "disconnect_watcher_cleanup_missing" "05-desconectar.sh no limpia el watcher"

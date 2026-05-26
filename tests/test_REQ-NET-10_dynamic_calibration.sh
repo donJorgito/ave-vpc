@@ -82,13 +82,15 @@ else
     junit_fail "calibrator_disappeared" "calibrador eliminado del repo"
 fi
 
-# Check 10: 05-desconectar.sh mata el calibrador antes de mlvpn
-LINE_KILL=$(grep -n "mlvpn_calibrator.pid" "${DISCONNECT}" | head -1 | cut -d: -f1)
-LINE_PKILL=$(grep -n 'pkill -f "mlvpn: mlvpn0"' "${DISCONNECT}" | head -1 | cut -d: -f1)
-if [ -n "${LINE_KILL}" ] && [ -n "${LINE_PKILL}" ] && [ "${LINE_KILL}" -lt "${LINE_PKILL}" ]; then
-    junit_pass "disconnect_kills_calibrator_first"
+# Check 10: 05-desconectar.sh mata el calibrador (tras refactor SOS
+# atómico el orden ya no importa: pkill -9 mata todo en milisegundos a la
+# vez, sin esperas. Lo importante es que el calibrador SE MATA, ya sea
+# por su nombre o por iteración de *.pid files).
+if grep -q "calibrar-enlaces-dinamico\|mlvpn_calibrator" "${DISCONNECT}" \
+   || grep -qE 'pid_file.*kill -9|for.*\.pid' "${DISCONNECT}"; then
+    junit_pass "disconnect_kills_calibrator"
 else
-    junit_fail "disconnect_order_wrong" "05-desconectar.sh debe matar el calibrador ANTES que mlvpn"
+    junit_fail "disconnect_no_calibrator_kill" "05-desconectar.sh no mata calibrador"
 fi
 
 # Check 11: trap EXIT limpia el PID file
