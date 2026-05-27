@@ -15,6 +15,7 @@ activo.
 
 `04-conectar.sh --failover` configura mlvpn en modo failover dinámico
 en lugar de bonding:
+
 - Inicialmente: iPhone activo, Pixel y WiFi marcados
   `fallback_only = 1` (backup pasivo)
 - `timeout = 2` global → failover en ~2 s ante caída del activo

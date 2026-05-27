@@ -32,10 +32,10 @@ Fase 3+ del roadmap v2 ubond.
   utun usando `SYSPROTO_CONTROL + UTUN_CONTROL_NAME`. Adaptado de
   `patches/tuntap_darwin_utun.c` (que era para mlvpn) a la API de
   ubond:
-    - `ubond_pkt_t` en lugar de `circular_buffer_t`
-    - `ubond_pkt_get/release()` en lugar de `mlvpn_pktbuffer_*`
-    - sin dependencia de `buffer.h`
-    - división correcta privsep: `root_tuntap_open()` (root, abre
+  - `ubond_pkt_t` en lugar de `circular_buffer_t`
+  - `ubond_pkt_get/release()` en lugar de `mlvpn_pktbuffer_*`
+  - sin dependencia de `buffer.h`
+  - división correcta privsep: `root_tuntap_open()` (root, abre
       el utun) + `ubond_tuntap_alloc()` (unprivileged, llama
       `priv_open_tun()` IPC al proceso priv)
 

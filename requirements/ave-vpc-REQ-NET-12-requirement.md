@@ -22,6 +22,7 @@ el MISMO paquete por **TODOS** los túneles activos simultáneamente;
 el receptor descarta duplicados quedándose con el primero que llegue.
 
 Beneficios:
+
 - **Latencia efectiva = la del enlace más rápido** (no la del más
   lento, como con bonding round-robin).
 - **Cero jitter** del bonding paquete-a-paquete.
@@ -52,7 +53,7 @@ Sección nueva `[filter.replicate]` (paralela a la existente
 `[filters]` que hace per-tunnel routing). Cada entrada es un nombre
 arbitrario asociado a una expresión BPF/pcap-filter:
 
-```
+```ini
 [filter.replicate]
 rtp_zoom        = "udp and (dst port 19302 or src port 19302)"
 rtp_meet        = "udp and (dst port 3478 or dst port 19305)"
@@ -91,6 +92,7 @@ int ubond_replicate_filter_add(const struct bpf_program *filter,
 ### 3. Modificación de `ubond_rtun_choose()` en `ubond.c:1777`
 
 **Antes** (estado actual, simplificado):
+
 ```c
 ubond_pkt_t *spkt = pop_from_send_buffer();
 ubond_tunnel_t *frtun = ubond_filters_choose(len, data);
@@ -102,6 +104,7 @@ UBOND_TAILQ_INSERT_HEAD(sbuf, spkt);  /* un solo túnel */
 ```
 
 **Después** (con replicación):
+
 ```c
 ubond_pkt_t *spkt = pop_from_send_buffer();
 

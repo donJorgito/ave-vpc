@@ -31,6 +31,7 @@ Si el túnel está idle (sin tráfico del usuario), no se penaliza
 nada — no podemos evaluar BW sin demanda.
 
 **Ventajas vs. enfoque activo (curl periódico)**:
+
 - 0 tráfico extra (lectura de contadores ya disponibles)
 - 0 puertos nuevos en RPi/router
 - 0 endpoints nuevos

@@ -13,6 +13,7 @@ Gracias por querer mejorar este proyecto. Aquí están las reglas del juego.
 ## Estándares de código
 
 ### Shell scripts
+
 - Bash únicamente (`#!/usr/bin/env bash`)
 - `set -euo pipefail` al inicio de cada script
 - Compatibles con macOS y Linux (Ubuntu 26.04 LTS)
@@ -20,6 +21,7 @@ Gracias por querer mejorar este proyecto. Aquí están las reglas del juego.
 - Pasar [ShellCheck](https://www.shellcheck.net/) sin warnings
 
 ### Commits
+
 Formato: `tipo: descripción corta en imperativo`
 
 | Tipo | Cuándo usarlo |
@@ -34,14 +36,17 @@ Formato: `tipo: descripción corta en imperativo`
 Ejemplo: `feat: añadir soporte para tercer enlace WiFi del tren`
 
 ### Mensajes de commit con IA
+
 Si el commit contiene código generado o revisado con IA, añade al final:
-```
+
+```text
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 ## Pre-commit hooks
 
 Instala los hooks antes de tu primer commit:
+
 ```bash
 pip install pre-commit
 pre-commit install
@@ -52,6 +57,7 @@ Los hooks comprueban automáticamente ShellCheck y que no se suban secretos.
 ## Tests
 
 Antes de abrir un PR, verifica que el script de tests pasa:
+
 ```bash
 ./tests/verificar-setup.sh
 ```

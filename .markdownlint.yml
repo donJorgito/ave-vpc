@@ -1,0 +1,29 @@
+# markdownlint config — IDLC v6 Rule 8 (linting de docs).
+# Reglas: defaults razonables con dos relajaciones explícitas para
+# este repo (líneas largas en bloques de código y HTML inline en
+# tablas), y MD024 con siblings_only para permitir headings repetidos
+# en secciones distintas (ej. "### Añadido" en cada versión del
+# CHANGELOG).
+default: true
+
+# MD013 line-length: el repo usa líneas largas en bloques de código,
+# tablas y comandos shell. El criterio "una línea por idea" no aplica
+# bien aquí. Off.
+MD013: false
+
+# MD033 inline HTML: usado puntualmente en CHANGELOG (<details>) y
+# tablas con <br/>. Off.
+MD033: false
+
+# MD024 no-duplicate-heading: el CHANGELOG repite "### Añadido",
+# "### Cambiado" varias veces dentro de la misma versión cuando
+# notas de commits posteriores se pliegan a la versión actual. Off.
+MD024: false
+
+# MD036 no-emphasis-as-heading: README usa **texto** como subdivisión
+# en sección Troubleshooting. Estilísticamente válido. Off.
+MD036: false
+
+# MD041 first-line-h1: relajado porque algunos requirements empiezan
+# con metadatos o frontmatter equivalente.
+MD041: false

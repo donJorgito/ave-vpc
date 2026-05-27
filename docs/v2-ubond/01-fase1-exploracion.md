@@ -30,6 +30,7 @@ ubond **es viable** como base para implementar replicación selectiva de paquete
 ### 1. La secuencia global `data_seq` es la pieza central
 
 `build/ubond/src/ubond.c:90`:
+
 ```c
 static uint64_t data_seq = 1;
 ```
@@ -37,6 +38,7 @@ static uint64_t data_seq = 1;
 Cada paquete de datos (no resend) lleva `data_seq` único en todo el túnel (no per-link). Ese número es la clave para que el receptor pueda deduplicar.
 
 `ubond_rtun_send()` línea 663:
+
 ```c
 if (pkt->p.type != UBOND_PKT_DATA_RESEND) {
     if (pkt->p.reorder) {
@@ -48,6 +50,7 @@ if (pkt->p.type != UBOND_PKT_DATA_RESEND) {
 ```
 
 `reorder.c:251`:
+
 ```c
 if (!b->enabled || !pkt->p.reorder || !pkt->p.data_seq)
     /* salta el reorder buffer — el paquete va directo */
@@ -58,6 +61,7 @@ if (!b->enabled || !pkt->p.reorder || !pkt->p.data_seq)
 ### 2. `set_reorder()` ya distingue protocolo IP por byte 9
 
 `build/ubond/src/ubond.c:644` (función `set_reorder`):
+
 ```c
 if ((pkt->p.type == UBOND_PKT_DATA || pkt->p.type == UBOND_PKT_DATA_RESEND)
     && pkt->p.data[9] == 6) {  // 6 = TCP
@@ -72,6 +76,7 @@ if ((pkt->p.type == UBOND_PKT_DATA || pkt->p.type == UBOND_PKT_DATA_RESEND)
 ### 3. El sistema de filtros existente (PCAP/BPF) ya hace per-tunnel routing
 
 `build/ubond/src/filters.c:6`:
+
 ```c
 ubond_tunnel_t *
 ubond_filters_choose(uint32_t pktlen, const u_char *pktdata) {
@@ -80,6 +85,7 @@ ubond_filters_choose(uint32_t pktlen, const u_char *pktdata) {
 ```
 
 `ubond_rtun_choose()` ya lo invoca:
+
 ```c
 #ifdef HAVE_FILTERS
     ubond_tunnel_t *frtun = ubond_filters_choose(len, data);
@@ -100,18 +106,20 @@ Cada túnel tiene un `hpsbuf` separado del `sbuf` normal. Es lo que usan los fil
 
 **Diseño preliminar** (a refinar en REQ-NET-12):
 
-```
+```ini
 [filter.replicate]
    "udp dst port 5004"   ; ej. RTP típico
    "udp dst port 19302"  ; ej. STUN/Meet
 ```
 
 Lógica en `ubond_rtun_choose()`:
+
 1. Tras `ubond_filters_choose` (routing), comprobar `ubond_replication_filters_match(pkt)`.
 2. Si match: para cada túnel `t` en estado `UBOND_AUTHOK`, clonar `pkt` (con mismo `data_seq` ya asignado) e insertar en `t->hpsbuf`.
 3. Si no match: comportamiento normal (un solo túnel).
 
 Lógica en receptor (`ubond_protocol_read()` o reorder):
+
 - Mantener un set de últimos N `data_seq` vistos por flujo (5-tupla).
 - Si el paquete entrante tiene `data_seq` ya visto → descartar.
 - Set debe ser pequeño (LRU de ~256 entradas) y específico por flujo replicado para no dañar dedup de TCP normal.
@@ -122,7 +130,7 @@ Estimación: **~250-400 LOC** entre filtros nuevos, clone de pkt, dedup set. No 
 
 ### Bloqueante #1 — Compilación macOS
 
-```
+```text
 ubond.c:1117:18: error: variable has incomplete type 'struct ifreq'
 ```
 
@@ -157,6 +165,7 @@ Estimación patch: **~50 LOC**, similar a lo que ya conocemos del patch utun.
 ## Estado de la branch
 
 `feat/ubond-evaluation` contiene:
+
 - `build/ubond/` — clon de upstream
 - `docs/v2-ubond/01-fase1-exploracion.md` (este documento)
 

@@ -20,7 +20,7 @@ abiertos en el router y sale a internet a través de la fibra óptica.
 
 ## Arquitectura con RPi en casa
 
-```
+```text
 [ Tren AVE ]                    [ Tu casa ]
    Mac                          RPi 4 ── router fibra ── internet
     │ iPhone (UDP 5080)            │         │
@@ -49,11 +49,13 @@ a 5082 internamente — ver `MLVPN_PORT_3_REMOTE` y la regla opcional
 ## Paso 1: Grabar la microSD (headless, sin monitor)
 
 Instala **Raspberry Pi Imager** en el Mac:
+
 ```bash
 brew install --cask raspberry-pi-imager
 ```
 
 En el Imager:
+
 1. **Dispositivo**: Raspberry Pi 4
 2. **OS**: Other general-purpose OS → Ubuntu → **Ubuntu Server 26.04 LTS (64-bit)**
 3. **Storage**: tu microSD
@@ -75,6 +77,7 @@ Opciones:
 - **IP estática** en la RPi tras el primer arranque con `sudo nmtui`
 
 Verifica que puedes entrar (espera ~1 min tras enchufar):
+
 ```bash
 ssh TU_USUARIO@192.168.1.XXX
 # o por hostname mDNS:
@@ -113,7 +116,7 @@ un nombre fijo que apunta a tu IP actual.
 [deSEC](https://desec.io) ofrece subdominios `*.dedyn.io` gratuitos con soporte
 para el protocolo DynDNS2 que el router ZTE F6640 soporta nativamente.
 
-1. Regístrate en https://desec.io y crea un subdominio `*.dedyn.io`
+1. Regístrate en <https://desec.io> y crea un subdominio `*.dedyn.io`
 2. En el router: **Internet → DDNS**
    - Provider: `DynDNS`
    - Provider URL: `https://update.dedyn.io/`
@@ -128,6 +131,7 @@ para el protocolo DynDNS2 que el router ZTE F6640 soporta nativamente.
 Regístrate, crea un hostname y configúralo directamente con el proveedor `No-IP`.
 
 Verifica que el hostname resuelve:
+
 ```bash
 dig tu-hostname.dedyn.io +short
 # Debe devolver la IP pública de casa
@@ -144,6 +148,7 @@ RPi_SSH_PORT="22"
 ```
 
 Ejecuta el script desde el Mac:
+
 ```bash
 ./01-generar-secreto.sh   # si no existe ya keys/mlvpn.secret
 ./07-setup-rpi.sh
@@ -162,6 +167,7 @@ VPS_USER="TU_USUARIO"
 ```
 
 Regenera la configuración del Mac:
+
 ```bash
 ./03-setup-mac.sh
 ```
@@ -183,6 +189,7 @@ Las /32 son más específicas que /1 en la tabla global → mlvpn usa ruta direc
 el móvil, el resto del tráfico entra por el tunel.
 
 Para verificar que el bonding funciona correctamente:
+
 ```bash
 traceroute 8.8.8.8
 # Hop 1 debe ser 10.10.10.1 (la RPi) — indica que el tráfico pasa por el tunel

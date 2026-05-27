@@ -33,3 +33,14 @@ repos:
       - id: terraform_fmt
       - id: terraform_validate
       - id: terraform_tflint
+
+  # markdownlint — linting de docs (IDLC v6 Rule 8: comprehensive
+  # docs linting). Config en .markdownlint.yml.
+  # Pin a v0.43.0: versiones >=0.44.0 actualizan transitiva de eslint
+  # que exige Node 20.19+/22.13+/24+. Mientras Jorge use Node 21.x,
+  # v0.43.0 es la última compatible.
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.43.0
+    hooks:
+      - id: markdownlint
+        args: ['--ignore', 'build/', '--ignore', 'node_modules/']

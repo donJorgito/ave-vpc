@@ -32,6 +32,25 @@ incrementalmente sin romper la v1.0.0 actual.
   6 warnings en `terraform/`: `required_version` ausente y 5
   variables sin `type` declarado.
 
+### Hardening IDLC v6 — segunda iteración (2026-05-27)
+
+Tras audit más exhaustivo, 3 gaps adicionales detectados y cerrados:
+
+- **Rule 8 — Docs linting**: añadido `markdownlint-cli` v0.43.0 al
+  pre-commit con `.markdownlint.yml`. Pinneado a v0.43 porque
+  versiones >=0.44 actualizan transitiva de eslint exigiendo
+  Node 20.19+/22.13+/24+, incompatible con Node 21.x del Mac. Auto-fix
+  resolvió ~129 warnings; 13 MD040 (lenguaje en bloques fenced)
+  arreglados manualmente con `text` / `bash` / `ini` según corresponda.
+- **Rule 9 — Branch protection en `main`**: configurada via API
+  GitHub. Requiere status checks "Lint y calidad" + "Tests de
+  verificación" verdes, historial lineal, sin force-push ni delete,
+  conversation resolution. `enforce_admins=false` para permitir
+  push directo solo de admin (workflow personal).
+- **Rule 10 — Release v1.0.0 publicado**: `gh release create v1.0.0`
+  con notas extraídas del CHANGELOG. Antes solo existía el git tag
+  (no visible en la pestaña Releases de GitHub UI).
+
 ## [1.0.0] — 2026-05-25
 
 Primera versión **estable** del bonding mlvpn + failover dinámico.
@@ -42,6 +61,7 @@ paquete-a-paquete tiene límites estructurales para sesiones
 HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 
 ### Añadido
+
 - **REQ-NET-11 — Modo failover dinámico (`--failover`) para
   videoconf y sesiones HTTP/2**. El bonding paquete-a-paquete de
   mlvpn (default WRR) reparte cada paquete entre los enlaces; con
@@ -81,14 +101,17 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   `bandwidth_upload` calibrado.
 
 ### Cambiado
+
 - **Logs de watchers unificados en syslog** (Apple Unified Log).
   Antes: el selector y el watcher de IP del WiFi escribían en
   `generated/mlvpn.log` mientras el binario mlvpn ya emitía a
   syslog — inconsistente. Ahora todos usan
   `logger -t mlvpn-<componente>`. Para verlo:
-  ```
+
+  ```bash
   log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info
   ```
+
 - **Rollback del tuning agresivo de mlvpn** (commit `8521d74`). Se
   intentaron `loss_tolerence` 15-30 %, `latency_tolerence = 800`,
   `reorder_buffer_size` 64-512 (commits 8fa0c56, 597891d, 76e9c59)
@@ -106,6 +129,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   advertencia para futuras iteraciones.
 
 ### Deprecated
+
 - **REQ-NET-10 — Calibración dinámica vía `bandwidth_upload`**.
   Sustituido funcionalmente por REQ-NET-11 (failover dinámico vía
   `fallback_only`, mucho más conservador). El SIGHUP frecuente
@@ -120,6 +144,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   Datos en `generated/measurements/`.
 
 ### Corregido
+
 - **REQ-MAC-05 — Limpieza defensiva de instancias mlvpn previas al
   reconectar**. Caso real observado en runtime: hasta 4 procesos
   `mlvpn: mlvpn0 @links.pixel @links.iphone` corriendo a la vez
@@ -176,7 +201,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   - `tests/test_REQ-NET-09_mlvpn_tuning.sh` (7 checks).
 - **REQ-NET-08 — Detección de "red de casa" por IP pública en lugar de
   subred local**. La detección anterior (`rpi_subnet == wifi_subnet`
-  + ping a `RPi_IP`) daba falsos positivos en cualquier WiFi con el
+  - ping a `RPi_IP`) daba falsos positivos en cualquier WiFi con el
   mismo `192.168.1.x` por defecto (la mayoría de routers ISP, hoteles
   y cafés) si algún dispositivo respondía como `.101`. Caso real:
   WiFi ajena con subred coincidente → script asumía "casa" y saltaba
@@ -193,6 +218,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   REQ-NET-06 actualizado para reconocer la nueva detección.
 
 ### Cambiado
+
 - **iPhone por cable USB en lugar de Wi-Fi hotspot**: docs y defaults
   pasan a asumir que **ambos móviles van por USB** (iPhone con Personal
   Hotspot por cable, Android con USB tethering). Esto libera el Wi-Fi
@@ -214,6 +240,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
     cubre ambos móviles. Parent pasa a `REQ-HW-02, REQ-HW-03`.
 
 ### Añadido
+
 - **`MLVPN_PORT_3_REMOTE`**: variable opcional con el puerto público al
   que conecta el cliente para el 3er enlace WiFi. Si difiere de
   `MLVPN_PORT_3` (puerto interno donde escucha el servidor), se asume
@@ -232,10 +259,12 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 - REQ-VPS-07 actualizado para describir el mapeo público opcional.
 
 ### Cambiado (sin publicar antes, parte del cambio anterior)
+
 - `requirements/REQ.md`: título de REQ-VPS-07 ahora especifica que los
   puertos son los del servidor.
 
 ### Añadido (commit anterior, ya publicado)
+
 - **REQ-NET-07**: rebind del enlace WiFi ante cambios de IP (renovación
   DHCP tras captive portal, roaming entre APs del AVE). `04-conectar.sh`:
   - Tras pasar el captive, espera 4 s y revalida la IP de `IFACE_WIFI`
@@ -260,16 +289,17 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   README.
 
 ### Cambiado
+
 - README: la sección de monitorización ya no recomienda
   `tail -f generated/mlvpn.log` (mlvpn manda los logs runtime a
   syslog, el fichero solo recoge errores tempranos de arranque y los
   rebind del watcher). En su lugar:
   `log stream --predicate 'process == "mlvpn"' --info`.
 
-
 ## [0.14.0] — 2026-05-19
 
 ### Cambiado
+
 - **Estructura de `requirements/` conforme a IDLC v6**: un fichero por
   requirement (`ave-vpc-<REQ-ID>-requirement.md`) siguiendo la plantilla
   oficial `templates/iac_component-id-requirement.md` del repo IDLC. 31
@@ -278,6 +308,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   fichero individual.
 
 ### Añadido
+
 - **31 tests de trazabilidad** en `tests/test_<REQ-ID>_*.sh`, uno por
   requirement (cumple Section 5.3.3.4 de IDLC v5 / Test traceability de
   IDLC v6). Cada test:
@@ -305,6 +336,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.13.0] — 2026-05-19
 
 ### Corregido
+
 - `08-monitor.py` — `get_interface_stats()` parseaba mal las interfaces sin
   MAC (utun, lo0). Las físicas tienen 11 columnas en `netstat -ibn` (con MAC
   en `parts[3]`) y los utun tienen 10 (sin MAC). El parser usaba offsets
@@ -320,11 +352,13 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   refleja la configuración del bonding.
 
 ### Cambiado
+
 - El bloque `TÚNEL mlvpn` ahora muestra el throughput útil real del túnel
   (sin overhead). Se añade una línea `Encapsulado` al final con la suma de
   físicas para que sea visible la diferencia (overhead del protocolo).
 
 ### Notas
+
 - Esto corrige una afirmación incorrecta del proyecto: el comentario en
   versiones anteriores decía que `netstat -ibn` no captura TX de interfaces
   TUN en macOS. Era un bug de parsing en `get_interface_stats()`, no una
@@ -333,6 +367,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.12.0] — 2026-05-19
 
 ### Añadido
+
 - Tercer enlace WiFi en mlvpn (`[links.wifi]`, puerto UDP 5082). El bonding
   ahora puede usar 3 enlaces simultáneamente: iPhone USB, Pixel USB y WiFi
   nativo del Mac.
@@ -362,6 +397,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 - `docs/rpi-setup.md` — diagrama actualizado con el 3er enlace WiFi opcional.
 
 ### Corregido
+
 - `04-conectar.sh` — eliminada duplicación de la /32 anti-loop al VPS que se
   añadía dos veces (en el paso 2 y otra vez tras crear utun). Ahora se añade
   una sola vez con preferencia móvil → WiFi como fallback.
@@ -369,12 +405,14 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.11.0] — 2026-05-19
 
 ### Añadido
+
 - `08-monitor.py` — monitor en tiempo real de enlaces mlvpn y tráfico agregado.
   Muestra throughput por enlace físico (iPhone, Pixel, WiFi) + estado de autenticación
   de cada link mlvpn. El agregado se calcula sumando las interfaces físicas porque
   `netstat -ibn` no captura TX de interfaces TUN (utun) en macOS.
 
 ### Corregido
+
 - `04-conectar.sh` — routing anti-loop para bonding completo con rutas 0/1 via tunel:
   Las rutas ifscope al VPS no se usan en lookups globales de macOS (sockets sin
   `IP_BOUND_IF`). Fix: añadir ruta /32 regular (sin ifscope) al VPS justo antes de
@@ -385,6 +423,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.10.0] — 2026-05-19
 
 ### Añadido
+
 - `03-setup-mac.sh` — crea `/tmp/sudo-askpass.sh` automáticamente: helper que muestra
   un diálogo gráfico macOS para la contraseña de sudo. Necesario en Macs corporativos
   con Jamf/MDM donde sudo sin TTY falla. Uso: `SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A <cmd>`
@@ -392,6 +431,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   firma correcta, env vars, permisos 700, key `statuscommand` vs `ip4_updns`
 
 ### Corregido
+
 - `02-setup-vps.sh` — sincronizado con los fixes de mlvpn: `statuscommand`, firma
   correcta del updown script, `chmod 700`, password embebida (sin `file://`)
 - `04-conectar.sh` / `05-desconectar.sh` — mensajes de error actualizados con instrucciones
@@ -400,6 +440,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.9.0] — 2026-05-19
 
 ### Corregido — TÚNEL COMPLETAMENTE FUNCIONAL
+
 - `07-setup-rpi.sh` / `03-setup-mac.sh` — updown script reescrito con la firma
   correcta de mlvpn: `script <device> <evento>` + env vars `IP4`, `IP4_GATEWAY`,
   `MTU`, `DEVICE`. La versión anterior usaba `$1=up/down` y vars `MLVPN_IPADDR`
@@ -416,6 +457,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.8.0] — 2026-05-19
 
 ### Corregido
+
 - `01-generar-secreto.sh` — cambiado de `openssl rand -hex 32` (64 chars) a `openssl rand -hex 16`
   (32 chars). El parser de config de mlvpn falla silenciosamente con passwords > ~40 chars:
   el proceso hijo hereda una clave derivada de una password diferente a la configurada.
@@ -424,6 +466,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 - pmset standby restaurado en AC — ya no se necesita para mantener el Mac despierto
 
 ### Primer viaje AVE confirmado (18/05/2026)
+
 - Bonding iPhone (Movistar) + Pixel (Yoigo) funcionando en Madrid-Orihuela
 - Latencia ~87-677ms (variación normal en tren), 0% pérdida de paquetes al VPS
 - El túnel sobrevive cambios de cobertura entre operadoras
@@ -431,6 +474,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.7.0] — 2026-05-18
 
 ### Añadido
+
 - `patches/tuntap_darwin_utun.c` — parche utun para macOS: sustituye `/dev/tun` (requiere
   kext obsoleto) por la API nativa `SYSPROTO_CONTROL + UTUN_CONTROL_NAME` (macOS 10.6+,
   Apple Silicon). Aplicado automáticamente por `03-setup-mac.sh` antes de compilar.
@@ -442,6 +486,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
   requieren sudo (rutas, utun, proceso mlvpn)
 
 ### Corregido
+
 - `04-conectar.sh` — mlvpn arranca con `--user mlvpn` (privilege separation) y sin sudo
   en el propio binario (utun no requiere root en macOS, pero sí el script completo)
 - `04-conectar.sh` — log file recreado sin root para evitar permisos incorrectos
@@ -454,6 +499,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 - `03-setup-mac.sh` — password embebida directamente (misma corrección que en RPi)
 
 ### Pendiente (en investigación)
+
 - `crypto_decrypt failed: -1` entre Mac (mlvpn compilado con utun patch, libsodium 1.0.20)
   y RPi (mlvpn Ubuntu 26.04). Passwords idénticas, mismo commit de mlvpn (master-b934d49),
   mismo protocolo. Causa pendiente de identificar.
@@ -461,6 +507,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.6.0] — 2026-05-18
 
 ### Corregido
+
 - `03-setup-mac.sh` — añadido `ac_cv_func_strnvis=no` al configure: macOS detecta
   `strnvis()` pero con firma incompatible con la usada en `setproctitle.c` de mlvpn,
   provocando errores de compilación. Forzar el fallback interno resuelve el problema.
@@ -470,11 +517,13 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.5.0] — 2026-05-15
 
 ### Añadido
+
 - `docs/rpi-setup.md` — sección "Notas de compatibilidad con Ubuntu 26.04 LTS" con las diferencias descubiertas al instalar en producción
 - `docs/rpi-setup.md` — advertencia de CGNAT con instrucciones para verificar y solicitar retirada al ISP
 - `README.md` — advertencia de CGNAT en la sección de Opción B (Raspberry Pi)
 
 ### Corregido
+
 - `07-setup-rpi.sh` — añadida dependencia `libpcap-dev` (requerida por mlvpn en Ubuntu 26.04)
 - `07-setup-rpi.sh` — usuario de sistema dedicado `mlvpn` con home `/var/lib/mlvpn` (mejor que `nobody` para trazabilidad)
 - `07-setup-rpi.sh` — servicio systemd usa `--user mlvpn` (mlvpn rechaza arrancar como root sin este flag)
@@ -484,10 +533,12 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.4.0] — 2026-05-13
 
 ### Añadido
+
 - `docs/rpi-setup.md` — guía actualizada con deSEC como proveedor DDNS recomendado (protocolo DynDNS2, nativo en router ZTE F6640)
 - Soporte deSEC (`*.dedyn.io`) en documentación: alternativa a No-IP, gratuita y privada
 
 ### Cambiado
+
 - SO objetivo para Raspberry Pi: **Ubuntu Server 26.04 LTS** (antes 24.04 LTS)
 - `07-setup-rpi.sh` — actualizado a Ubuntu 26.04 LTS en comentarios y mensajes de salida
 - `docs/rpi-setup.md` — reescrito: Imager headless con Ubuntu 26.04, port forwarding tres puertos (5080-5082), DDNS con deSEC
@@ -498,11 +549,13 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 - `README.md` — Ubuntu 26.04 LTS, deSEC/dedyn.io, puerto 5082 añadido al port forwarding
 
 ### Seguridad
+
 - Eliminada clave pública SSH hardcodeada de `terraform/variables.tf` (historial reescrito con `git filter-repo`)
 
 ## [0.3.0] — 2026-05-09
 
 ### Añadido
+
 - `06-provision-vps.sh` — itera automáticamente por ambos shapes Always Free (A1.Flex ARM y E2.1.Micro x86) en cada intento; para en cuanto uno tiene éxito
 - `.github/workflows/ci.yml` — GitHub Actions con ShellCheck, validación de sintaxis bash, checks IDLC y terraform fmt/validate
 - `tests/verificar-setup.sh` — script de verificación del entorno completo
@@ -511,6 +564,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 - Pre-commit hooks: ShellCheck, detect-private-key, trailing whitespace, check-yaml
 
 ### Cambiado
+
 - `06-provision-vps.sh` — corregido bug de log doble (tee + cron redirect); añadido PATH completo para que terraform sea encontrado desde cron; jitter aleatorio 0-600s para evitar patrón detectable
 - `02-setup-vps.sh` — eliminado mensaje que pedía abrir puertos manualmente (ya lo hace Terraform); añadida dependencia `libtool` necesaria para `autogen.sh`
 - `03-setup-mac.sh` — añadido check explícito de Xcode CLT y Homebrew; corregidos warnings SC2155 de ShellCheck
@@ -519,11 +573,13 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 - `.gitignore` — añadidos `.playwright-mcp/`, `.DS_Store`, `.mcp.json`, `*.png`
 
 ### Corregido
+
 - Puertos UDP 5080-5082 y TCP 22 gestionados 100% por Terraform (security list en VCN) — ningún paso manual
 
 ## [0.2.0] — 2026-05-08
 
 ### Añadido
+
 - `06-provision-vps.sh` — provisionado automático del VPS en Oracle Cloud con Terraform, retry horario con jitter aleatorio, notificación macOS al completar
 - `00-detectar-interfaces.sh` — detección automática de interfaces iPhone (hotspot WiFi) y Android (USB tethering)
 - `terraform/` — infraestructura Oracle Cloud como código (VCN, subnet, security list, IGW, VM)
@@ -534,6 +590,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 - `CONTRIBUTING.md`, `CODEOWNERS`, `.pre-commit-config.yaml`
 
 ### Cambiado
+
 - `02-setup-vps.sh` — añadida dependencia `libtool` (necesaria para `autogen.sh`)
 - `03-setup-mac.sh` — añadido check explícito de Xcode CLT y Homebrew
 - README completamente reescrito con arquitectura, tabla de configuración, troubleshooting y alternativas de VPS
@@ -541,6 +598,7 @@ HTTP/2/videoconf, mitigados con el modo `--failover` dinámico.
 ## [0.1.0] — 2026-05-07
 
 ### Añadido
+
 - `01-generar-secreto.sh` — genera `keys/mlvpn.secret`
 - `02-setup-vps.sh` — compila e instala mlvpn en el VPS vía SSH
 - `03-setup-mac.sh` — compila mlvpn en el Mac, genera `generated/mlvpn.conf`
