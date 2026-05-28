@@ -24,7 +24,7 @@
 #   6. Instala como /usr/local/sbin/ubond
 #   7. Crea usuario de sistema 'ubond' (paralelo a 'mlvpn')
 #   8. Genera config plantilla generated/ubond.conf con sección
-#      [filter.replicate] vacía (el usuario añade sus propias reglas)
+#      [filters.replicate] vacía (el usuario añade sus propias reglas)
 #
 # LO QUE NO HACE:
 #   - No toca mlvpn (sigue funcionando)
@@ -72,6 +72,12 @@ done
 
 # shellcheck source=/dev/null
 source "${CONFIG_FILE}"
+
+# Puertos UDP de ubond — distintos a mlvpn para coexistir.
+# Default 5083/5084/5085 (mlvpn usa 5080-5082).
+UBOND_PORT_1="${UBOND_PORT_1:-5083}"
+UBOND_PORT_2="${UBOND_PORT_2:-5084}"
+UBOND_PORT_3="${UBOND_PORT_3:-5085}"
 
 # =====================================================================
 # Paso 1: Verificar Xcode CLT
@@ -167,7 +173,7 @@ else
     export LDFLAGS
 
     # ac_cv_func_strnvis=no: igual que en mlvpn
-    # --enable-filters: requerido para [filters] y [filter.replicate]
+    # --enable-filters: requerido para [filters] y [filters.replicate]
     ac_cv_func_strnvis=no ./configure \
         --prefix=/usr/local \
         --sysconfdir=/etc \
@@ -218,7 +224,7 @@ fi
 # =====================================================================
 # Paso 7: Generar plantilla generated/ubond.conf
 #
-# Mismo formato que mlvpn.conf pero con sección [filter.replicate]
+# Mismo formato que mlvpn.conf pero con sección [filters.replicate]
 # inicialmente vacía. El usuario añade reglas BPF según su uso.
 # =====================================================================
 echo "=> Generando plantilla generated/ubond.conf..."
@@ -229,7 +235,7 @@ UBOND_SECRET="$(tr -d '\n' < "${KEYS_DIR}/mlvpn.secret")"
 
 cat > "${GENERATED_DIR}/ubond.conf" <<EOF
 # ubond.conf — generado por 03b-setup-mac-ubond.sh
-# REQ-NET-12: sección [filter.replicate] activa
+# REQ-NET-12: sección [filters.replicate] activa
 [general]
 mode = "client"
 tuntap = "tun"
@@ -251,7 +257,7 @@ statuscommand = "${GENERATED_DIR}/ubond_updown_mac.sh"
 #
 # Ejemplos típicos para videoconf (descomentar las que apliquen):
 #
-# [filter.replicate]
+# [filters.replicate]
 # zoom_rtp        = "udp and (dst port 8801 or dst port 8802)"
 # meet_stun_turn  = "udp and (dst port 3478 or dst port 19302 or dst port 19305)"
 # rtp_generic     = "udp and portrange 16384-32767"
@@ -260,13 +266,13 @@ statuscommand = "${GENERATED_DIR}/ubond_updown_mac.sh"
 [links.iphone]
 bindhost = "PLACEHOLDER_IPHONE_IP"
 remotehost = "${VPS_IP}"
-remoteport = ${MLVPN_PORT_1}
+remoteport = ${UBOND_PORT_1}
 bandwidth_upload = 10000000
 
 [links.pixel]
 bindhost = "PLACEHOLDER_PIXEL_IP"
 remotehost = "${VPS_IP}"
-remoteport = ${MLVPN_PORT_2}
+remoteport = ${UBOND_PORT_2}
 bandwidth_upload = 10000000
 EOF
 chmod 600 "${GENERATED_DIR}/ubond.conf"
@@ -292,7 +298,7 @@ echo "  Config:  ${GENERATED_DIR}/ubond.conf"
 echo "  Updown:  ${GENERATED_DIR}/ubond_updown_mac.sh"
 echo ""
 echo "Para activar replicación de tu meet/videoconf:"
-echo "  1. Edita ${GENERATED_DIR}/ubond.conf y descomenta/edita [filter.replicate]"
+echo "  1. Edita ${GENERATED_DIR}/ubond.conf y descomenta/edita [filters.replicate]"
 echo "  2. Ejecuta 04b-conectar-ubond.sh (próxima sesión)"
 echo ""
 echo "mlvpn (v1.x) sigue intacto en /usr/local/sbin/mlvpn — coexisten."

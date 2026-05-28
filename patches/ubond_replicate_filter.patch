@@ -1,5 +1,5 @@
 diff --git a/src/config.c b/src/config.c
-index 28342ed..5ed4f3f 100644
+index 28342ed..8a25d69 100644
 --- a/src/config.c
 +++ b/src/config.c
 @@ -479,6 +479,31 @@ ubond_config(int config_file_fd, int first_time)
@@ -7,7 +7,7 @@ index 28342ed..5ed4f3f 100644
          work = work->next;
      }
 +
-+    /* REQ-NET-12: parser de la sección [filter.replicate].
++    /* REQ-NET-12: parser de la sección [filters.replicate].
 +     * Cada entrada `name = "bpf expr"` añade una regla al pool de
 +     * replicación. Cuando un paquete matchea, se duplica a TODOS
 +     * los túneles activos (no solo a uno como en [filters]). */
@@ -15,7 +15,7 @@ index 28342ed..5ed4f3f 100644
 +    while (work)
 +    {
 +        if (work->section != NULL &&
-+                strncmp(work->section, "filter.replicate", 16) == 0) {
++                strncmp(work->section, "filters.replicate", 17) == 0) {
 +            memset(&filter, 0, sizeof(filter));
 +            if (pcap_compile(pcap_dead_p, &filter, work->conf->val,
 +                    1, PCAP_NETMASK_UNKNOWN) != 0) {
@@ -96,7 +96,7 @@ index 9f85e46..24e7668 100644
 +    return 0;
 +}
 diff --git a/src/ubond.c b/src/ubond.c
-index b29383a..686c49f 100644
+index b29383a..bf07a38 100644
 --- a/src/ubond.c
 +++ b/src/ubond.c
 @@ -191,6 +191,29 @@ struct ubond_options_s ubond_options = {
@@ -188,20 +188,7 @@ index b29383a..686c49f 100644
      if (*t->bindaddr) {
        n = bind(fd, res->ai_addr, res->ai_addrlen);
        freeaddrinfo(res);
-@@ -1775,17 +1828,45 @@ ubond_rtun_choose(ubond_tunnel_t *rtun)
-     }
-   }
-   if (!spkt) return;
--
-+
-   if (!ev_is_active(&tuntap.io_read)) {
-     ev_io_start(EV_A_ &tuntap.io_read);
-   }
-
-   ubond_pkt_list_t *sbuf = &rtun->sbuf;
--
-+
- #ifdef HAVE_FILTERS
+@@ -1786,6 +1839,38 @@ ubond_rtun_choose(ubond_tunnel_t *rtun)
    u_char *data=(u_char *)(spkt->p.data);
    uint32_t len=spkt->p.len;
 
@@ -223,7 +210,11 @@ index b29383a..686c49f 100644
 +      if (ubond_pkt_list_is_full(&t->hpsbuf)) continue;
 +
 +      ubond_pkt_t *clone = ubond_pkt_get();
-+      memcpy(&clone->p, &spkt->p, sizeof(spkt->p));
++      /* Copia COMPLETA: p (payload+headers), timestamp y len (wire
++       * length, crítica para enviar). El campo entry (TAILQ) se
++       * sobrescribe inmediatamente por UBOND_TAILQ_INSERT_HEAD,
++       * así que copiarlo no hace daño. */
++      memcpy(clone, spkt, sizeof(*spkt));
 +      UBOND_TAILQ_INSERT_HEAD(&t->hpsbuf, clone);
 +      copies++;
 +    }
@@ -236,19 +227,6 @@ index b29383a..686c49f 100644
    ubond_tunnel_t *frtun = ubond_filters_choose((uint32_t)len,data);
    if (frtun) {
      /* High priority buffer, not reorderd when a filter applies */
-@@ -1793,10 +1874,10 @@ ubond_rtun_choose(ubond_tunnel_t *rtun)
-     sbuf = &rtun->hpsbuf;
-   }
- #endif
--
-+
-   if (ubond_pkt_list_is_full(sbuf))
-     log_warnx("tuntap", "%s buffer: overflow", rtun->name);
--
-+
-   /* Ask for a free buffer */
-   UBOND_TAILQ_INSERT_HEAD(sbuf, spkt);
-
 diff --git a/src/ubond.h b/src/ubond.h
 index c67c648..11a3efb 100644
 --- a/src/ubond.h

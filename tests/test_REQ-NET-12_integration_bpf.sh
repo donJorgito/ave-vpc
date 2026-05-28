@@ -1,6 +1,6 @@
 #!/bin/sh
 # Validates ave-vpc.REQ-NET-12 integration test (Fase 3): el filtro BPF
-# del config [filter.replicate] funciona como espera ubond en runtime.
+# del config [filters.replicate] funciona como espera ubond en runtime.
 #
 # Compila tests/integration/test_replicate_bpf_filter.c contra libpcap
 # y verifica que las 15 aserciones pasan: matches positivos, negativos,

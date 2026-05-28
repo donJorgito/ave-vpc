@@ -150,7 +150,7 @@ else
     rm -f /tmp/ubond_replicate_filter.patch
 
     ./autogen.sh
-    # --enable-filters: requerido para [filter.replicate]
+    # --enable-filters: requerido para [filters.replicate]
     ./configure --sysconfdir=/etc --enable-filters
     make -j"$(nproc)"
     sudo make install
@@ -162,8 +162,8 @@ fi
 # =====================================================================
 # Paso 3: Config /etc/ubond/ubond.conf (servidor)
 # Mismo secret que mlvpn, mismo TUN_*_IP/MTU. Puertos distintos.
-# Sección [filter.replicate] presente pero VACÍA — el cliente decide
-# qué replicar; el servidor solo necesita [filter.replicate] declarada
+# Sección [filters.replicate] presente pero VACÍA — el cliente decide
+# qué replicar; el servidor solo necesita [filters.replicate] declarada
 # para que el dedup LRU se active en protocol_read.
 # =====================================================================
 echo "  [RPi] Escribiendo /etc/ubond/ubond.conf..."
@@ -186,7 +186,7 @@ statuscommand = "/etc/ubond/ubond_updown.sh"
 # REQ-NET-12: en el servidor la sección puede estar vacía. El dedup
 # LRU se activa en protocol_read independiente del contenido de
 # esta sección. Las reglas las define el cliente.
-[filter.replicate]
+[filters.replicate]
 
 [links.iphone]
 bindhost = "0.0.0.0"

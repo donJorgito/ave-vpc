@@ -101,13 +101,13 @@ else
     junit_fail "touches_mlvpn" "el script elimina/desinstala mlvpn"
 fi
 
-# Check 12: genera generated/ubond.conf con [filter.replicate] de ejemplo
+# Check 12: genera generated/ubond.conf con [filters.replicate] de ejemplo
 if grep -q "ubond.conf" "${SCRIPT}" \
-   && grep -q "\[filter.replicate\]" "${SCRIPT}" \
+   && grep -q "\[filters.replicate\]" "${SCRIPT}" \
    && grep -qE "zoom_rtp|meet_stun|rtp_generic" "${SCRIPT}"; then
     junit_pass "generates_config_with_replicate_examples"
 else
-    junit_fail "no_config_template" "no genera ubond.conf con ejemplos [filter.replicate]"
+    junit_fail "no_config_template" "no genera ubond.conf con ejemplos [filters.replicate]"
 fi
 
 # Check 13: copia mlvpn_updown_mac.sh → ubond_updown_mac.sh

@@ -64,7 +64,7 @@ else
     junit_fail "no_cli_overrides" "no acepta flags --host/--user/--port"
 fi
 
-# Check 6: instala libpcap-dev (requerido para [filter.replicate])
+# Check 6: instala libpcap-dev (requerido para [filters.replicate])
 if grep -q "libpcap-dev" "${SCRIPT}"; then
     junit_pass "installs_libpcap"
 else

@@ -21,7 +21,7 @@ coexistencia heredada de [[REQ-NET-20]] / [[REQ-NET-21]]:
 - Cleanup defensivo busca `ubond: ubond0` en vez de `mlvpn: mlvpn0`.
 - **Sin watchers de `--failover` ni `wifi-reintegrator` en esta
   primera versión** — la v2 se valida primero en bonding puro
-  contra `[filter.replicate]`. Si funciona, se duplican los
+  contra `[filters.replicate]`. Si funciona, se duplican los
   watchers como `tools/seleccionar-mejor-enlace_ubond.sh` y
   `tools/wifi-reintegrator_ubond.sh` (decisión de duplicar vs
   parametrizar tomada en [[ubond-v2-roadmap]] memoria del

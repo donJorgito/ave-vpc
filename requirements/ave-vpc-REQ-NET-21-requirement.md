@@ -30,7 +30,7 @@ Layout en RPi:
 - **El servicio se crea pero NO arranca automáticamente**. Decisión
   del usuario activar v2 cuando lo pruebe. Evita interferencias con
   mlvpn ya en producción.
-- **Sección `[filter.replicate]` vacía**. El servidor solo necesita
+- **Sección `[filters.replicate]` vacía**. El servidor solo necesita
   el dedup LRU (que se activa en `protocol_read` independientemente
   del contenido de la sección). Las reglas de replicación las define
   el cliente.
@@ -57,9 +57,9 @@ Layout en RPi:
   - Clona `markfoodyburton/ubond` con `--depth 1` en `/tmp/ubond-build`.
   - Aplica **solo** `ubond_replicate_filter.patch` (NO los macOS).
     `patch -p1 -N` no falla si ya aplicado.
-  - `./configure --enable-filters` (requerido para `[filter.replicate]`).
+  - `./configure --enable-filters` (requerido para `[filters.replicate]`).
   - Genera `/etc/ubond/ubond.conf` (mode=server, sección
-    `[filter.replicate]` vacía, puertos 5083-5085).
+    `[filters.replicate]` vacía, puertos 5083-5085).
   - Genera `/etc/ubond/ubond_updown.sh` con la misma lógica que
     `/etc/mlvpn/mlvpn_updown.sh` (NAT MASQUERADE + iptables FORWARD).
   - Crea usuario sistema `ubond` con home `/var/lib/ubond` (chroot).

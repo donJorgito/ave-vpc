@@ -26,10 +26,10 @@ El script aplica los **3 patches** del repo en orden:
 2. `patches/tuntap_darwin_utun_ubond.c` (REQ-NET-19) — sustituye
    `tuntap_darwin.c` con la implementación utun-API moderna.
 3. `patches/ubond_replicate_filter.patch` (REQ-NET-12) — añade la
-   sección `[filter.replicate]` y la lógica clone-to-N + dedup LRU.
+   sección `[filters.replicate]` y la lógica clone-to-N + dedup LRU.
 
 Tras compilar e instalar, genera una **plantilla `ubond.conf`** con
-la sección `[filter.replicate]` comentada con ejemplos típicos para
+la sección `[filters.replicate]` comentada con ejemplos típicos para
 videoconf (Zoom, Meet RTP, Anthropic API) que el usuario puede
 descomentar según necesite.
 
@@ -57,7 +57,7 @@ descomentar según necesite.
   - Aplica los 3 patches en orden con `patch -p1 -N` (no fail si
     ya aplicado).
   - Configure con `--enable-filters` (requerido para
-    `[filter.replicate]`).
+    `[filters.replicate]`).
   - Make + sudo make install.
 - Crea usuario de sistema `ubond` con UID libre desde 501 (mlvpn
   usa desde 500), shell `/usr/bin/false`, home `/var/empty`. NO crea
@@ -65,7 +65,7 @@ descomentar según necesite.
 - Genera `generated/ubond.conf` con:
   - `[general]` con secret embebido (lee `keys/mlvpn.secret`),
     `interface_name = "ubond0"`, MTU desde `config/env`.
-  - Sección `[filter.replicate]` comentada con ≥4 ejemplos
+  - Sección `[filters.replicate]` comentada con ≥4 ejemplos
     (zoom_rtp, meet_stun_turn, rtp_generic, anthropic_api).
   - Mismos `bandwidth_upload` que mlvpn (10 Mbps móvil).
 - Copia `generated/mlvpn_updown_mac.sh` → `ubond_updown_mac.sh`

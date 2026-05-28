@@ -18,11 +18,11 @@ else
 fi
 
 # Check 2: Define la sintaxis del filtro en config
-if grep -q '\[filter.replicate\]' "${DOC}" \
+if grep -q '\[filters.replicate\]' "${DOC}" \
    && grep -qE 'udp.*port|udp.*dst' "${DOC}"; then
     junit_pass "config_syntax_defined"
 else
-    junit_fail "no_config_syntax" "no define [filter.replicate] con ejemplos"
+    junit_fail "no_config_syntax" "no define [filters.replicate] con ejemplos"
 fi
 
 # Check 3: Identifica las funciones concretas a modificar en ubond
@@ -165,11 +165,11 @@ else
     junit_fail "no_dedup" "dedup LRU no implementado"
 fi
 
-# Check 20: parser config para [filter.replicate]
-if grep -q "filter.replicate" "${PATCH}"; then
+# Check 20: parser config para [filters.replicate]
+if grep -q "filters.replicate" "${PATCH}"; then
     junit_pass "config_parser_added"
 else
-    junit_fail "no_config_parser" "parser de [filter.replicate] no añadido"
+    junit_fail "no_config_parser" "parser de [filters.replicate] no añadido"
 fi
 
 # Check 21: clone-to-N en rtun_choose

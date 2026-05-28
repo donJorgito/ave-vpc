@@ -38,7 +38,7 @@ ubond ya tiene el 70 % del andamiaje (`data_seq` global, reorder
 buffer con dedup, sistema de filtros PCAP/BPF, `hpsbuf`
 high-priority send buffer per-túnel). Lo que falta es:
 
-1. Nueva sección `[filter.replicate]` en el config con reglas
+1. Nueva sección `[filters.replicate]` en el config con reglas
    tipo BPF.
 2. Lógica de clone-to-N-tunnels en `ubond_rtun_choose()`.
 3. Dedup set LRU en el receptor para descartar duplicados.
@@ -49,12 +49,12 @@ high-priority send buffer per-túnel). Lo que falta es:
 
 ## Sintaxis del filtro en config
 
-Sección nueva `[filter.replicate]` (paralela a la existente
+Sección nueva `[filters.replicate]` (paralela a la existente
 `[filters]` que hace per-tunnel routing). Cada entrada es un nombre
 arbitrario asociado a una expresión BPF/pcap-filter:
 
 ```ini
-[filter.replicate]
+[filters.replicate]
 rtp_zoom        = "udp and (dst port 19302 or src port 19302)"
 rtp_meet        = "udp and (dst port 3478 or dst port 19305)"
 anthropic_sse   = "tcp and dst port 443 and dst host api.anthropic.com"
@@ -263,7 +263,7 @@ repite (el cliente no replica), nunca descarta nada. El cambio en
 ## Cambios fuera de `ubond.c`
 
 - `config.c` (~línea 447): nuevo bloque que reconoce
-  `[filter.replicate]` y compila las reglas con `pcap_compile`,
+  `[filters.replicate]` y compila las reglas con `pcap_compile`,
   añadiéndolas con `ubond_replicate_filter_add()`.
 - `ubond.h`: declarar `struct ubond_replicate_filters_s` y la global.
 - `filters.c`: implementar `ubond_replicate_filter_match` y
@@ -307,4 +307,4 @@ repite (el cliente no replica), nunca descarta nada. El cambio en
   el dedup set nunca dispara.
 - Sin variables nuevas en `config/env`. Toda la config de
   replicación va en `mlvpn.conf` / `ubond.conf` (sección nueva
-  `[filter.replicate]`).
+  `[filters.replicate]`).
