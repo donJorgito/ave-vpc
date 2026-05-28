@@ -43,12 +43,25 @@ else
     junit_fail "no_secret_share" "no usa keys/mlvpn.secret"
 fi
 
-# Check 5: SSH al RPi con el patrón conocido (heredoc + env vars)
+# Check 5: SSH al RPi con el patrón conocido (heredoc + env vars).
+# Tras REQ-NET-22 design pass: UBOND_PATCH se pasa base64-encoded
+# (UBOND_PATCH_B64) para evitar que las líneas multi-línea del patch
+# se interpreten como comandos remotos.
 if grep -q 'ssh -p "${RPi_SSH_PORT}"' "${SCRIPT}" \
-   && grep -q 'UBOND_PATCH=' "${SCRIPT}"; then
+   && grep -qE 'UBOND_PATCH(_B64)?=' "${SCRIPT}"; then
     junit_pass "ssh_pattern_with_env"
 else
     junit_fail "wrong_ssh_pattern" "no usa el patrón ssh+heredoc con env vars"
+fi
+
+# Check 16: flags --host/--user/--port para override del config/env.
+# Permite invocar via DDNS desde fuera de la LAN doméstica.
+if grep -q -- '--host)' "${SCRIPT}" \
+   && grep -q -- '--user)' "${SCRIPT}" \
+   && grep -q -- '--port)' "${SCRIPT}"; then
+    junit_pass "cli_overrides"
+else
+    junit_fail "no_cli_overrides" "no acepta flags --host/--user/--port"
 fi
 
 # Check 6: instala libpcap-dev (requerido para [filter.replicate])

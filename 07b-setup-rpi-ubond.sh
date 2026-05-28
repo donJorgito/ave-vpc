@@ -24,8 +24,38 @@
 #   - No toca mlvpn ni su servicio (sigue arriba).
 #   - No aplica los patches macOS (REQ-NET-19) — Linux compila vanilla.
 #   - Solo aplica patches/ubond_replicate_filter.patch (REQ-NET-12).
+#
+# FLAGS:
+#   --host HOST   Sobrescribe RPi_IP del config (ej. usar DDNS público
+#                 200bares.dedyn.io desde fuera de la LAN doméstica).
+#   --user USER   Sobrescribe RPi_USER del config.
+#   --port PORT   Sobrescribe RPi_SSH_PORT del config.
+#
+# EJEMPLO (desde la oficina, vía DDNS+puerto SSH externo):
+#   ./07b-setup-rpi-ubond.sh --host 200bares.dedyn.io --user jorge --port 2222
 ###############################################################################
 set -euo pipefail
+
+# --- Parser de flags (antes de source) ---
+CLI_HOST=""
+CLI_USER=""
+CLI_PORT=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --host) CLI_HOST="$2"; shift 2 ;;
+        --user) CLI_USER="$2"; shift 2 ;;
+        --port) CLI_PORT="$2"; shift 2 ;;
+        -h|--help)
+            sed -n '2,/^###/p' "$0" | grep -E "^# " | sed 's/^# //'
+            exit 0
+            ;;
+        *)
+            echo "ERROR: argumento desconocido: $1"
+            echo "Uso: $0 [--host HOST] [--user USER] [--port PORT]"
+            exit 1
+            ;;
+    esac
+done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KEYS_DIR="${SCRIPT_DIR}/keys"
@@ -48,12 +78,13 @@ fi
 # shellcheck source=/dev/null
 source "${CONFIG_FILE}"
 
-RPi_IP="${RPi_IP:-}"
-RPi_USER="${RPi_USER:-ubuntu}"
-RPi_SSH_PORT="${RPi_SSH_PORT:-22}"
+# Precedencia: flag CLI > config/env > default literal.
+RPi_IP="${CLI_HOST:-${RPi_IP:-}}"
+RPi_USER="${CLI_USER:-${RPi_USER:-ubuntu}}"
+RPi_SSH_PORT="${CLI_PORT:-${RPi_SSH_PORT:-22}}"
 
 if [[ -z "${RPi_IP}" ]]; then
-    echo "ERROR: RPi_IP no definido en config/env"
+    echo "ERROR: RPi_IP no definido (ni en config/env ni vía --host)"
     exit 1
 fi
 
@@ -63,12 +94,16 @@ UBOND_PORT_2="${UBOND_PORT_2:-5084}"
 UBOND_PORT_3="${UBOND_PORT_3:-5085}"
 
 UBOND_SECRET="$(cat "${KEYS_DIR}/mlvpn.secret")"
-UBOND_PATCH="$(cat "${PATCHES_DIR}/ubond_replicate_filter.patch")"
+# El patch va base64-encoded: SSH joins args con espacio y rompe newlines.
+# Pasarlo crudo hizo que líneas como "--- a/src/ubond.c" se interpretasen
+# como comandos remotos. base64 sin newlines (-w0 en GNU; en macOS sin
+# argumento equivalente por defecto, pero `base64` de macOS NO inserta
+# newlines automáticamente).
+UBOND_PATCH_B64="$(base64 < "${PATCHES_DIR}/ubond_replicate_filter.patch" | tr -d '\n')"
 
 echo "=> Conectando a la Raspberry Pi ${RPi_IP} (puerto SSH ${RPi_SSH_PORT})..."
 echo "=> ubond escuchará en ${UBOND_PORT_1}/${UBOND_PORT_2}/${UBOND_PORT_3} UDP (paralelo a mlvpn 5080-5082)"
 
-# Copiar el patch al RPi como heredoc-compatible: enviamos el contenido por env
 ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     UBOND_PORT_1="${UBOND_PORT_1}" \
     UBOND_PORT_2="${UBOND_PORT_2}" \
@@ -77,7 +112,7 @@ ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     TUN_VPS_IP="${TUN_VPS_IP}" \
     TUN_MAC_IP="${TUN_MAC_IP}" \
     TUN_MTU="${TUN_MTU}" \
-    UBOND_PATCH="${UBOND_PATCH}" \
+    UBOND_PATCH_B64="${UBOND_PATCH_B64}" \
     bash <<'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -107,8 +142,8 @@ else
     git clone --depth 1 https://github.com/markfoodyburton/ubond.git ubond-build
     cd ubond-build
 
-    # Volcar el patch (pasado por env var) y aplicarlo
-    printf '%s' "${UBOND_PATCH}" > /tmp/ubond_replicate_filter.patch
+    # Volcar el patch (pasado base64-encoded por env var) y aplicarlo
+    printf '%s' "${UBOND_PATCH_B64}" | base64 -d > /tmp/ubond_replicate_filter.patch
     if ! patch -p1 -N --reject-file=- < /tmp/ubond_replicate_filter.patch 2>&1 | head -10; then
         echo "  [RPi] (patch ya aplicado o no aplicable; continuando)"
     fi
