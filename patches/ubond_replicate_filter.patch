@@ -96,7 +96,7 @@ index 9f85e46..24e7668 100644
 +    return 0;
 +}
 diff --git a/src/ubond.c b/src/ubond.c
-index b29383a..bf07a38 100644
+index b29383a..65d1e03 100644
 --- a/src/ubond.c
 +++ b/src/ubond.c
 @@ -191,6 +191,29 @@ struct ubond_options_s ubond_options = {
@@ -129,28 +129,27 @@ index b29383a..bf07a38 100644
  #endif
 
  static char *optstr = "c:n:u:hvVD:p:";
-@@ -616,6 +639,20 @@ ubond_protocol_read(ubond_tunnel_t *tun, ubond_pkt_t *pkt)
+@@ -616,6 +639,19 @@ ubond_protocol_read(ubond_tunnel_t *tun, ubond_pkt_t *pkt)
          proto->data_seq = 0;
          proto->tun_seq = 0;
      }
 +
 +#ifdef HAVE_FILTERS
-+    /* REQ-NET-12: dedup de paquetes replicados.
-+     * Los paquetes replicados llegan por N túneles con mismo
-+     * data_seq. El primero se procesa; los demás se descartan
-+     * aquí ANTES de tocar el reorder buffer (que esperaría al
-+     * "hueco" introduciendo latencia destructiva para RTP). */
-+    if ((proto->type == UBOND_PKT_DATA || proto->type == UBOND_PKT_DATA_RESEND) &&
++    /* REQ-NET-12 dedup DESACTIVADO temporalmente para aislar bug.
++     * Solo se activa cuando hay filtros activos — antes corría en
++     * cada paquete y rompía dataplane (auth OK, datos no fluían). */
++    if (ubond_replicate_filters.count > 0 &&
++        (proto->type == UBOND_PKT_DATA || proto->type == UBOND_PKT_DATA_RESEND) &&
 +        ubond_replicate_dedup_check(proto->data_seq)) {
 +        log_debug("replicate", "%s descartando duplicado data_seq=%lu",
 +                  tun->name, proto->data_seq);
-+        return 0;  /* éxito: el "primer hermano" ya se procesó */
++        return 0;
 +    }
 +#endif
      if (proto->timestamp != (uint16_t)-1) {
          tun->saved_timestamp = proto->timestamp;
          tun->saved_timestamp_received_at = now64;
-@@ -1114,7 +1151,12 @@ static int
+@@ -1114,7 +1150,12 @@ static int
  ubond_rtun_bind(ubond_tunnel_t *t)
  {
      struct addrinfo hints, *res;
@@ -163,7 +162,7 @@ index b29383a..bf07a38 100644
      char bindifstr[UBOND_IFNAMSIZ+5];
      int n, fd;
 
-@@ -1148,6 +1190,7 @@ ubond_rtun_bind(ubond_tunnel_t *t)
+@@ -1148,6 +1189,7 @@ ubond_rtun_bind(ubond_tunnel_t *t)
               t->name, t->bindaddr ? t->bindaddr : "any",
               bindifstr);
 
@@ -171,7 +170,7 @@ index b29383a..bf07a38 100644
      if (*t->binddev) {
        memset(&ifr, 0, sizeof(ifr));
        snprintf(ifr.ifr_name, sizeof(ifr.ifr_name) - 1, t->binddev);
-@@ -1155,6 +1198,16 @@ ubond_rtun_bind(ubond_tunnel_t *t)
+@@ -1155,6 +1197,16 @@ ubond_rtun_bind(ubond_tunnel_t *t)
          log_warn(NULL, "failed to bind on interface %s", t->binddev);
        }
      }
@@ -188,7 +187,7 @@ index b29383a..bf07a38 100644
      if (*t->bindaddr) {
        n = bind(fd, res->ai_addr, res->ai_addrlen);
        freeaddrinfo(res);
-@@ -1786,6 +1839,38 @@ ubond_rtun_choose(ubond_tunnel_t *rtun)
+@@ -1786,6 +1838,41 @@ ubond_rtun_choose(ubond_tunnel_t *rtun)
    u_char *data=(u_char *)(spkt->p.data);
    uint32_t len=spkt->p.len;
 
@@ -196,8 +195,11 @@ index b29383a..bf07a38 100644
 +   * filtro de replicación, lo enviamos por TODOS los túneles
 +   * activos (no solo por uno). data_seq se asigna UNA vez aquí y
 +   * todas las copias lo comparten para que el receptor pueda
-+   * dedupearlas. */
-+  if (spkt->p.type == UBOND_PKT_DATA &&
++   * dedupearlas.
++   * Gated por count > 0 para evitar overhead/side-effects cuando no
++   * hay filtros activos. */
++  if (ubond_replicate_filters.count > 0 &&
++      spkt->p.type == UBOND_PKT_DATA &&
 +      ubond_replicate_filter_match(len, data)) {
 +    spkt->p.reorder = 1;
 +    spkt->p.data_seq = data_seq++;
