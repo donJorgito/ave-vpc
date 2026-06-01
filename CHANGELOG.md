@@ -10,6 +10,21 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Pre-AVE 2026-06-01 — preparativos sesión validación trayecto
+
+- Conf templates (`03b-setup-mac-ubond.sh`, `04b-conectar-ubond.sh`):
+  ejemplos comentados de `loss_tolerence=80` y `latency_tolerence=2000`
+  por enlace para AVE noisy. El usuario los descomenta en el tren si
+  observa loss cycling.
+- `tools/lib/report.sh`: el veredicto del smoke-test ahora toma el
+  resultado de ping como ground truth. Si ping pasa, "Dataplane
+  FUNCIONA"; el contador 0 en pcap de ubond0 se anota como fallo de
+  captura RPi (timing entre tcpdump y interfaz UP), no como bug
+  real. Evita falsos negativos en diagnóstico AVE.
+- `docs/v2-ubond/05-cheatsheet-ave.md`: secuencia de fases (v1
+  baseline → v2 bonding → v2+tolerences → v2+replicate) con métricas
+  a anotar y comandos exactos.
+
 ### Bug #6 atenuado — per-link tolerences en ubond (REQ-NET-25, 2026-06-01)
 
 - Nuevo patch C `patches/ubond_per_link_tolerence.patch` (~130

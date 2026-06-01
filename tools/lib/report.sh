@@ -94,6 +94,22 @@ report_diagnose() {
     printf -- '- RPi tun out (ubond0):  **%d** pkts\n' "${rpi_tun_out}"
     printf -- '- Mac utun in:           **%d** pkts\n\n' "${mac_tun_in}"
 
+    # Si ping pasó (ping_received > 0) el dataplane funciona, sin importar
+    # si capturamos el ubond0 del RPi o no — el tcpdump remoto en ubond0
+    # falla a veces por timing (la iface no está UP cuando arranca tcpdump).
+    # Tomar ping como ground truth y los pcaps como diagnóstico.
+    local ping_recv="${TESTS_PING_RECEIVED:-0}"
+    local ping_total="${TESTS_PING_TOTAL:-0}"
+    if [[ "${ping_recv}" -gt 0 ]] && [[ "${ping_total}" -gt 0 ]]; then
+        printf '**Veredicto:** Dataplane FUNCIONA (ping %s/%s).' \
+            "${ping_recv}" "${ping_total}"
+        if (( rpi_tun_out == 0 )); then
+            printf ' Nota: pcap de ubond0 vacío — fallo de captura RPi (la iface puede no estar UP cuando arranca tcpdump). No es bug del dataplane.'
+        fi
+        printf '\n'
+        return
+    fi
+
     if   (( mac_out == 0 ));        then printf '**Veredicto:** Mac no envía nada — ubond no autentica o socket no bind.\n'
     elif (( rpi_in == 0 ));         then printf '**Veredicto:** Mac envía pero RPi no recibe — filtrado en red (NAT/firewall) entre Mac y RPi.\n'
     elif (( rpi_tun_out == 0 ));    then printf '**Veredicto:** RPi recibe UDP pero NO escribe al tun — bug en ubond servidor (decrypt/dedup/reorder).\n'

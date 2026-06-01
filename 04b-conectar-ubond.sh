@@ -221,6 +221,10 @@ remotehost = "${VPS_IP}"
 remoteport = ${UBOND_PORT_3_REMOTE}
 bandwidth_upload = 50000000
 timeout = 8
+# REQ-NET-25: WiFi del AVE/hotel suele ser muy noisy.
+# Descomentar si hay loss cycling en trayecto.
+# loss_tolerence    = 80
+# latency_tolerence = 2000
 EOF
     if [[ "${UBOND_PORT_3_REMOTE}" != "${UBOND_PORT_3}" ]]; then
         echo "  WiFi añadido (cliente :${UBOND_PORT_3_REMOTE} → router → RPi:${UBOND_PORT_3})"

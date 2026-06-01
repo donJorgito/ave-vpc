@@ -275,17 +275,34 @@ statuscommand = "${GENERATED_DIR}/ubond_updown_mac.sh"
 # rtp_generic     = "udp and portrange 16384-32767"
 # anthropic_api   = "tcp and dst port 443 and dst host api.anthropic.com"
 
+# REQ-NET-25: per-link tolerences. Defaults 0 = comportamiento histórico
+# (LOSS_TOLERENCE 31% global + threshold keepalive 0.5s+2*RTT). Para
+# enlaces 4G en AVE descomenta y ajusta — se observó cycling cada 1s
+# en trayecto 2026-05-29 con threshold tight.
+#
+# Recomendación AVE Movistar/Yoigo (RTT ~150-300ms, jitter alto):
+#   loss_tolerence    = 80
+#   latency_tolerence = 2000
+#
+# Conservador (descarta link rápido, solo si v1 no soporta el ciclo):
+#   loss_tolerence    = 50
+#   latency_tolerence = 1000
+
 [links.iphone]
 bindhost = "PLACEHOLDER_IPHONE_IP"
 remotehost = "${VPS_IP}"
 remoteport = ${UBOND_PORT_1}
 bandwidth_upload = 10000000
+# loss_tolerence    = 80
+# latency_tolerence = 2000
 
 [links.pixel]
 bindhost = "PLACEHOLDER_PIXEL_IP"
 remotehost = "${VPS_IP}"
 remoteport = ${UBOND_PORT_2}
 bandwidth_upload = 10000000
+# loss_tolerence    = 80
+# latency_tolerence = 2000
 EOF
 chmod 600 "${GENERATED_DIR}/ubond.conf"
 
