@@ -54,7 +54,11 @@ plantilla.
 
 ## Bugs OBSERVADOS pero NO entendidos
 
-### Bug #5 — Dataplane no fluye aunque auth funciona
+### Bug #5 — Dataplane no fluye aunque auth funciona — RESUELTO 2026-06-01
+
+**Estado**: causa raíz identificada y validada. NO era código ubond.
+Era colisión de tun IP en RPi entre `mlvpn0` y `ubond0`. Documentado
+abajo.
 
 **Síntoma**: ubond autentica los enlaces (`@links.iphone`,
 `@links.pixel`, `2 tunnels up`), keepalives van y vienen, pero
@@ -129,7 +133,7 @@ mismo router doméstico, mismo DDNS, misma RPi. Por tanto:
 
 **Síntoma**: tras autenticar, ubond emite cada segundo:
 
-```text
+```log
 [INFO/rtt] links.pixel keepalive reached threashold,
             keepalive recieved 0.784944s ago
 [INFO] all tunnels are down or lossy but fallback is not available
@@ -203,3 +207,80 @@ manuales con `nc` (sin keepalive) caducan rápido.
   agravado por AVE conditions.
 - Bug #7 (auth intermitente) probablemente CGNAT.
 - v1 sigue intacto y funcional para el viaje.
+
+---
+
+## Resolución Bug #5 — sesión 2026-06-01 (cafetería)
+
+Tras instrumentar el dataplane con un smoke-test adaptativo
+(REQ-NET-23, `tools/smoke-{casa,cafe,ave}.sh` con tcpdump
+simultáneo Mac+RPi vía SSH), el reporte automático pinpointed:
+
+```text
+- Mac UDP out (físicas):  116 pkts ✓
+- RPi UDP in (5083-85):   128 pkts ✓
+- RPi tun out (ubond0):     0 pkts ✗
+- Mac utun in:              5 pkts (sólo requests salientes)
+```
+
+Veredicto del tool: "RPi recibe UDP pero NO escribe al tun".
+
+Investigación manual en RPi reveló la verdadera causa:
+
+```text
+$ ip route show | grep 10.10.10
+10.10.10.0/24 dev mlvpn0  proto kernel scope link src 10.10.10.1
+10.10.10.0/24 dev ubond0  proto kernel scope link src 10.10.10.1
+
+$ ip addr | grep "10.10.10.1"
+    inet 10.10.10.1/24 scope global mlvpn0
+    inet 10.10.10.1/24 scope global ubond0
+```
+
+**Causa raíz**: tanto `mlvpn0` como `ubond0` tienen IP `10.10.10.1/24`
+simultáneamente. La coexistencia funciona para INPUT (puertos UDP
+distintos: 5080-5082 vs 5083-5085) pero ROMPE para OUTPUT. Cuando
+ubond decrypta una request ICMP echo y la inyecta en `ubond0` vía
+`tuntap_write`, el kernel responde a 10.10.10.2 buscando ruta a
+`10.10.10.0/24` → matchea la PRIMERA entrada (mlvpn0, creada antes).
+La reply sale por mlvpn0, donde no hay cliente Mac escuchando ubond.
+
+**Validación**:
+
+```text
+$ ssh rpi 'sudo systemctl stop mlvpn'
+$ ./tools/smoke-cafe.sh
+ping 10.10.10.1: 5/5 paquetes recibidos, 0% packet loss
+```
+
+Confirmado: con mlvpn parado, dataplane ubond fluye 100%. Bug #5
+pinpointed a colisión de routing, NO a código ubond.
+
+**Bugs colaterales detectados durante la investigación**:
+
+- `Error: ipv4: Address already assigned` en RPi journal: ubond no
+  podía crear ubond0 limpio porque mlvpn0 mantenía 10.10.10.1.
+- `links.iphone received invalid packet of N bytes`: scanners de
+  internet hitting puerto 5083 (publicamente forwardeado en
+  router). NO era nuestro tráfico — falsos positivos de debug.
+
+**Plan de fix (siguiente sesión)**:
+
+- Subnet distinta para ubond: `10.10.20.0/24` con
+  `UBOND_TUN_VPS_IP=10.10.20.1` y `UBOND_TUN_MAC_IP=10.10.20.2`.
+- Cambios en `config/env`, `03b-setup-mac-ubond.sh`,
+  `07b-setup-rpi-ubond.sh`, `04b-conectar-ubond.sh`,
+  `tools/lib/conf-gen.sh`.
+- Nuevo REQ-NET-24 + test que valida coexistencia mlvpn+ubond
+  con ambas subnets activas.
+
+## Mejoras de tooling permanente derivadas de esta sesión
+
+- `tools/smoke-{casa,cafe,ave}.sh` (REQ-NET-23): suite que evita
+  tener que volver a debugarse a ciegas en futuros bugs de
+  dataplane. Reproducible, capturas concretas, veredicto
+  automático.
+- `SOS.sh` consciente de v2: elimina procesos ubond y limpia
+  utuns colgadas — vital tras crashes durante debug.
+- Memoria `[[bug5-rpi-tun-ip-collision]]`: causa raíz para
+  evitar que se reabra como hipótesis falsa en sesiones futuras.
