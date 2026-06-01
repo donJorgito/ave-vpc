@@ -41,10 +41,17 @@ echo "=== SOS ==="
 
 # 1. Matar TODO lo del túnel (mlvpn v1 + ubond v2) — múltiples patrones
 # porque ambos cambian setproctitle. Sin pkill suave + sleep: -9 directo.
+#
+# IMPORTANTE: para ubond usamos `ubond: ` (dos puntos + espacio) en vez
+# de `ubond: ubond0`. Razón: 04b lanza con `--name ubond0` produciendo
+# title `ubond: ubond0 [priv]`, pero los smoke-test (tools/lib/) y
+# debug runs sin `--name` producen `ubond: ubond [priv]` (sin el "0").
+# El patrón corto cubre ambos. Bug detectado en AVE 2026-06-01:
+# zombies de smoke-test sobrevivían a SOS.sh.
 pkill -9 -f "mlvpn: mlvpn0" 2>/dev/null
 pkill -9 -f "/usr/local/sbin/mlvpn" 2>/dev/null
 pkill -9 -x "mlvpn" 2>/dev/null
-pkill -9 -f "ubond: ubond0" 2>/dev/null
+pkill -9 -f "ubond: " 2>/dev/null
 pkill -9 -f "/usr/local/sbin/ubond" 2>/dev/null
 pkill -9 -x "ubond" 2>/dev/null
 pkill -9 -f "seleccionar-mejor-enlace" 2>/dev/null
@@ -109,9 +116,9 @@ if pgrep -f "mlvpn: mlvpn0" >/dev/null 2>&1; then
 else
     echo "✓ mlvpn parado"
 fi
-if pgrep -f "ubond: ubond0" >/dev/null 2>&1; then
+if pgrep -f "ubond: " >/dev/null 2>&1; then
     echo "✗ procesos ubond aún vivos (raro tras pkill -9):"
-    pgrep -lf "ubond: ubond0" | sed 's/^/    /'
+    pgrep -lf "ubond: " | sed 's/^/    /'
 else
     echo "✓ ubond parado"
 fi

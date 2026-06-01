@@ -10,6 +10,19 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### SOS.sh + ubond-runner.sh — bugfix process title (AVE 2026-06-01)
+
+- `SOS.sh` no mataba procesos ubond lanzados por smoke-tests porque
+  el pattern "ubond: ubond0" no matcheaba el title "ubond: ubond
+  [priv]" (sin el "0") que producen los runs sin `--name ubond0`.
+  Cambiado a "ubond: " (con espacio) que cubre ambas variantes —
+  bug detectado en vivo en AVE.
+- `tools/lib/ubond-runner.sh`: añadido `--name ubond0` para alinear
+  el process title con producción (04b ya lo hace). Defense in
+  depth.
+- Verificación final de SOS.sh también actualizada al nuevo pattern
+  (antes daba falso "✓ ubond parado").
+
 ### Pre-AVE 2026-06-01 — preparativos sesión validación trayecto
 
 - Conf templates (`03b-setup-mac-ubond.sh`, `04b-conectar-ubond.sh`):

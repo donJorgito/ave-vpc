@@ -52,9 +52,14 @@ ubond_runner_start_with_conf() {
     require_cmd "${UBOND_BIN}"
 
     : > "${UBOND_LOG}"
+    # --name ubond0 alinea el process title con producción (04b usa el
+    # mismo flag) — sin esto los procesos quedan como "ubond: ubond [priv]"
+    # y SOS.sh no los mataba con su patrón "ubond: ubond0" (bug AVE
+    # 2026-06-01).
     "${UBOND_BIN}" \
         --config "${conf}" \
         --user ubond \
+        --name ubond0 \
         --debug --verbose \
         > "${UBOND_LOG}" 2>&1 &
     local pid="$!"
