@@ -257,6 +257,13 @@ fi
 rm -f "${GENERATED_DIR}/ubond.log"
 touch "${GENERATED_DIR}/ubond.log"
 
+# Snapshot de utuns ANTES de arrancar ubond — el nuevo será el de ubond.
+# Más robusto que parsear ifconfig con regex frágiles (bug AVE 2026-06-01:
+# `grep -B1 "nd6 options" | cut -d: -f1` devolvía "inet6 fe80" en macOS
+# moderno porque la línea anterior a "nd6 options" es ahora la inet6
+# fe80::%utunN, no la cabecera utunN:).
+UTUN_PRE=$(ifconfig -l | tr ' ' '\n' | grep -E '^utun[0-9]+$' | sort)
+
 /usr/local/sbin/ubond \
     --config "${GENERATED_DIR}/ubond_active.conf" \
     --name ubond0 \
@@ -271,7 +278,8 @@ echo "  Esperando autenticación de enlaces..."
 UTUN_IFACE=""
 for _ in $(seq 1 20); do
     if pgrep -f "ubond: ubond0 @" &>/dev/null; then
-        UTUN_IFACE=$(ifconfig | grep -B1 "nd6 options" | grep "utun" | tail -1 | cut -d: -f1)
+        UTUN_POST=$(ifconfig -l | tr ' ' '\n' | grep -E '^utun[0-9]+$' | sort)
+        UTUN_IFACE=$(comm -13 <(echo "${UTUN_PRE}") <(echo "${UTUN_POST}") | head -1)
         [[ -n "${UTUN_IFACE}" ]] && break
     fi
     sleep 1
