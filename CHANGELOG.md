@@ -33,6 +33,15 @@ incrementalmente sin romper la v1.0.0 actual.
   RPi in=128, RPi tun out=0 → veredicto "ubond servidor no escribe al
   tun" — Bug #5 pinpointed por primera vez con datos concretos.
 
+### SOS.sh consciente de v2 (2026-06-01)
+
+- Mata procesos `ubond: ubond0` y `/usr/local/sbin/ubond` además de
+  los de mlvpn.
+- Limpia IPs `10.10.10.x` colgadas en utun fantasma (vista tras crashes
+  ubond y refactor smoke-test).
+- Borra `generated/ubond_active.conf` además de `mlvpn_active.conf`.
+- Verificación final reporta estado independiente de mlvpn y ubond.
+
 ### Hardening IDLC v6 (2026-05-26)
 
 - **Rule 2 — Defensa en profundidad de secrets**: añadido `gitleaks`

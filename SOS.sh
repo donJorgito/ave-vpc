@@ -39,15 +39,22 @@ GENERATED_DIR="${SCRIPT_DIR}/generated"
 
 echo "=== SOS ==="
 
-# 1. Matar TODO lo del túnel — múltiples patrones porque mlvpn cambia su
-# setproctitle. Sin pkill suave + sleep: -9 directo.
+# 1. Matar TODO lo del túnel (mlvpn v1 + ubond v2) — múltiples patrones
+# porque ambos cambian setproctitle. Sin pkill suave + sleep: -9 directo.
 pkill -9 -f "mlvpn: mlvpn0" 2>/dev/null
 pkill -9 -f "/usr/local/sbin/mlvpn" 2>/dev/null
 pkill -9 -x "mlvpn" 2>/dev/null
+pkill -9 -f "ubond: ubond0" 2>/dev/null
+pkill -9 -f "/usr/local/sbin/ubond" 2>/dev/null
+pkill -9 -x "ubond" 2>/dev/null
 pkill -9 -f "seleccionar-mejor-enlace" 2>/dev/null
 pkill -9 -f "calibrar-enlaces-dinamico" 2>/dev/null
 pkill -9 -f "wifi-reintegrator" 2>/dev/null
 pkill -9 -f "tee.*mlvpn.log" 2>/dev/null
+pkill -9 -f "tee.*ubond.log" 2>/dev/null
+# Watchers v2 si existieran como copias *_ubond.sh
+pkill -9 -f "seleccionar-mejor-enlace_ubond" 2>/dev/null
+pkill -9 -f "wifi-reintegrator_ubond" 2>/dev/null
 
 # Defensivo: matar también por PID files (cubre watchers cuyo nombre
 # pueda variar)
@@ -76,11 +83,23 @@ if [[ -n "${VPS_IP}" ]]; then
     route -n delete -host "${VPS_IP}" 2>/dev/null
 fi
 
-# 4. Limpiar artefactos del túnel (PID files, conf activa)
+# 4. Limpiar artefactos del túnel (PID files, confs activas v1+v2,
+#    IPs colgadas en utuns).
 [[ -d "${GENERATED_DIR}" ]] && {
     rm -f "${GENERATED_DIR}"/*.pid 2>/dev/null
     rm -f "${GENERATED_DIR}/mlvpn_active.conf" 2>/dev/null
+    rm -f "${GENERATED_DIR}/ubond_active.conf" 2>/dev/null
 }
+
+# Limpia 10.10.10.x colgada en utuns fantasma (visto tras crashes ubond
+# 2026-05-29 y refactor 2026-06-01).
+for i in $(seq 0 15); do
+    ip="$(ifconfig "utun${i}" 2>/dev/null \
+            | awk '$1 == "inet" && $2 ~ /^10\.10\.10\./ { print $2; exit }')"
+    if [[ -n "${ip}" ]]; then
+        ifconfig "utun${i}" inet delete 2>/dev/null
+    fi
+done
 
 # 5. Verificación final
 echo ""
@@ -89,6 +108,12 @@ if pgrep -f "mlvpn: mlvpn0" >/dev/null 2>&1; then
     pgrep -lf "mlvpn: mlvpn0" | sed 's/^/    /'
 else
     echo "✓ mlvpn parado"
+fi
+if pgrep -f "ubond: ubond0" >/dev/null 2>&1; then
+    echo "✗ procesos ubond aún vivos (raro tras pkill -9):"
+    pgrep -lf "ubond: ubond0" | sed 's/^/    /'
+else
+    echo "✓ ubond parado"
 fi
 
 DEF_IFACE="$(route -n get default 2>/dev/null | awk '/interface/{print $2}')"
