@@ -10,6 +10,25 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Bug #6 atenuado — per-link tolerences en ubond (REQ-NET-25, 2026-06-01)
+
+- Nuevo patch C `patches/ubond_per_link_tolerence.patch` (~130
+  líneas) port de mlvpn al fork ubond:
+  - `loss_tolerence` (% loss, max 100): per-link override del
+    hardcoded `LOSS_TOLERENCE = 31.0` en `ubond_rtun_check_lossy`.
+  - `latency_tolerence` (ms, max 5000): gracia adicional para el
+    keepalive ack antes de marcar UBOND_LOSSY (mapeo semántico —
+    ubond no tiene check separado de RTT como mlvpn).
+- Se aplica como Patch 4 en `03b-setup-mac-ubond.sh` y vía
+  `UBOND_PATCH2_B64` en `07b-setup-rpi-ubond.sh` después del
+  patch de replicación (orden importa).
+- Defaults 0 = comportamiento histórico preservado.
+- REQ-NET-25 + test estático `test_REQ-NET-25_per_link_tolerence.sh`
+  (9/9 PASS) verifica el patch, su aplicación en los scripts y
+  los caps explícitos.
+- Validación runtime del comportamiento ("el ciclo loss cycling
+  se atenúa") requiere AVE real — pendiente para próximo trayecto.
+
 ### Bug #5 resuelto — coexistencia mlvpn↔ubond (REQ-NET-24, 2026-06-01)
 
 - ubond v2 ahora usa subnet `10.10.20.0/24` (mlvpn sigue en

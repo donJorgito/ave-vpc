@@ -63,7 +63,7 @@ if [[ ! -f "${KEYS_DIR}/mlvpn.secret" ]]; then
     echo "ERROR: No existe keys/mlvpn.secret. Ejecuta primero 01-generar-secreto.sh"
     exit 1
 fi
-for p in ubond_macos_compile.patch tuntap_darwin_utun_ubond.c ubond_replicate_filter.patch; do
+for p in ubond_macos_compile.patch tuntap_darwin_utun_ubond.c ubond_replicate_filter.patch ubond_per_link_tolerence.patch; do
     if [[ ! -f "${PATCHES_DIR}/${p}" ]]; then
         echo "ERROR: falta ${PATCHES_DIR}/${p}"
         exit 1
@@ -166,6 +166,12 @@ else
     # Patch 3 (REQ-NET-12): replicación selectiva por 5-tupla
     echo "  Aplicando ubond_replicate_filter.patch..."
     if ! patch -p1 -N --reject-file=- < "${PATCHES_DIR}/ubond_replicate_filter.patch" 2>&1 | head -5; then
+        echo "  (patch ya aplicado o no aplicable; continuando)"
+    fi
+
+    # Patch 4 (REQ-NET-25): per-link loss_tolerence/latency_tolerence
+    echo "  Aplicando ubond_per_link_tolerence.patch..."
+    if ! patch -p1 -N --reject-file=- < "${PATCHES_DIR}/ubond_per_link_tolerence.patch" 2>&1 | head -5; then
         echo "  (patch ya aplicado o no aplicable; continuando)"
     fi
 

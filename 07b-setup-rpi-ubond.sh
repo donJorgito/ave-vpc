@@ -100,6 +100,7 @@ UBOND_SECRET="$(cat "${KEYS_DIR}/mlvpn.secret")"
 # argumento equivalente por defecto, pero `base64` de macOS NO inserta
 # newlines automáticamente).
 UBOND_PATCH_B64="$(base64 < "${PATCHES_DIR}/ubond_replicate_filter.patch" | tr -d '\n')"
+UBOND_PATCH2_B64="$(base64 < "${PATCHES_DIR}/ubond_per_link_tolerence.patch" | tr -d '\n')"
 
 echo "=> Conectando a la Raspberry Pi ${RPi_IP} (puerto SSH ${RPi_SSH_PORT})..."
 echo "=> ubond escuchará en ${UBOND_PORT_1}/${UBOND_PORT_2}/${UBOND_PORT_3} UDP (paralelo a mlvpn 5080-5082)"
@@ -113,6 +114,7 @@ ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     UBOND_TUN_MAC_IP="${UBOND_TUN_MAC_IP:-10.10.20.2}" \
     TUN_MTU="${TUN_MTU}" \
     UBOND_PATCH_B64="${UBOND_PATCH_B64}" \
+    UBOND_PATCH2_B64="${UBOND_PATCH2_B64}" \
     bash <<'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -142,12 +144,19 @@ else
     git clone --depth 1 https://github.com/markfoodyburton/ubond.git ubond-build
     cd ubond-build
 
-    # Volcar el patch (pasado base64-encoded por env var) y aplicarlo
+    # Volcar y aplicar patches en orden (replicate primero, per_link después
+    # — el segundo asume el estado post-replicate).
     printf '%s' "${UBOND_PATCH_B64}" | base64 -d > /tmp/ubond_replicate_filter.patch
     if ! patch -p1 -N --reject-file=- < /tmp/ubond_replicate_filter.patch 2>&1 | head -10; then
-        echo "  [RPi] (patch ya aplicado o no aplicable; continuando)"
+        echo "  [RPi] (patch replicate ya aplicado o no aplicable; continuando)"
     fi
     rm -f /tmp/ubond_replicate_filter.patch
+
+    printf '%s' "${UBOND_PATCH2_B64}" | base64 -d > /tmp/ubond_per_link_tolerence.patch
+    if ! patch -p1 -N --reject-file=- < /tmp/ubond_per_link_tolerence.patch 2>&1 | head -10; then
+        echo "  [RPi] (patch per_link_tolerence ya aplicado o no aplicable; continuando)"
+    fi
+    rm -f /tmp/ubond_per_link_tolerence.patch
 
     ./autogen.sh
     # --enable-filters: requerido para [filters.replicate]

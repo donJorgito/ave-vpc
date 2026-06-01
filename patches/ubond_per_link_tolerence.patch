@@ -1,0 +1,130 @@
+--- a/src/ubond.h
++++ b/src/ubond.h
+@@ -149,6 +149,15 @@
+     int disconnects;      /* is it stable ? */
+     int conn_attempts;    /* connection attempts */
+     int fallback_only;    /* if set, this link will be used when all others are down */
++    /* REQ-NET-25: per-link tolerences (port from mlvpn).
++     * loss_tolerence: % loss umbral antes de marcar UBOND_LOSSY.
++     * latency_tolerence_ms: extra gracia ms para keepalive ack antes
++     *   de marcar lossy (mapeo semántico — ubond no tiene check
++     *   separado de RTT como mlvpn, así que aquí significa "tolerancia
++     *   adicional al timeout de keepalive ack"). 0 = usar defaults
++     *   globales (LOSS_TOLERENCE 31% y UBOND_IO_TIMEOUT_DEFAULT*2 = 500ms). */
++    double loss_tolerence;
++    uint32_t latency_tolerence_ms;
+     double sent_loss;   /* loss as reported by far end */
+     uint64_t loss_cnt;
+     uint64_t loss_event;
+@@ -230,12 +239,14 @@
+ int ubond_loss_ratio(ubond_tunnel_t *tun);
+ void ubond_rtun_set_weight(ubond_tunnel_t *t, double weight);
+
++/* REQ-NET-25: añadidos parámetros loss_tolerence y latency_tolerence_ms */
+ ubond_tunnel_t *ubond_rtun_new(const char *name,
+     const char *bindaddr, const char *bindport, const char *binddev, uint32_t bindfib,
+     const char *destaddr, const char *destport,
+     int server_mode, uint32_t timeout,
+     int fallback_only, uint32_t bandwidth, uint32_t quota,
+-    uint32_t reorder_length);
++    uint32_t reorder_length,
++    double loss_tolerence, uint32_t latency_tolerence_ms);
+ void ubond_rtun_drop(ubond_tunnel_t *t);
+ void ubond_rtun_status_down(ubond_tunnel_t *t);
+ #ifdef HAVE_FILTERS
+--- a/src/ubond.c
++++ b/src/ubond.c
+@@ -918,7 +918,8 @@
+                int server_mode, uint32_t timeout,
+                int fallback_only, uint32_t bandwidth_max,
+                uint32_t quota,
+-               uint32_t reorder_length)
++               uint32_t reorder_length,
++               double loss_tolerence, uint32_t latency_tolerence_ms)
+ {
+     ubond_tunnel_t *new;
+
+@@ -955,6 +956,9 @@
+     new->recvbytes = 0;
+     new->permitted = 0;
+     new->quota = quota;
++    /* REQ-NET-25: per-link tolerences. 0 = usar default global. */
++    new->loss_tolerence = (loss_tolerence > 0) ? loss_tolerence : LOSS_TOLERENCE;
++    new->latency_tolerence_ms = latency_tolerence_ms;
+     new->reorder_length= reorder_length;
+     new->reorder_length_preset= reorder_length;
+     new->reorder_length_max=0;
+@@ -1928,7 +1932,14 @@
+   double loss = tun->sent_loss;
+   int status_changed = 0;
+   ev_tstamp now = ev_now(EV_DEFAULT_UC);
+-  int keepalive_ok= ((tun->last_keepalive_ack == 0) || (tun->last_keepalive_ack + (UBOND_IO_TIMEOUT_DEFAULT*2) + ((tun->srtt_av/1000.0)*2)) > now);
++  /* REQ-NET-25: keepalive grace per-link. latency_tolerence_ms se suma
++   * al timeout base UBOND_IO_TIMEOUT_DEFAULT*2 (500ms). Default 0 ms
++   * preserva el comportamiento histórico. Útil para enlaces con jitter
++   * alto (AVE 4G) donde el ack del keepalive a veces tarda 1s+. */
++  double keepalive_extra_grace = tun->latency_tolerence_ms / 1000.0;
++  int keepalive_ok= ((tun->last_keepalive_ack == 0) || (tun->last_keepalive_ack + (UBOND_IO_TIMEOUT_DEFAULT*2) + keepalive_extra_grace + ((tun->srtt_av/1000.0)*2)) > now);
++  /* REQ-NET-25: loss_tolerence per-link reemplaza el global. */
++  double loss_thr = tun->loss_tolerence;
+
+   if (!keepalive_ok && tun->status == UBOND_AUTHOK) {
+     log_info("rtt", "%s keepalive reached threashold, keepalive recieved %fs ago", tun->name, now-tun->last_keepalive_ack);
+@@ -1939,14 +1950,14 @@
+     // here, we fear the worst, and will ask for all packets again. Lets hope
+     // there are not too many in flight.
+     status_changed = 1;
+-  } else if (loss >= LOSS_TOLERENCE && tun->status == UBOND_AUTHOK) {
++  } else if (loss >= loss_thr && tun->status == UBOND_AUTHOK) {
+     log_info("rtt", "%s packet loss reached threashold: %f%%/%f%%",
+-             tun->name, loss, LOSS_TOLERENCE);
++             tun->name, loss, loss_thr);
+     tun->status = UBOND_LOSSY;
+     status_changed = 1;
+-  } else if (keepalive_ok && loss < LOSS_TOLERENCE && tun->status == UBOND_LOSSY) {
++  } else if (keepalive_ok && loss < loss_thr && tun->status == UBOND_LOSSY) {
+     log_info("rtt", "%s packet loss acceptable again: %f%%/%f%%",
+-             tun->name, loss, LOSS_TOLERENCE);
++             tun->name, loss, loss_thr);
+     tun->status = UBOND_AUTHOK;
+     status_changed = 1;
+   }
+--- a/src/config.c
++++ b/src/config.c
+@@ -326,6 +326,26 @@
+                 if (fallback_only) {
+                     ubond_options.fallback_available = 1;
+                 }
++                /* REQ-NET-25: per-link loss_tolerence (% loss antes de
++                 * marcar LOSSY) y latency_tolerence (ms extra de gracia
++                 * para keepalive ack antes de marcar LOSSY). 0 = usar
++                 * default global. */
++                uint32_t loss_tolerence_int = 0;
++                uint32_t latency_tolerence_ms = 0;
++                _conf_set_uint_from_conf(
++                    config, lastSection, "loss_tolerence",
++                    &loss_tolerence_int, 0, NULL, 0);
++                if (loss_tolerence_int > 100) {
++                    log_warnx("config", "loss_tolerence is capped to 100 %%");
++                    loss_tolerence_int = 100;
++                }
++                _conf_set_uint_from_conf(
++                    config, lastSection, "latency_tolerence",
++                    &latency_tolerence_ms, 0, NULL, 0);
++                if (latency_tolerence_ms > 5000) {
++                    log_warnx("config", "latency_tolerence capped to 5000 ms");
++                    latency_tolerence_ms = 5000;
++                }
+                 LIST_FOREACH(tmptun, &rtuns, entries)
+                 {
+                     if (mystr_eq(lastSection, tmptun->name))
+@@ -399,7 +419,8 @@
+                     ubond_rtun_new(
+                         lastSection, bindaddr, bindport, binddev, bindfib, dstaddr, dstport,
+                         default_server_mode, timeout, fallback_only,
+-                        bwlimit, quota, reorder_length);
++                        bwlimit, quota, reorder_length,
++                        (double)loss_tolerence_int, latency_tolerence_ms);
+                 }
+                 if (bindaddr)
+                     free(bindaddr);
