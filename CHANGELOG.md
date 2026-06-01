@@ -10,6 +10,29 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Smoke-test adaptativo ubond (REQ-NET-23, 2026-06-01)
+
+- **`tools/smoke-{casa,cafe,ave}.sh`** — orchestrators que arrancan
+  ubond cliente en runtime, capturan tcpdump simultáneo en Mac y RPi
+  (vía SSH), corren batería de tests (ping ICMP, curl HTTP por túnel,
+  throughput 1MB, UDP probe) y emiten un reporte markdown con
+  diagnóstico automático: cuenta paquetes en cada punto (Mac out / RPi
+  in / RPi tun out / Mac utun in) y declara dónde muere el paquete.
+- **`tools/lib/`** (7 librerías sourceables) — código compartido entre
+  los 3 orchestrators sin duplicación: `_common.sh` (logging,
+  require_root, as_invoker), `env-detect.sh`, `conf-gen.sh`,
+  `tcpdump.sh`, `ubond-runner.sh`, `tests.sh`, `report.sh`.
+- **Diseño "una password por run"**: el orchestrator se invoca como
+  `sudo -E ./tools/smoke-X.sh`. `require_root` valida EUID==0 al
+  inicio. SSH y scp se ejecutan dropeando privs al `${SUDO_USER}`
+  vía `as_invoker`.
+- Test estático `test_REQ-NET-23_smoke_lib.sh` (12 PASS) verifica
+  existencia de archivos, sintaxis, funciones expuestas por cada lib,
+  y que los orchestrators piden root y instalan trap cleanup.
+- Validado en runtime desde una cafetería (2026-06-01): Mac out=116,
+  RPi in=128, RPi tun out=0 → veredicto "ubond servidor no escribe al
+  tun" — Bug #5 pinpointed por primera vez con datos concretos.
+
 ### Hardening IDLC v6 (2026-05-26)
 
 - **Rule 2 — Defensa en profundidad de secrets**: añadido `gitleaks`

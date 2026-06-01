@@ -68,6 +68,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-20](ave-vpc-REQ-NET-20-requirement.md) | Setup paralelo de ubond en macOS (Fase 4 v2) |
 | [REQ-NET-21](ave-vpc-REQ-NET-21-requirement.md) | Setup paralelo de ubond en RPi (Fase 4 v2) |
 | [REQ-NET-22](ave-vpc-REQ-NET-22-requirement.md) | Cliente ubond paralelo a mlvpn (Fase 4 v2) |
+| [REQ-NET-23](ave-vpc-REQ-NET-23-requirement.md) | Smoke-test adaptativo ubond (tools/smoke-*) |
 
 ## Restricciones macOS (REQ-MAC)
 
