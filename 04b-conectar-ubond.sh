@@ -80,6 +80,11 @@ UBOND_PORT_2="${UBOND_PORT_2:-5084}"
 UBOND_PORT_3="${UBOND_PORT_3:-5085}"
 UBOND_PORT_3_REMOTE="${UBOND_PORT_3_REMOTE:-${UBOND_PORT_3}}"
 
+# Subnet del túnel ubond (REQ-NET-24) — distinta de mlvpn para
+# evitar colisión de routing en el RPi (Bug #5).
+UBOND_TUN_VPS_IP="${UBOND_TUN_VPS_IP:-10.10.20.1}"
+UBOND_TUN_MAC_IP="${UBOND_TUN_MAC_IP:-10.10.20.2}"
+
 # =====================================================================
 # Paso 1: Detectar IPs actuales de cada interfaz (idéntico a 04-conectar)
 # =====================================================================
@@ -270,7 +275,7 @@ done
 
 if [[ -n "${UTUN_IFACE}" ]]; then
     echo "  Configurando ${UTUN_IFACE} con IP del túnel..."
-    ifconfig "${UTUN_IFACE}" "${TUN_MAC_IP}" "${TUN_VPS_IP}" mtu "${TUN_MTU}" up 2>/dev/null || true
+    ifconfig "${UTUN_IFACE}" "${UBOND_TUN_MAC_IP}" "${UBOND_TUN_VPS_IP}" mtu "${TUN_MTU}" up 2>/dev/null || true
     route -n add -net 0.0.0.0/1   -interface "${UTUN_IFACE}" 2>/dev/null || true
     route -n add -net 128.0.0.0/1 -interface "${UTUN_IFACE}" 2>/dev/null || true
     echo "  Túnel ubond activo en ${UTUN_IFACE}"
@@ -284,8 +289,8 @@ fi
 # =====================================================================
 echo ""
 echo "=> Verificando conectividad por el túnel ubond..."
-if ping -c 2 -W 2 "${TUN_VPS_IP}" &>/dev/null; then
-    echo "  Ping al VPS (${TUN_VPS_IP}): OK"
+if ping -c 2 -W 2 "${UBOND_TUN_VPS_IP}" &>/dev/null; then
+    echo "  Ping al VPS (${UBOND_TUN_VPS_IP}): OK"
 else
     echo "  AVISO: No hay ping todavía. Comprobar:"
     echo "    1. ubond.service está iniciado en RPi: ssh ${VPS_USER}@${VPS_IP} 'systemctl is-active ubond'"
@@ -299,7 +304,7 @@ fi
 echo ""
 echo "=== UBOND ACTIVO (v2 experimental) ==="
 echo ""
-echo "  Túnel:   ${TUN_MAC_IP} <-> ${TUN_VPS_IP}"
+echo "  Túnel:   ${UBOND_TUN_MAC_IP} <-> ${UBOND_TUN_VPS_IP}"
 echo "  Enlaces: ${ACTIVE_LINKS}"
 [[ -n "${IP_IPHONE}" ]] && echo "    - iPhone (${IFACE_IPHONE}): ${IP_IPHONE} -> VPS:${UBOND_PORT_1}"
 [[ -n "${IP_PIXEL}" ]]  && echo "    - Pixel  (${IFACE_PIXEL}):  ${IP_PIXEL}  -> VPS:${UBOND_PORT_2}"

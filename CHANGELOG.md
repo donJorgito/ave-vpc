@@ -10,6 +10,23 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Bug #5 resuelto — coexistencia mlvpn↔ubond (REQ-NET-24, 2026-06-01)
+
+- ubond v2 ahora usa subnet `10.10.20.0/24` (mlvpn sigue en
+  `10.10.10.0/24`). `config/env` añade `UBOND_TUN_VPS_IP=10.10.20.1`
+  y `UBOND_TUN_MAC_IP=10.10.20.2`.
+- `03b-setup-mac-ubond.sh`, `04b-conectar-ubond.sh`,
+  `07b-setup-rpi-ubond.sh` y `tools/lib/{conf-gen,tests,ubond-runner}.sh`
+  pasan a `UBOND_TUN_*` con defaults seguros (10.10.20.x — nunca caen
+  a 10.10.10.x para evitar regresar al bug).
+- `tools/smoke-casa.sh` ahora incluye WiFi como link en target=LAN
+  (no hay hairpin posible cuando se conecta a IP local del RPi).
+- REQ-NET-24 + test estático `test_REQ-NET-24_coexistencia.sh`
+  (11/11 PASS) verifica los criterios: subnets distintas, scripts
+  usan `UBOND_TUN_*`, no hay defaults `10.10.10.x` en código v2.
+- **Validado runtime**: smoke-casa.sh con mlvpn.service Y ubond.service
+  activos en RPi, ping 5/5 success al gateway 10.10.20.1.
+
 ### Smoke-test adaptativo ubond (REQ-NET-23, 2026-06-01)
 
 - **`tools/smoke-{casa,cafe,ave}.sh`** — orchestrators que arrancan

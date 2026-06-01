@@ -5,8 +5,8 @@
 # Política:
 #   - Target:  LAN (192.168.1.101) si alcanzable, sino aborta — la idea es
 #              probar el dataplane sin internet de por medio.
-#   - Links:   WiFi NO (haría hairpin); usa iPhone/Pixel si están conectados,
-#              sino aborta con explicación.
+#   - Links:   WiFi sí (target es LAN, no DDNS — no hay hairpin posible).
+#              iPhone/Pixel si están tethered también se incluyen.
 #   - Capt.:   Mac + RPi (vía SSH LAN).
 
 set -uo pipefail
@@ -41,18 +41,16 @@ env_detect_all
 env_detect_summary
 
 if [[ "${DETECTED_RPI_LAN_OK}" != "1" ]]; then
-    die 1 "RPi no alcanzable en LAN (${RPi_IP}). ¿Estás en la WiFi de casa?"
+    die 1 "RPi no alcanzable en LAN (${RPi_IP:-?}). ¿Estás en la WiFi de casa?"
 fi
 
-# Excluir WiFi (hairpin) — solo iPhone/Pixel.
+# Con target=LAN no hay hairpin — incluimos todos los links elegibles
+# (WiFi, iPhone, Pixel). En LAN el WiFi suele ser la única ruta cuando
+# no hay tethering activo.
 env_detect_eligible_links
-LINKS=()
-for entry in "${ELIGIBLE_LINKS[@]:-}"; do
-    [[ "${entry%%|*}" == "wifi" ]] && continue
-    LINKS+=("${entry}")
-done
+LINKS=("${ELIGIBLE_LINKS[@]:-}")
 if (( ${#LINKS[@]} == 0 )); then
-    die 1 "Sin iPhone/Pixel tetherados. Conecta al menos uno y reintenta."
+    die 1 "Sin links elegibles (WiFi/iPhone/Pixel). Conecta al menos uno."
 fi
 
 ubond_runner_cleanup_stale

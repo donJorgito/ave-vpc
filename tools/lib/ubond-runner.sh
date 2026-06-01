@@ -2,7 +2,7 @@
 # tools/lib/ubond-runner.sh
 #
 # Ciclo de vida de ubond cliente para smoke-tests:
-#   - cleanup_stale: mata procesos colgados y limpia 10.10.10.x de utuns
+#   - cleanup_stale: mata procesos colgados y limpia la subnet ubond de utuns
 #     fantasma (problema observado en debug 2026-05-29).
 #   - start_with_conf: lanza ubond con el conf indicado en background,
 #     redirigiendo a un log conocido.
@@ -20,20 +20,25 @@ UBOND_BIN="${UBOND_BIN:-/usr/local/sbin/ubond}"
 UBOND_LOG="${SMOKE_TMPDIR}/ubond_client.log"
 UBOND_PID_FILE="${SMOKE_TMPDIR}/ubond_client.pid"
 
-# Mata procesos ubond colgados, limpia IPs 10.10.10.x de utuns fantasma.
+# Mata procesos ubond colgados, limpia IPs ubond (10.10.20.x) de utuns
+# fantasma. Importante: NO tocamos 10.10.10.x — esa subnet pertenece a
+# mlvpn y un cleanup global rompería v1 corriendo simultáneamente
+# (REQ-NET-24).
 ubond_runner_cleanup_stale() {
     if pgrep -f "${UBOND_BIN}" >/dev/null 2>&1; then
         log_warn "Procesos ubond previos — terminando"
         pkill -9 -f "${UBOND_BIN}" || true
         sleep 1
     fi
-    # Limpia IPs colgadas en utun*.
+    local subnet_re="${UBOND_TUN_MAC_IP%.*}\\."  # ej. 10.10.20.
+    # Escapa puntos para regex literal.
+    subnet_re="${subnet_re//./\\.}"
     local i ip
     for i in $(seq 0 15); do
         ip="$(ifconfig "utun${i}" 2>/dev/null \
-                | awk '$1 == "inet" && $2 ~ /^10\.10\.10\./ { print $2; exit }')"
+                | awk -v re="^${subnet_re}" '$1 == "inet" && $2 ~ re { print $2; exit }')"
         if [[ -n "${ip}" ]]; then
-            log_warn "Limpiando ${ip} de utun${i} (zombie de run anterior)"
+            log_warn "Limpiando ${ip} de utun${i} (zombie ubond de run anterior)"
             ifconfig "utun${i}" inet delete 2>/dev/null || true
         fi
     done
@@ -79,13 +84,14 @@ ubond_runner_wait_auth() {
     return 1
 }
 
-# Detecta qué utunN tiene la IP del túnel. Devuelve el nombre por stdout
-# (ej. "utun7"), vacío si no hay.
+# Detecta qué utunN tiene la IP del túnel ubond. Devuelve el nombre por
+# stdout (ej. "utun7"), vacío si no hay.
 ubond_runner_find_utun_iface() {
+    local target="${UBOND_TUN_MAC_IP:-10.10.20.2}"
     local i ip
     for i in $(seq 0 15); do
         ip="$(ifconfig "utun${i}" 2>/dev/null \
-                | awk '$1 == "inet" && $2 == "'"${TUN_MAC_IP:-10.10.10.2}"'" { print $2; exit }')"
+                | awk '$1 == "inet" && $2 == "'"${target}"'" { print $2; exit }')"
         if [[ -n "${ip}" ]]; then
             echo "utun${i}"; return 0
         fi
@@ -93,7 +99,8 @@ ubond_runner_find_utun_iface() {
     return 1
 }
 
-# Para ubond limpio (kill + cleanup IPs colgadas).
+# Para ubond limpio (kill + cleanup IPs ubond colgadas). Importante: solo
+# limpiamos utuns con la IP de ubond (UBOND_TUN_MAC_IP), no las de mlvpn.
 ubond_runner_stop() {
     if [[ -f "${UBOND_PID_FILE}" ]]; then
         pkill -f "${UBOND_BIN}" 2>/dev/null || true
@@ -101,10 +108,12 @@ ubond_runner_stop() {
     sleep 1
     pkill -9 -f "${UBOND_BIN}" 2>/dev/null || true
     rm -f "${UBOND_PID_FILE}"
-    # Limpia IPs colgadas tras kill.
-    local i
+    local target="${UBOND_TUN_MAC_IP:-10.10.20.2}"
+    local i ip
     for i in $(seq 0 15); do
-        ifconfig "utun${i}" inet delete 2>/dev/null || true
+        ip="$(ifconfig "utun${i}" 2>/dev/null \
+                | awk '$1 == "inet" && $2 == "'"${target}"'" { print $2; exit }')"
+        [[ -n "${ip}" ]] && ifconfig "utun${i}" inet delete 2>/dev/null || true
     done
     log_info "ubond detenido"
 }

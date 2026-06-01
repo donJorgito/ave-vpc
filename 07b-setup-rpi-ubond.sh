@@ -109,8 +109,8 @@ ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     UBOND_PORT_2="${UBOND_PORT_2}" \
     UBOND_PORT_3="${UBOND_PORT_3}" \
     UBOND_SECRET="${UBOND_SECRET}" \
-    TUN_VPS_IP="${TUN_VPS_IP}" \
-    TUN_MAC_IP="${TUN_MAC_IP}" \
+    UBOND_TUN_VPS_IP="${UBOND_TUN_VPS_IP:-10.10.20.1}" \
+    UBOND_TUN_MAC_IP="${UBOND_TUN_MAC_IP:-10.10.20.2}" \
     TUN_MTU="${TUN_MTU}" \
     UBOND_PATCH_B64="${UBOND_PATCH_B64}" \
     bash <<'REMOTE_SCRIPT'
@@ -173,8 +173,8 @@ sudo tee /etc/ubond/ubond.conf > /dev/null <<EOF
 mode = "server"
 tuntap = "tun"
 interface_name = "ubond0"
-ip4 = "${TUN_VPS_IP}"
-ip4_gateway = "${TUN_MAC_IP}"
+ip4 = "${UBOND_TUN_VPS_IP}"
+ip4_gateway = "${UBOND_TUN_MAC_IP}"
 mtu = ${TUN_MTU}
 password = "${UBOND_SECRET}"
 timeout = 30

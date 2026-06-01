@@ -79,6 +79,12 @@ UBOND_PORT_1="${UBOND_PORT_1:-5083}"
 UBOND_PORT_2="${UBOND_PORT_2:-5084}"
 UBOND_PORT_3="${UBOND_PORT_3:-5085}"
 
+# Subnet del túnel ubond — DISTINTA de mlvpn (REQ-NET-24). Default
+# 10.10.20.x. Si config/env no la define todavía (se añadió en
+# REQ-NET-24), caemos al default para no romper en migración.
+UBOND_TUN_VPS_IP="${UBOND_TUN_VPS_IP:-10.10.20.1}"
+UBOND_TUN_MAC_IP="${UBOND_TUN_MAC_IP:-10.10.20.2}"
+
 # =====================================================================
 # Paso 1: Verificar Xcode CLT
 # =====================================================================
@@ -240,8 +246,8 @@ cat > "${GENERATED_DIR}/ubond.conf" <<EOF
 mode = "client"
 tuntap = "tun"
 interface_name = "ubond0"
-ip4 = "${TUN_MAC_IP}"
-ip4_gateway = "${TUN_VPS_IP}"
+ip4 = "${UBOND_TUN_MAC_IP}"
+ip4_gateway = "${UBOND_TUN_VPS_IP}"
 mtu = ${TUN_MTU}
 password = "${UBOND_SECRET}"
 timeout = 30

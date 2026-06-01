@@ -2,7 +2,7 @@
 # tools/lib/tests.sh
 #
 # Batería de tests sobre el túnel ubond ya levantado:
-#   - run_ping_test:       N pings ICMP a 10.10.10.1 (gateway interno).
+#   - run_ping_test:       N pings ICMP al gateway ubond (UBOND_TUN_VPS_IP).
 #   - run_curl_tunnel:     curl HTTP a 1.1.1.1 vía túnel; verifica HTTP/TCP.
 #   - run_throughput:      descarga 1MB de api.ipify.org; mide KB/s.
 #   - run_nc_udp_probe:    netcat UDP a RPi:5083 con payload pequeño;
@@ -18,7 +18,7 @@
 : "${AVEVPC_ROOT:?source _common.sh primero}"
 
 run_ping_test() {
-    local target="${TUN_VPS_IP:-10.10.10.1}"
+    local target="${UBOND_TUN_VPS_IP:-10.10.20.1}"
     local count="${1:-5}"
     log_info "PING ${target} ×${count}"
     local out rc

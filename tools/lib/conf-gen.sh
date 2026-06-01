@@ -54,8 +54,8 @@ conf_gen_write() {
 mode = "client"
 tuntap = "tun"
 interface_name = "ubond0"
-ip4 = "${TUN_MAC_IP:-10.10.10.2}"
-ip4_gateway = "${TUN_VPS_IP:-10.10.10.1}"
+ip4 = "${UBOND_TUN_MAC_IP:-10.10.20.2}"
+ip4_gateway = "${UBOND_TUN_VPS_IP:-10.10.20.1}"
 mtu = ${TUN_MTU:-1400}
 password = "${secret}"
 timeout = 30
