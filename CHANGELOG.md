@@ -10,6 +10,39 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Watchdog ubond v2 + auto-recovery (REQ-NET-26, 2026-06-02)
+
+Postmortem del incidente AVE 2026-06-01 (analizado con 3 agentes
+expertos en paralelo + verificador independiente). Causa primaria:
+v2+replicación cae bajo flap de cobertura, sin que ningún sistema lo
+detecte hasta que el usuario nota apps fallando y ejecuta `SOS.sh`
+manualmente.
+
+Bloque A implementado (Bloque B con fix C pendiente):
+
+- **`tools/ubond-watchdog.sh`** (nuevo) — daemon que vigila tres
+  señales: pgrep procesos ubond ausentes, ping a `UBOND_TUN_VPS_IP`
+  con threshold 4×5s, flag-file `generated/ubond_unhealthy` tocado
+  por el statuscommand. Tras umbral invoca `SOS.sh` con cooldown 60s
+  y notifica via `osascript`. Auto-recovery sin intervención humana.
+- **`04b-conectar-ubond.sh`**: pasa `--debug --verbose` al binario
+  (sin esto `generated/ubond.log` quedaba en 0 bytes — diagnóstico
+  ciego). Captura PID real con `pgrep "ubond: ubond0 [priv]"`, no del
+  subshell `tee`. Arranca el watchdog tras configurar el utun.
+- **`05b-desconectar-ubond.sh`**: mata el watchdog ANTES que ubond
+  para evitar double-cleanup. Usa pattern "ubond: " (con espacio)
+  que cubre todas las variantes de title.
+- **`SOS.sh`**: mata `tools/ubond-watchdog.sh` (sin esto el watchdog
+  detectaría "ubond ausente" y dispararía SOS en bucle). Limpia
+  `ubond_unhealthy` flag.
+- **`03b-setup-mac-ubond.sh`**: regenera `ubond_updown_mac.sh` propio
+  (no copia del de mlvpn). Log a `/tmp/ubond_updown.log` separado.
+  En `rtun_down`/`tuntap_down` toca `ubond_unhealthy` → señal
+  temprana al watchdog (más rápido que ping timeout).
+- REQ-NET-26 + test estático `test_REQ-NET-26_watchdog.sh` (12/12 PASS).
+
+Validación runtime requiere reproducir el incidente AVE — pendiente.
+
 ### SOS.sh + ubond-runner.sh — bugfix process title (AVE 2026-06-01)
 
 - `SOS.sh` no mataba procesos ubond lanzados por smoke-tests porque

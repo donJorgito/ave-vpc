@@ -71,6 +71,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-23](ave-vpc-REQ-NET-23-requirement.md) | Smoke-test adaptativo ubond (tools/smoke-*) |
 | [REQ-NET-24](ave-vpc-REQ-NET-24-requirement.md) | Coexistencia mlvpn↔ubond con subnets distintas |
 | [REQ-NET-25](ave-vpc-REQ-NET-25-requirement.md) | Per-link loss_tolerence/latency_tolerence en ubond (port mlvpn) |
+| [REQ-NET-26](ave-vpc-REQ-NET-26-requirement.md) | Watchdog ubond v2 con auto-recovery + visibilidad |
 
 ## Restricciones macOS (REQ-MAC)
 

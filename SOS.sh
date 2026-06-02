@@ -62,6 +62,9 @@ pkill -9 -f "tee.*ubond.log" 2>/dev/null
 # Watchers v2 si existieran como copias *_ubond.sh
 pkill -9 -f "seleccionar-mejor-enlace_ubond" 2>/dev/null
 pkill -9 -f "wifi-reintegrator_ubond" 2>/dev/null
+# REQ-NET-26: watchdog ubond v2. Si SOS lo lanza el usuario, el
+# watchdog NO debe sobrevivir y volver a invocar SOS en bucle.
+pkill -9 -f "tools/ubond-watchdog.sh" 2>/dev/null
 
 # Defensivo: matar también por PID files (cubre watchers cuyo nombre
 # pueda variar)
@@ -91,11 +94,12 @@ if [[ -n "${VPS_IP}" ]]; then
 fi
 
 # 4. Limpiar artefactos del túnel (PID files, confs activas v1+v2,
-#    IPs colgadas en utuns).
+#    IPs colgadas en utuns, health flag del watchdog REQ-NET-26).
 [[ -d "${GENERATED_DIR}" ]] && {
     rm -f "${GENERATED_DIR}"/*.pid 2>/dev/null
     rm -f "${GENERATED_DIR}/mlvpn_active.conf" 2>/dev/null
     rm -f "${GENERATED_DIR}/ubond_active.conf" 2>/dev/null
+    rm -f "${GENERATED_DIR}/ubond_unhealthy" 2>/dev/null
 }
 
 # Limpia 10.10.10.x colgada en utuns fantasma (visto tras crashes ubond

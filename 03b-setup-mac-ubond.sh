@@ -306,15 +306,57 @@ bandwidth_upload = 10000000
 EOF
 chmod 600 "${GENERATED_DIR}/ubond.conf"
 
-# Reusamos el updown_mac.sh de mlvpn (es exactamente la misma firma)
-if [[ -f "${GENERATED_DIR}/mlvpn_updown_mac.sh" ]]; then
-    cp "${GENERATED_DIR}/mlvpn_updown_mac.sh" "${GENERATED_DIR}/ubond_updown_mac.sh"
-    chmod 755 "${GENERATED_DIR}/ubond_updown_mac.sh"
-    echo "  ✓ ubond_updown_mac.sh creado (copia de mlvpn_updown_mac.sh)"
-else
-    echo "  AVISO: no existe mlvpn_updown_mac.sh — ejecuta 03-setup-mac.sh"
-    echo "         antes para generarlo, o crea ubond_updown_mac.sh manualmente."
-fi
+# ubond_updown_mac.sh: statuscommand propio (NO copia del de mlvpn).
+# Diferencias críticas vs mlvpn_updown_mac.sh:
+#   - Log a /tmp/ubond_updown.log (separado de v1 — incidente AVE
+#     2026-06-01 mostró post-mortem confuso por log compartido).
+#   - rtun_down/tuntap_down tocan generated/ubond_unhealthy → señal
+#     temprana al watchdog (REQ-NET-26) para auto-recovery.
+echo "=> Generando ubond_updown_mac.sh (REQ-NET-26 health flag)..."
+cat > "${GENERATED_DIR}/ubond_updown_mac.sh" <<UPDOWN_EOF
+#!/bin/bash
+# Statuscommand de ubond — invocado por el binario en eventos de túnel.
+#
+# Firma: script <interfaz> <evento> [nombre_enlace]
+#   \$1 = DEVICE   — utun asignado por kernel (ej. utun7)
+#   \$2 = evento   — tuntap_up | tuntap_down | rtun_up | rtun_down
+#   \$3 = (rtun_*) nombre del enlace
+#
+# Env vars: IP4, IP4_GATEWAY, MTU, DEVICE.
+
+IFACE="\$1"
+EVENT="\$2"
+LOG="/tmp/ubond_updown.log"
+HEALTH_FLAG="${GENERATED_DIR}/ubond_unhealthy"
+
+echo "\$(date) called: iface=\$IFACE event=\$EVENT IP4=\$IP4 IP4_GW=\$IP4_GATEWAY MTU=\$MTU" >> "\$LOG"
+
+case "\${EVENT}" in
+    tuntap_up)
+        # Asignar IP a la interfaz utun (las rutas /1 las gestiona 04b).
+        ifconfig "\${IFACE}" "\${IP4}" "\${IP4_GATEWAY}" mtu "\${MTU}" up
+        # Quitar flag por si quedó de un down anterior — túnel sano de nuevo.
+        rm -f "\${HEALTH_FLAG}"
+        ;;
+    tuntap_down)
+        # Túnel completo cae — señal al watchdog (REQ-NET-26).
+        touch "\${HEALTH_FLAG}"
+        ;;
+    rtun_down)
+        # Un enlace cayó. No es fatal por sí solo (otros pueden seguir up),
+        # pero si TODOS caen el watchdog lo detectará por ping fail.
+        # Tocamos flag igual — el watchdog lo descarta si está stale.
+        touch "\${HEALTH_FLAG}"
+        ;;
+    rtun_up)
+        # Enlace recuperado — si el flag estaba puesto, podría limpiarse.
+        # Pero solo si TODOS los links están up; el watchdog lo evaluará
+        # via ping. Aquí no tocamos el flag.
+        ;;
+esac
+UPDOWN_EOF
+chmod 755 "${GENERATED_DIR}/ubond_updown_mac.sh"
+echo "  ✓ ubond_updown_mac.sh creado (log /tmp/ubond_updown.log + health flag)"
 
 # =====================================================================
 # Resumen

@@ -24,10 +24,22 @@ if [[ -f "${CONFIG_FILE}" ]]; then
     source "${CONFIG_FILE}"
 fi
 
-echo "=> Matando procesos ubond y watchers..."
-pkill -f "ubond: ubond0" 2>/dev/null || true
+echo "=> Matando watchdog (REQ-NET-26) y procesos ubond..."
+# Watchdog primero — si lo dejamos vivo tras matar ubond, su check
+# "proceso ubond ausente" disparará SOS.sh y haría double-cleanup.
+if [[ -f "${GENERATED_DIR}/ubond_watchdog.pid" ]]; then
+    WPID="$(cat "${GENERATED_DIR}/ubond_watchdog.pid" 2>/dev/null || true)"
+    [[ -n "${WPID}" ]] && kill "${WPID}" 2>/dev/null || true
+    rm -f "${GENERATED_DIR}/ubond_watchdog.pid"
+fi
+pkill -f "tools/ubond-watchdog.sh" 2>/dev/null || true
+
+# El pattern "ubond: " (con espacio) cubre las dos variantes de title:
+# "ubond: ubond0 [priv]" (04b con --name) y "ubond: ubond [priv]"
+# (smoke-tests sin --name). Bug detectado en AVE 2026-06-01.
+pkill -f "ubond: " 2>/dev/null || true
 sleep 1
-pkill -9 -f "ubond: ubond0" 2>/dev/null || true
+pkill -9 -f "ubond: " 2>/dev/null || true
 pkill -9 -f "tee.*ubond.log" 2>/dev/null || true
 
 if [[ -f "${GENERATED_DIR}/ubond.pid" ]]; then
@@ -49,8 +61,9 @@ if [[ -n "${VPS_IP:-}" ]]; then
     done
 fi
 
-echo "=> Limpiando ubond_active.conf..."
+echo "=> Limpiando ubond_active.conf y health flag..."
 rm -f "${GENERATED_DIR}/ubond_active.conf" 2>/dev/null || true
+rm -f "${GENERATED_DIR}/ubond_unhealthy" 2>/dev/null || true
 
 echo ""
 if pgrep -f "ubond: ubond0" >/dev/null 2>&1; then

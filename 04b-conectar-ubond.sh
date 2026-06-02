@@ -264,14 +264,28 @@ touch "${GENERATED_DIR}/ubond.log"
 # fe80::%utunN, no la cabecera utunN:).
 UTUN_PRE=$(ifconfig -l | tr ' ' '\n' | grep -E '^utun[0-9]+$' | sort)
 
+# --debug --verbose: imprescindibles para que generated/ubond.log tenga
+# contenido (sin --debug, ubond va a syslog y macOS unified log filtra
+# log_info por nivel, dejando ubond.log en 0 bytes — incidente AVE
+# 2026-06-01).
 /usr/local/sbin/ubond \
     --config "${GENERATED_DIR}/ubond_active.conf" \
     --name ubond0 \
     --user ubond \
+    --debug --verbose \
     2>&1 | tee "${GENERATED_DIR}/ubond.log" &
 
-UBOND_PID=$!
-echo "${UBOND_PID}" > "${GENERATED_DIR}/ubond.pid"
+# $! es el PID del subshell que ejecuta `tee`, NO del binario ubond.
+# Capturamos el PID real con pgrep tras dar tiempo a setproctitle.
+TEE_PID=$!
+sleep 1
+UBOND_PID="$(pgrep -f "ubond: ubond0 \[priv\]" | head -1)"
+if [[ -n "${UBOND_PID}" ]]; then
+    echo "${UBOND_PID}" > "${GENERATED_DIR}/ubond.pid"
+else
+    # Fallback al PID del tee (mejor que nada — bug AVE 2026-06-01).
+    echo "${TEE_PID}" > "${GENERATED_DIR}/ubond.pid"
+fi
 
 # Detectar utun y configurar IP
 echo "  Esperando autenticación de enlaces..."
@@ -291,6 +305,17 @@ if [[ -n "${UTUN_IFACE}" ]]; then
     route -n add -net 0.0.0.0/1   -interface "${UTUN_IFACE}" 2>/dev/null || true
     route -n add -net 128.0.0.0/1 -interface "${UTUN_IFACE}" 2>/dev/null || true
     echo "  Túnel ubond activo en ${UTUN_IFACE}"
+
+    # REQ-NET-26: arrancar watchdog de salud. Detecta pérdida del túnel
+    # (ping gateway interno KO repetido o updown reportando rtun_down) y
+    # dispara SOS.sh automáticamente. Sin él, el usuario tiene que
+    # detectar el fallo manualmente — patrón observado en AVE 2026-06-01.
+    if [[ -x "${SCRIPT_DIR}/tools/ubond-watchdog.sh" ]]; then
+        echo "  Arrancando watchdog (auto-recovery via SOS.sh si pierde gateway)..."
+        UBOND_TUN_VPS_IP="${UBOND_TUN_VPS_IP}" \
+            "${SCRIPT_DIR}/tools/ubond-watchdog.sh" >/dev/null 2>&1 &
+        echo "    watchdog pid=$!"
+    fi
 else
     echo "  AVISO: No se pudo detectar utun de ubond — ningún enlace autenticó"
     echo "  Comprueba: tail -f ${GENERATED_DIR}/ubond.log"
