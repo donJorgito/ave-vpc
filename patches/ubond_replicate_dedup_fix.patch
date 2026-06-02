@@ -14,7 +14,22 @@
 
 --- a/src/ubond.c
 +++ b/src/ubond.c
-@@ -456,8 +456,12 @@
+@@ -108,6 +108,14 @@
+     p=malloc(sizeof (struct ubond_pkt_t));
+   }
+   pool_out++;
++  /* REQ-NET-27: zerar `replicated` aquí. El campo se añadió a
++   * ubond_pkt_t para distinguir clones del replicate filter, pero el
++   * pool reusa slots — sin esto, un clone liberado vuelve al pool con
++   * replicated=1 y el siguiente paquete normal hereda el flag → se
++   * reproduce el mismo síntoma de H1 esporádicamente (regresión
++   * detectada por staff-review post-merge). Defensive: solo este
++   * campo, no zero todo el struct (los caller asignan los demás). */
++  if (p) p->replicated = 0;
+   return p;
+ };
+ void ubond_pkt_release(ubond_pkt_t *p)
+@@ -456,8 +464,12 @@
      } else {
          pkt->len=len; // stamp the wire length
 
@@ -29,7 +44,7 @@
            ubond_pkt_release(pkt);
            return;
          }
-@@ -649,7 +653,13 @@
+@@ -649,7 +661,13 @@
          ubond_replicate_dedup_check(proto->data_seq)) {
          log_debug("replicate", "%s descartando duplicado data_seq=%lu",
                    tun->name, proto->data_seq);
@@ -44,7 +59,7 @@
      }
  #endif
      if (proto->timestamp != (uint16_t)-1) {
-@@ -695,7 +705,14 @@
+@@ -695,7 +713,14 @@
      set_reorder(pkt);
 
      if (pkt->p.type!=UBOND_PKT_DATA_RESEND) {
@@ -60,7 +75,7 @@
          proto->data_seq = data_seq;
        } else {
          proto->data_seq = 0;
-@@ -810,7 +827,11 @@
+@@ -810,7 +835,11 @@
        // we are here when we succeed to send the packet
 
        if (pkt->p.type!=UBOND_PKT_DATA_RESEND) {
@@ -73,7 +88,7 @@
        }
  //      if (pkt->p.reorder) {
  //        printf("Sending data seq %lu on %s (tun seq %lu)\n", pkt->p.data_seq, tun->name, pkt->p.tun_seq);
-@@ -1863,11 +1884,23 @@
+@@ -1863,11 +1892,23 @@
        if (ubond_pkt_list_is_full(&t->hpsbuf)) continue;
 
        ubond_pkt_t *clone = ubond_pkt_get();

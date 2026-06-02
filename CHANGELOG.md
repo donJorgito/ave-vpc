@@ -10,6 +10,20 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Fix regresión REQ-NET-27 — `replicated` uninit en pool reuse (2026-06-02)
+
+Staff-review independiente post-merge detectó regresión bloqueante:
+el campo `int replicated` añadido a `ubond_pkt_t` no se inicializaba
+en `ubond_pkt_get()`. Como el pool reusa slots de paquetes liberados,
+un clone (`replicated=1`) que vuelve al pool y sale para un paquete
+normal heredaba el flag → reproducía intermitentemente el mismo
+síntoma de H1 (data_seq divergente), con dificultad de debug porque
+es esporádico ("a veces falla, a veces no").
+
+Fix de una línea en `ubond_pkt_get()` (`build/ubond/src/ubond.c`):
+`if (p) p->replicated = 0;` antes de `return p;`. Patch regenerado a
+114 líneas (era 99). Mac+RPi redeployed via `make install` y 07b.
+
 ### Fix replicación selectiva — H1+H2+NULL (REQ-NET-27, 2026-06-02)
 
 Bloque B del postmortem AVE 2026-06-01. Causas C1+C2+C3 corregidas.
