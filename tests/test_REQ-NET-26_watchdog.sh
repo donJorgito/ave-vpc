@@ -107,4 +107,25 @@ else
         "updown handler no toca HEALTH_FLAG en eventos down"
 fi
 
+# 13. REGRESIÓN BLOQUEANTE: el watchdog DEBE pingar a través del utun
+# de ubond (ifscope `-b utunN`), NO global. La subnet del túnel puede
+# colisionar con redes corporativas reales (observado oficina Roche
+# 2026-06-02: un host random respondía a 10.10.20.1 con ttl=239,
+# dando falso "túnel sano" sin haberlo).
+if grep -qE 'ping .*-b "?\$\{?UTUN\}?"?' "${WATCHDOG}"; then
+    junit_pass "watchdog_pings_via_utun_ifscope"
+else
+    junit_fail "watchdog_pings_global" \
+        "watchdog hace ping global — regresará al falso negativo si la subnet túnel colisiona con red corp"
+fi
+
+# 14. El watchdog debe tratar "sin utun" como fail (túnel caído por
+# definición), no saltar el check.
+if grep -qE 'sin utun ubond.*túnel caído|no utun.*tunnel down' "${WATCHDOG}"; then
+    junit_pass "watchdog_treats_no_utun_as_down"
+else
+    junit_fail "watchdog_skips_no_utun" \
+        "watchdog no trata ausencia de utun como fallo del túnel"
+fi
+
 junit_finalize

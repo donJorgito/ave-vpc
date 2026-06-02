@@ -106,4 +106,34 @@ else
     junit_skip "binary_not_built" "build/ubond/src/ubond no existe (skip)"
 fi
 
+# 12. REGRESIÓN BLOQUEANTE: el patch DEBE inicializar `replicated = 0`
+# en ubond_pkt_get(). Sin esto, el pool reuse hereda replicated=1 de
+# clones liberados → reproduce H1 esporádicamente. Detectado por
+# staff-review post-merge 2026-06-02; fix de una línea en el patch.
+# Verificamos que esa línea está presente en el patch.
+if grep -qE '^\+.*p->replicated *= *0' "${PATCH}"; then
+    junit_pass "patch_initializes_replicated_in_pool_get"
+else
+    junit_fail "regression_replicated_uninit" \
+        "patch NO inicializa replicated=0 en ubond_pkt_get — pool reuse heredaría flag de clones liberados (regresión 2026-06-02)"
+fi
+
+# 13. La inicialización debe estar DENTRO de la función ubond_pkt_get
+# (contexto), no aleatoriamente en otra parte. Heurística: la línea
+# `p->replicated = 0` debe aparecer en un hunk que también referencia
+# `ubond_pkt_get` o `pool_out` (variable cercana). Si solo aparece en
+# clone path, el pool seguiría sin zerar el campo.
+if awk '
+    /^@@/ { context_func = ""; in_pool_get = 0 }
+    /^@@.*ubond_pkt_get/ { in_pool_get = 1 }
+    /pool_out\+\+/ && /^[ +]/ { in_pool_get = 1 }
+    in_pool_get && /^\+.*p->replicated *= *0/ { found = 1 }
+    END { exit !found }
+' "${PATCH}"; then
+    junit_pass "replicated_init_inside_pkt_get"
+else
+    junit_fail "replicated_init_misplaced" \
+        "p->replicated = 0 no está en el hunk de ubond_pkt_get (puede estar mal ubicado y no proteger el pool reuse)"
+fi
+
 junit_finalize

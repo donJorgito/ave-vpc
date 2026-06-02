@@ -10,6 +10,37 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Fix watchdog REQ-NET-26 — ping global → ifscope (oficina 2026-06-02)
+
+Validación runtime del watchdog en oficina Roche reveló bug de
+diseño: el watchdog hacía `ping ${UBOND_TUN_VPS_IP}` global. La
+subnet del túnel `10.10.20.0/24` puede colisionar con redes
+corporativas reales — observado: un host de Roche respondía a
+`10.10.20.1` con ttl=239 cuando el túnel NO existía, dando falso
+"túnel sano".
+
+Fix:
+
+- Watchdog ahora detecta el utun cuya `inet` matchea
+  `UBOND_TUN_MAC_IP` (10.10.20.2 default) y pinguea con
+  `-b utun${N}` (ifscope) — solo responde si el túnel está vivo
+  realmente.
+- Si NO hay utun con esa IP, el túnel está caído por definición —
+  fail++ inmediato.
+- Refactor del bloque "3) Ping al gateway" en
+  `tools/ubond-watchdog.sh`.
+
+Tests `test_REQ-NET-26_watchdog.sh` reforzados con 2 checks nuevos
+(14 total): `watchdog_pings_via_utun_ifscope` y
+`watchdog_treats_no_utun_as_down`. Pasan ambos.
+
+**Validación runtime ejecutada (post-fix)**:
+
+- Test A: kill -9 ubond → watchdog detecta proceso ausente → SOS
+  auto-disparado en 4s. PASS.
+- Test B: ubond proceso vivo pero sin utun (no auth) → watchdog
+  detecta sin-utun → SOS tras 2 ticks. PASS.
+
 ### Fix regresión REQ-NET-27 — `replicated` uninit en pool reuse (2026-06-02)
 
 Staff-review independiente post-merge detectó regresión bloqueante:

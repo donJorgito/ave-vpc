@@ -98,16 +98,37 @@ while :; do
         fi
     fi
 
-    # 3) Ping al gateway interno. Si falla, contar.
-    if ping -c 1 -t "${PING_TIMEOUT_S}" "${TARGET}" >/dev/null 2>&1; then
+    # 3) Ping al gateway interno por dentro del utun de ubond.
+    #
+    # ATENCIÓN: NO usar `ping ${TARGET}` global. La subnet del túnel
+    # (10.10.20.0/24) puede colisionar con redes corporativas reales —
+    # observado en oficina Roche, donde un host random respondía a
+    # 10.10.20.1 con ttl=239, dando falso "túnel sano" sin haberlo.
+    # Bug detectado en test B 2026-06-02. El ping debe forzarse por
+    # la utun del túnel; si no existe utun con UBOND_TUN_MAC_IP, el
+    # túnel está caído por definición.
+    UTUN=""
+    for i in $(seq 0 15); do
+        if ifconfig "utun${i}" 2>/dev/null \
+                | awk '$1 == "inet" && $2 == "'"${UBOND_TUN_MAC_IP:-10.10.20.2}"'" {found=1} END {exit !found}'; then
+            UTUN="utun${i}"
+            break
+        fi
+    done
+
+    if [[ -z "${UTUN}" ]]; then
+        fails=$((fails + 1))
+        log "health fail ${fails}/${FAIL_THRESHOLD} (sin utun ubond — túnel caído)"
+    elif ping -c 1 -t "${PING_TIMEOUT_S}" -b "${UTUN}" "${TARGET}" >/dev/null 2>&1; then
         if (( fails > 0 )); then
             log "recuperado tras ${fails} fallos consecutivos"
         fi
         fails=0
         continue
+    else
+        fails=$((fails + 1))
+        log "health fail ${fails}/${FAIL_THRESHOLD} (ping ${TARGET} via ${UTUN} KO)"
     fi
-    fails=$((fails + 1))
-    log "health fail ${fails}/${FAIL_THRESHOLD} (ping ${TARGET})"
 
     if (( fails >= FAIL_THRESHOLD )); then
         if trigger_sos "sin respuesta ${TARGET} ${fails}×${TICK_S}s"; then
