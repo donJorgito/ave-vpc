@@ -72,6 +72,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-24](ave-vpc-REQ-NET-24-requirement.md) | Coexistencia mlvpn↔ubond con subnets distintas |
 | [REQ-NET-25](ave-vpc-REQ-NET-25-requirement.md) | Per-link loss_tolerence/latency_tolerence en ubond (port mlvpn) |
 | [REQ-NET-26](ave-vpc-REQ-NET-26-requirement.md) | Watchdog ubond v2 con auto-recovery + visibilidad |
+| [REQ-NET-27](ave-vpc-REQ-NET-27-requirement.md) | Fix replicación selectiva (H1+H2+NULL check) |
 
 ## Restricciones macOS (REQ-MAC)
 

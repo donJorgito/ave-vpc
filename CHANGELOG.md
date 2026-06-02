@@ -10,6 +10,33 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Fix replicación selectiva — H1+H2+NULL (REQ-NET-27, 2026-06-02)
+
+Bloque B del postmortem AVE 2026-06-01. Causas C1+C2+C3 corregidas.
+
+- **`patches/ubond_replicate_dedup_fix.patch`** (~99 líneas): toca
+  `src/pkt.h` (1 hunk) y `src/ubond.c` (5 hunks).
+- **H1** (data_seq sobrescrito): añadido `int replicated` a struct
+  `ubond_pkt_t` (campo externo, NO al wire format). En
+  `ubond_rtun_choose` se marca `clone->replicated = 1`. En
+  `ubond_rtun_send` se chequea: si `pkt->replicated`, no sobreescribir
+  `proto->data_seq` ni incrementar el global → todos los clones
+  llegan al receptor con el MISMO `data_seq` → la dedup LRU matchea.
+- **H2** (return 0 vs < 0): cambiado contrato de `ubond_protocol_read`:
+  `< 0` error, `= 0` válido sigue, `> 0` consumido (dedup hit). Caller
+  en `ubond_rtun_read` cortocircuita con `!= 0`. Ya no se contabilizan
+  duplicados como pérdida en reorder.
+- **NULL check**: añadido `if (!clone) continue;` en clone path con
+  log `pool exhausted, skipping clone for %s` (defensive).
+- **03b**: aplica como Patch 5 en su chain.
+- **07b**: transporta vía `UBOND_PATCH3_B64` y aplica al final.
+- **Mac y RPi binarios actualizados** vía `make install` y 07b
+  reprovision (verificado con `strings | grep "pool exhausted"`).
+- REQ-NET-27 + test estático `test_REQ-NET-27_replicate_dedup_fix.sh`
+  (11/11 PASS).
+
+Validación runtime requiere reproducir trayecto AVE — pendiente.
+
 ### Watchdog ubond v2 + auto-recovery (REQ-NET-26, 2026-06-02)
 
 Postmortem del incidente AVE 2026-06-01 (analizado con 3 agentes

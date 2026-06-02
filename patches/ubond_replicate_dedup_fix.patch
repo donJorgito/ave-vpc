@@ -1,0 +1,99 @@
+--- a/src/pkt.h
++++ b/src/pkt.h
+@@ -38,6 +38,11 @@
+   ubond_proto_t p;
+   ev_tstamp timestamp;
+   uint16_t len; // wire read length
++  /* REQ-NET-27: marca paquetes clonados por replicate filter (REQ-NET-12).
++   * Si =1, ubond_rtun_send NO debe sobreescribir p.data_seq (ya viene
++   * asignado en ubond_rtun_choose) NI incrementar el global data_seq
++   * en el send-success. Cero significa paquete normal. NO va al wire. */
++  int replicated;
+   TAILQ_ENTRY(ubond_pkt_t) entry;
+ } ubond_pkt_t;
+
+--- a/src/ubond.c
++++ b/src/ubond.c
+@@ -456,8 +456,12 @@
+     } else {
+         pkt->len=len; // stamp the wire length
+
+-        /* validate the received packet */
+-        if (ubond_protocol_read(tun, pkt) < 0) {
++        /* validate the received packet — REQ-NET-27 contract:
++         *   < 0 = error → liberar y volver
++         *   > 0 = consumido internamente (dedup hit) → liberar y volver
++         *   = 0 = válido, seguir procesando */
++        int pr = ubond_protocol_read(tun, pkt);
++        if (pr != 0) {
+           ubond_pkt_release(pkt);
+           return;
+         }
+@@ -649,7 +653,13 @@
+         ubond_replicate_dedup_check(proto->data_seq)) {
+         log_debug("replicate", "%s descartando duplicado data_seq=%lu",
+                   tun->name, proto->data_seq);
+-        return 0;
++        /* REQ-NET-27: contrato del retorno actualizado:
++         *   < 0  = error de protocolo (parsing, crypto, etc).
++         *   = 0  = paquete válido, caller continúa procesando.
++         *   > 0  = paquete consumido internamente (dedup hit), caller
++         *          NO debe continuar (sino se contabiliza como pérdida
++         *          en reorder y dispara request_resend espurio). */
++        return 1;
+     }
+ #endif
+     if (proto->timestamp != (uint16_t)-1) {
+@@ -695,7 +705,14 @@
+     set_reorder(pkt);
+
+     if (pkt->p.type!=UBOND_PKT_DATA_RESEND) {
+-      if (pkt->p.reorder) {
++      /* REQ-NET-27: si el paquete viene de replicate (clone), su
++       * proto->data_seq ya fue asignado UNA vez en ubond_rtun_choose
++       * para que TODOS los clones compartan el mismo data_seq y la
++       * dedup LRU del receptor pueda matchear. NO sobreescribir aquí
++       * con el global, que ya avanzó tras el clone anterior. */
++      if (pkt->replicated) {
++        /* mantener proto->data_seq tal como vino del clone */
++      } else if (pkt->p.reorder) {
+         proto->data_seq = data_seq;
+       } else {
+         proto->data_seq = 0;
+@@ -810,7 +827,11 @@
+       // we are here when we succeed to send the packet
+
+       if (pkt->p.type!=UBOND_PKT_DATA_RESEND) {
+-        if (pkt->p.reorder) data_seq++;
++        /* REQ-NET-27: data_seq global SOLO avanza una vez por paquete
++         * lógico, no una por cada clon. ubond_rtun_choose ya hizo
++         * data_seq++ al asignar el seq al primer clone — saltarlo aquí
++         * para los clones posteriores. */
++        if (pkt->p.reorder && !pkt->replicated) data_seq++;
+       }
+ //      if (pkt->p.reorder) {
+ //        printf("Sending data seq %lu on %s (tun seq %lu)\n", pkt->p.data_seq, tun->name, pkt->p.tun_seq);
+@@ -1863,11 +1884,23 @@
+       if (ubond_pkt_list_is_full(&t->hpsbuf)) continue;
+
+       ubond_pkt_t *clone = ubond_pkt_get();
++      /* REQ-NET-27: defensive — pool exhausto puede devolver NULL
++       * (ubond_pkt_get hace malloc en fallback, que también puede
++       * fallar bajo presión de memoria). Saltar este link en vez de
++       * crashear. */
++      if (!clone) {
++        log_warnx("replicate", "pool exhausted, skipping clone for %s",
++                  t->name);
++        continue;
++      }
+       /* Copia COMPLETA: p (payload+headers), timestamp y len (wire
+        * length, crítica para enviar). El campo entry (TAILQ) se
+        * sobrescribe inmediatamente por UBOND_TAILQ_INSERT_HEAD,
+        * así que copiarlo no hace daño. */
+       memcpy(clone, spkt, sizeof(*spkt));
++      /* REQ-NET-27: marcar como replicado para que ubond_rtun_send NO
++       * reasigne data_seq ni incremente el global por cada clone. */
++      clone->replicated = 1;
+       UBOND_TAILQ_INSERT_HEAD(&t->hpsbuf, clone);
+       copies++;
+     }
