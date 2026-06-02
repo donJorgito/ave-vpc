@@ -10,6 +10,57 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Monitor continuo del cliente ubond v2 (REQ-NET-28, 2026-06-02 oficina)
+
+Postmortem multi-agente del incidente AVE 2026-06-01: el usuario explicitó
+"el monitor era un requisito, no lo estamos cumpliendo". 5 agentes
+expertos (C/network design, bash impl, ALCOA++ auditor, IDLC v6 auditor,
+runbook reviewer) trabajaron en paralelo para construir el monitor
+correctamente.
+
+- **`tools/ave-monitor.sh`** (~700 LOC bash, ALCOA++ compliant):
+  - 8 categorías de métricas: estado links, cobertura física, salud
+    túnel, tráfico real, throughput muestreado, eventos del binario,
+    watchdog/SOS, sistema.
+  - Output dual: stdout legible (color tty) + NDJSON estructurado +
+    raw log de eventos.
+  - Cadencia: tick 10s default, throughput cada 6 ticks, snapshot
+    expandido cada 30 ticks, rotación size 10MB.
+  - 9 detecciones de anomalías (link_auth=0, ping<50%, throughput<50KB/s,
+    iface_change, public_ip drift, TRIGGER SOS, wifi flap, utun ausente
+    con auth>0, TTL>64).
+
+- **`tools/smoke-replicate.sh`** (REQ-NET-23 ext, ~180 LOC): orquestador
+  on-demand para validar runtime de la dedup LRU (REQ-NET-27). Lanza
+  ubond con [filters.replicate] activa, genera tráfico ICMP+UDP que
+  matchea filtros, recolecta journal RPi via SSH para contar dedup hits.
+  4 veredictos posibles incluyendo "regresión replicated uninit".
+
+- **`docs/v2-ubond/07-trayecto-runbook.md`** (1143 palabras): runbook
+  operativo definitivo para el AVE. Pre-flight → arranque (orden físico)
+  → monitorización → fallos (3 casos) → desconexión → postmortem con
+  tabla síntoma→log→qué buscar.
+
+- **ALCOA++ compliance** (3 fixes bloqueantes corregidos tras auditor
+  externo):
+  - **Attributable**: NDJSON emite `session_start` inicial con `host`,
+    `user`, `git_sha`, `ubond_version`, `monitor_pid`, `tick_s`. Cada
+    fichero correlacionable post-mortem.
+  - **Contemporaneous**: `sync` periódico cada 6 writes (~60s con
+    tick=10s). Crash del Mac no pierde más de 1 min de eventos.
+  - **Accurate**: distingue `null` (no medido — ej. ping bloqueado por
+    red caída) de `0` (medido a cero loss). El consumidor `jq` puede
+    filtrar `select(.ping.sent != null)`.
+
+- **IDLC v6**: 4 shellcheck warnings corregidos (SC2046 array, SC2034
+  globals con disable doc, SC2155 split declarations). Pre-commit hooks
+  pasan limpio.
+
+- **REQ-NET-28** + test estático (18/18 PASS, 3 nuevos checks
+  específicos para ALCOA++ Attributable/Contemporaneous/Accurate).
+
+Validación runtime requiere trayecto AVE — pendiente vuelta.
+
 ### Fix watchdog REQ-NET-26 — ping global → ifscope (oficina 2026-06-02)
 
 Validación runtime del watchdog en oficina Roche reveló bug de

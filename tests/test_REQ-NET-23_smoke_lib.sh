@@ -14,7 +14,7 @@ all_present=1
 for f in _common.sh env-detect.sh conf-gen.sh tcpdump.sh ubond-runner.sh tests.sh report.sh; do
     [ -r "${LIB_DIR}/${f}" ] || { all_present=0; break; }
 done
-for f in smoke-casa.sh smoke-cafe.sh smoke-ave.sh; do
+for f in smoke-casa.sh smoke-cafe.sh smoke-ave.sh smoke-replicate.sh; do
     [ -x "${ROOT}/tools/${f}" ] || { all_present=0; break; }
 done
 if [ "${all_present}" = 1 ]; then

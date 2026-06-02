@@ -73,6 +73,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-25](ave-vpc-REQ-NET-25-requirement.md) | Per-link loss_tolerence/latency_tolerence en ubond (port mlvpn) |
 | [REQ-NET-26](ave-vpc-REQ-NET-26-requirement.md) | Watchdog ubond v2 con auto-recovery + visibilidad |
 | [REQ-NET-27](ave-vpc-REQ-NET-27-requirement.md) | Fix replicación selectiva (H1+H2+NULL check) |
+| [REQ-NET-28](ave-vpc-REQ-NET-28-requirement.md) | Monitor continuo del cliente ubond v2 (ALCOA++) |
 
 ## Restricciones macOS (REQ-MAC)
 
