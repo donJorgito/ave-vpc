@@ -10,6 +10,30 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### 08-monitor.py dual-mode mlvpn/ubond (2026-06-03)
+
+El monitor TUI real-time pasa a soportar v1 (mlvpn) y v2 (ubond) con
+auto-detect del daemon corriendo. Antes solo v1 — al lanzarlo con
+ubond activo no mostraba nada útil.
+
+Cambios:
+
+- `DAEMON_INFO` dict con parámetros por daemon (subnet, proctitle,
+  conf, labels). Añadir wireguard u otro requeriría solo una entry.
+- `detect_daemon()` con preferencia ubond + warning explícito si
+  ambos vivos (anomalía de transición v1→v2 o SOS fallido).
+- `check_replicate_active(daemon)` nueva: detecta `[filters.replicate]`
+  poblada → modo REPLICATE (vs BONDING/FAILOVER previos). Lee
+  `ubond_active.conf` con sudo -n cat fallback (root-only en sistemas
+  reales) o `ubond.conf` user-readable.
+- Modo REPLICATE en `draw()` con label azul (vs verde BONDING /
+  amarillo FAILOVER).
+- `--daemon mlvpn|ubond|auto` CLI flag (default auto).
+
+Revisado por: agente C+networking expert (PASA con caveats menores
+incorporados) + agente IDLC v6/ALCOA++ auditor (APROBADO con caveats
+incorporados — sudo fallback, warning ambos daemons, este CHANGELOG).
+
 ### Resolver DNS resiliente + endpoints configurables (2026-06-03 oficina)
 
 Durante setup pre-test C en oficina Roche, el DNS corp no resolvía

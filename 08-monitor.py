@@ -1,23 +1,37 @@
 #!/usr/bin/env python3
 ###############################################################################
-# 08-monitor.py — Monitor de bonding mlvpn en tiempo real
+# 08-monitor.py — Monitor TUI real-time de bonding mlvpn (v1) o ubond (v2)
 #
-# DONDE SE EJECUTA: En tu Mac (con mlvpn activo)
+# DONDE SE EJECUTA: En tu Mac (con mlvpn o ubond activo)
 #
-# QUE MUESTRA:
-#   - Throughput útil del túnel mlvpn leído del utun (sin overhead UDP)
-#   - Throughput de cada enlace físico (iPhone, Pixel, WiFi si activo)
-#   - Estado de cada link: ACTIVO | AUTH... | sin IP
-#   - Suma encapsulada (tráfico real por las físicas, incluye overhead)
-#   - Actualización cada segundo
+# QUE MUESTRA (auto-adapta según daemon detectado):
+#   v1 mlvpn:
+#     - Modo BONDING o FAILOVER (lee fallback_only de mlvpn_active.conf)
+#     - Throughput utun (10.10.10.2) + por enlace físico
+#     - Estado links: ACTIVO / AUTH... / sin IP
+#   v2 ubond:
+#     - Modo BONDING o REPLICATE (detecta [filters.replicate] activa)
+#     - Throughput utun (10.10.20.2) + por enlace físico
+#     - Estado links: ACTIVO / AUTH... / sin IP
 #
 # USO:
-#   ./08-monitor.py
-#   ./08-monitor.py --interval 2   # actualizar cada 2 segundos
+#   ./08-monitor.py                    # auto-detect mlvpn o ubond
+#   ./08-monitor.py --daemon mlvpn     # forzar v1
+#   ./08-monitor.py --daemon ubond     # forzar v2
+#   ./08-monitor.py --interval 2       # tick 2s (default 1s)
 #
 # REQUISITOS:
 #   - Python 3 (incluido en macOS)
-#   - mlvpn corriendo (./04-conectar.sh ejecutado)
+#   - mlvpn vivo (./04-conectar.sh) o ubond vivo (./04b-conectar-ubond.sh)
+#
+# COMPLEMENTARIO A tools/ave-monitor.sh:
+#   - 08-monitor.py: TUI real-time para uso humano interactivo durante
+#     viaje. No persiste — clear() cada tick. Útil cuando quieres VER
+#     el estado en directo.
+#   - tools/ave-monitor.sh: NDJSON logger background para forensic
+#     post-incident (ALCOA++). No tiene display, escribe a fichero.
+#     Útil para reconstruir QUÉ pasó después.
+#   Pueden correr simultáneamente sin interferir.
 ###############################################################################
 
 import sys
@@ -26,8 +40,7 @@ import subprocess
 import os
 import re
 import argparse
-import socket
-from collections import defaultdict
+
 
 # ─── Colores ──────────────────────────────────────────────────────────────────
 RESET  = '\033[0m'
@@ -40,6 +53,60 @@ DIM    = '\033[2m'
 BLUE   = '\033[94m'
 
 
+# ─── Daemon abstraction ───────────────────────────────────────────────────────
+# Toda la diferencia v1/v2 vive aquí. Si añades daemons (ej. wireguard),
+# añade entrada con sus parámetros y el resto del script lo soporta.
+DAEMON_INFO = {
+    'mlvpn': {
+        'tun_subnet': '10.10.10.',
+        'tun_ip': '10.10.10.2',
+        'proc_pattern': 'mlvpn: mlvpn0',
+        'active_conf': 'mlvpn_active.conf',
+        'header_label': 'mlvpn v1 monitor',
+        'tunnel_label': 'TÚNEL mlvpn',
+        'connect_hint': './04-conectar.sh',
+    },
+    'ubond': {
+        'tun_subnet': '10.10.20.',
+        'tun_ip': '10.10.20.2',
+        'proc_pattern': 'ubond: ubond0',
+        'active_conf': 'ubond_active.conf',
+        'header_label': 'ubond v2 monitor',
+        'tunnel_label': 'TÚNEL ubond',
+        'connect_hint': './04b-conectar-ubond.sh',
+    },
+}
+
+
+def detect_daemon():
+    """Auto-detecta qué daemon está corriendo. Si ambos vivos: prefiere
+    ubond (v2 es el target post-migración) Y emite warning explícito
+    porque indica estado anómalo (transición v1→v2 incompleta o SOS
+    fallido). Si ninguno: None.
+
+    Devuelve tupla (daemon, both_alive_warning).
+    """
+    try:
+        out = subprocess.check_output(['ps', 'aux'], text=True)
+    except Exception:
+        return (None, False)
+    has_ubond = any(
+        'ubond: ubond0' in line and '[priv]' not in line
+        for line in out.splitlines()
+    )
+    has_mlvpn = any(
+        'mlvpn: mlvpn0' in line and '[priv]' not in line
+        for line in out.splitlines()
+    )
+    if has_ubond and has_mlvpn:
+        return ('ubond', True)
+    if has_ubond:
+        return ('ubond', False)
+    if has_mlvpn:
+        return ('mlvpn', False)
+    return (None, False)
+
+
 def get_interface_stats():
     """Lee bytes in/out de todas las interfaces via netstat -ibn.
 
@@ -48,7 +115,7 @@ def get_interface_stats():
       - utun/lo0 (sin MAC):   name mtu <Link#N>      Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll  (10 cols)
 
     Detectamos si parts[3] es una MAC (5 ':') para desplazar el offset y leer Ibytes/Obytes
-    correctamente en ambos casos. Esto es lo que permite leer el utun de mlvpn directamente.
+    correctamente en ambos casos. Esto es lo que permite leer el utun directamente.
     """
     try:
         out = subprocess.check_output(['netstat', '-ibn'], text=True)
@@ -84,8 +151,10 @@ def get_interface_ip(iface):
         return None
 
 
-def find_mlvpn_utun():
-    """Busca el utun que mlvpn está usando (el que tiene 10.10.10.x)."""
+def find_tunnel_utun(daemon):
+    """Busca el utun que el daemon dado está usando (subnet específica
+    por daemon: 10.10.10.x para mlvpn, 10.10.20.x para ubond)."""
+    subnet = DAEMON_INFO[daemon]['tun_subnet']
     try:
         out = subprocess.check_output(['ifconfig'], text=True)
         current = None
@@ -93,20 +162,24 @@ def find_mlvpn_utun():
             m = re.match(r'^(utun\d+):', line)
             if m:
                 current = m.group(1)
-            if current and '10.10.10.' in line:
+            if current and subnet in line:
                 return current
     except Exception:
         pass
     return None
 
 
-def check_mlvpn_links():
-    """Obtiene el estado de los links de mlvpn desde el nombre del proceso."""
+def check_daemon_links(daemon):
+    """Obtiene el estado de los links del daemon desde el nombre del proceso.
+    El proctitle de mlvpn/ubond tiene la forma:
+      'mlvpn: mlvpn0 @links.iphone @links.pixel !links.wifi ...'
+    @ = autenticado, ! = autenticación pendiente.
+    """
+    pattern = DAEMON_INFO[daemon]['proc_pattern']
     try:
         out = subprocess.check_output(['ps', 'aux'], text=True)
         for line in out.splitlines():
-            if 'mlvpn: mlvpn0' in line and '[priv]' not in line:
-                # @link = autenticado, !link = no autenticado
+            if pattern in line and '[priv]' not in line:
                 authed = re.findall(r'@(links\.\w+)', line)
                 pending = re.findall(r'!(links\.\w+)', line)
                 return {l: 'OK' for l in authed} | {l: 'AUTH_PENDING' for l in pending}
@@ -115,8 +188,12 @@ def check_mlvpn_links():
     return {}
 
 
-def check_failover_roles():
+def check_failover_roles(daemon):
     """Lee mlvpn_active.conf y devuelve {link_key: 'active'|'backup'} (REQ-NET-17).
+
+    Solo aplica a mlvpn — ubond v2 no usa `fallback_only` (su modo
+    failover/replicate se decide via [filters.replicate], no via marca
+    por link). Si daemon != 'mlvpn', devuelve {} sin leer nada.
 
     Si algún link tiene `fallback_only = 1`, el túnel está en modo --failover
     (REQ-NET-11). En ese modo:
@@ -125,14 +202,12 @@ def check_failover_roles():
 
     Devuelve dict vacío {} si no hay config, no se puede leer, o ningún link
     tiene fallback_only=1 (modo bonding clásico, no aplica distinción).
-
-    El conf está chmod 600 owner=root → intentamos leer sin sudo (a veces
-    funciona si el monitor se lanza con sudo o si los permisos cambiaron),
-    si falla, sudo -n (no interactivo: si no hay cache, devolvemos {}).
     """
+    if daemon != 'mlvpn':
+        return {}
     conf_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
-        'generated', 'mlvpn_active.conf'
+        'generated', DAEMON_INFO[daemon]['active_conf']
     )
     if not os.path.exists(conf_path):
         return {}
@@ -177,22 +252,50 @@ def check_failover_roles():
     return roles if has_any_backup else {}
 
 
-def check_captive_portal():
-    """Detecta captive portal en la WiFi (HTTP 204 test)."""
-    try:
-        import urllib.request
-        r = urllib.request.urlopen(
-            'http://captive.apple.com/hotspot-detect.html',
-            timeout=2
-        )
-        # Apple devuelve 200 con "<HTML>..." si hay captive portal
-        # y una página diferente. Simplificamos: si llega, no hay captive.
-        content = r.read(100).decode('utf-8', errors='ignore')
-        if 'Success' in content:
-            return False  # Sin captive
-        return True  # Posible captive
-    except Exception:
-        return True  # Sin conectividad → posible captive o sin red
+def check_replicate_active(daemon):
+    """Solo aplica a ubond: detecta si la sección [filters.replicate]
+    tiene al menos una regla BPF activa (no comentada). Si sí → modo
+    REPLICATE. Si no → bonding clásico.
+
+    Lee primero generated/ubond_active.conf (si 04b lo creó) y cae a
+    generated/ubond.conf como fallback. ubond_active.conf en sistemas
+    reales suele ser 0600 root, así que probamos `sudo -n cat` (no
+    interactivo: si no hay cache, fallback al .conf user-readable).
+    """
+    if daemon != 'ubond':
+        return False
+    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'generated')
+    for name in ('ubond_active.conf', 'ubond.conf'):
+        conf_path = os.path.join(base_dir, name)
+        if not os.path.exists(conf_path):
+            continue
+        content = None
+        try:
+            with open(conf_path, 'r') as f:
+                content = f.read()
+        except (PermissionError, OSError):
+            try:
+                content = subprocess.check_output(
+                    ['sudo', '-n', 'cat', conf_path],
+                    text=True, stderr=subprocess.DEVNULL
+                )
+            except subprocess.CalledProcessError:
+                continue
+        if not content:
+            continue
+        in_replicate = False
+        for raw in content.splitlines():
+            line = raw.strip()
+            if line == '[filters.replicate]':
+                in_replicate = True
+                continue
+            if line.startswith('[') and in_replicate:
+                in_replicate = False
+                continue
+            if in_replicate and line and not line.startswith('#') and '=' in line:
+                return True
+        return False
+    return False
 
 
 def fmt_bytes(b):
@@ -217,15 +320,25 @@ def fmt_total(b):
         return f'{b/1_073_741_824:.2f} GB'
 
 
-def draw(interfaces, prev_stats, curr_stats, interval, links_status, utun, iteration, failover_roles):
+def draw(daemon, prev_stats, curr_stats, interval, links_status, utun,
+         iteration, failover_roles, replicate_active):
     """Dibuja la pantalla del monitor."""
     os.system('clear')
 
+    info = DAEMON_INFO[daemon]
     is_failover = bool(failover_roles)
-    mode_str = f'{YELLOW}[FAILOVER]{RESET}' if is_failover else f'{GREEN}[BONDING]{RESET}'
+    is_replicate = bool(replicate_active)
 
-    print(f'{BOLD}{CYAN}┌─ ave-vpc mlvpn monitor ─────────────────────────────────────────┐{RESET}')
-    print(f'{BOLD}{CYAN}│{RESET}  Actualización cada {interval}s  •  Modo: {mode_str}  •  Ctrl+C para salir' + f'{BOLD}{CYAN} │{RESET}')
+    if is_failover:
+        mode_str = f'{YELLOW}[FAILOVER]{RESET}'
+    elif is_replicate:
+        mode_str = f'{BLUE}[REPLICATE]{RESET}'
+    else:
+        mode_str = f'{GREEN}[BONDING]{RESET}'
+
+    title = f'ave-vpc {info["header_label"]}'
+    print(f'{BOLD}{CYAN}┌─ {title} ─────────────────────────────────────────┐{RESET}')
+    print(f'{BOLD}{CYAN}│{RESET}  Tick {interval}s  •  Modo: {mode_str}  •  Ctrl+C para salir' + f'{BOLD}{CYAN}  │{RESET}')
     print(f'{BOLD}{CYAN}└─────────────────────────────────────────────────────────────────┘{RESET}')
     print()
 
@@ -233,16 +346,16 @@ def draw(interfaces, prev_stats, curr_stats, interval, links_status, utun, itera
     if utun:
         # Leemos los bytes directamente del utun (tráfico útil del túnel,
         # sin overhead UDP). En macOS, netstat -ibn sí captura los counters
-        # del utun de mlvpn una vez parseado correctamente (ver get_interface_stats).
+        # del utun una vez parseado correctamente (ver get_interface_stats).
         p_utun = prev_stats.get(utun, (0, 0))
         c_utun = curr_stats.get(utun, (0, 0))
         agg_rx = max(0, c_utun[0] - p_utun[0]) / interval
         agg_tx = max(0, c_utun[1] - p_utun[1]) / interval
-        print(f'{BOLD}  TÚNEL mlvpn  {GREEN}●{RESET}  {utun}  IP: {BOLD}10.10.10.2{RESET}')
+        print(f'{BOLD}  {info["tunnel_label"]}  {GREEN}●{RESET}  {utun}  IP: {BOLD}{info["tun_ip"]}{RESET}')
         print(f'  {"↓ RX":<18} {GREEN}{fmt_bytes(agg_rx):>10}{RESET}  {DIM}(tráfico útil del túnel){RESET}')
         print(f'  {"↑ TX":<18} {CYAN}{fmt_bytes(agg_tx):>10}{RESET}  {DIM}(tráfico útil del túnel){RESET}')
     else:
-        print(f'  {RED}TÚNEL mlvpn  ✗  No activo — ejecuta ./04-conectar.sh{RESET}')
+        print(f'  {RED}{info["tunnel_label"]}  ✗  No activo — ejecuta {info["connect_hint"]}{RESET}')
     print()
 
     # ─── Enlaces físicos ──────────────────────────────────────────────
@@ -313,6 +426,10 @@ def draw(interfaces, prev_stats, curr_stats, interval, links_status, utun, itera
             summary_str = f'{YELLOW}FAILOVER{RESET}  •  activo: {GREEN}{failover_active_link}{RESET}'
         else:
             summary_str = f'{RED}FAILOVER sin activo (todos en backup){RESET}'
+    elif is_replicate and active_count >= 2:
+        summary_str = f'{BLUE}REPLICATE ACTIVO ({active_count} enlaces){RESET}'
+    elif is_replicate:
+        summary_str = f'{YELLOW}REPLICATE degradado ({active_count} enlace){RESET}'
     elif active_count >= 2:
         summary_str = f'{GREEN}BONDING ACTIVO ({active_count} enlaces){RESET}'
     elif active_count == 1:
@@ -322,9 +439,9 @@ def draw(interfaces, prev_stats, curr_stats, interval, links_status, utun, itera
 
     print(f'  {summary_str}', end='')
     if utun:
-        # En modo failover: sumar SOLO el activo. En bonding: suma de todos.
-        # Mostrar también keepalives de backups por separado para confirmar
-        # que mlvpn los mantiene vivos (~1 pkt/s) sin enviar data por ellos.
+        # En modo failover: sumar SOLO el activo. En bonding/replicate: suma de todos.
+        # En failover, mostrar también keepalives de backups por separado para
+        # confirmar que mlvpn los mantiene vivos (~1 pkt/s) sin enviar data.
         sum_active_rx = sum_active_tx = 0
         sum_backup_rx = sum_backup_tx = 0
         for link_key, (_, iface) in link_names.items():
@@ -344,17 +461,43 @@ def draw(interfaces, prev_stats, curr_stats, interval, links_status, utun, itera
             print(f'  •  Activo {DIM}↓{fmt_bytes(sum_active_rx)} ↑{fmt_bytes(sum_active_tx)}{RESET}')
             print(f'  Backups (solo keepalives) {DIM}↓{fmt_bytes(sum_backup_rx)} ↑{fmt_bytes(sum_backup_tx)}{RESET}', end='')
         else:
+            # En modo replicate, el "encapsulado" es ~N×útil (replicado por N links).
+            # La diferencia útil/encapsulado revela el factor de replicación real.
             print(f'  •  Encapsulado {DIM}↓{fmt_bytes(sum_active_rx)} ↑{fmt_bytes(sum_active_tx)}{RESET}', end='')
     print()
     print()
-    print(f'  {DIM}iter {iteration}{RESET}')
+    print(f'  {DIM}iter {iteration}  •  daemon: {daemon}{RESET}')
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Monitor mlvpn en tiempo real')
+    parser = argparse.ArgumentParser(
+        description='Monitor TUI real-time de mlvpn (v1) o ubond (v2)'
+    )
     parser.add_argument('--interval', '-i', type=float, default=1.0,
                         help='Intervalo de actualización en segundos (default: 1)')
+    parser.add_argument('--daemon', '-d',
+                        choices=['auto', 'mlvpn', 'ubond'], default='auto',
+                        help='Cuál monitorizar (default: auto-detect)')
     args = parser.parse_args()
+
+    if args.daemon == 'auto':
+        daemon, both_alive = detect_daemon()
+        if daemon is None:
+            print(f'{RED}Ningún daemon detectado.{RESET}')
+            print(f'  Lanza {DAEMON_INFO["mlvpn"]["connect_hint"]} (v1)'
+                  f' o {DAEMON_INFO["ubond"]["connect_hint"]} (v2).')
+            sys.exit(1)
+        if both_alive:
+            print(f'{YELLOW}{BOLD}AVISO:{RESET}{YELLOW} mlvpn Y ubond vivos simultáneamente.{RESET}')
+            print(f'  Estado anómalo (transición v1→v2 incompleta o SOS fallido).')
+            print(f'  Mostrando ubond. Para limpiar: ejecuta SOS.sh y relanza.')
+            print(f'  Para forzar mlvpn: --daemon mlvpn')
+            time.sleep(2)
+        else:
+            print(f'{DIM}Auto-detected: {daemon}{RESET}')
+            time.sleep(0.5)
+    else:
+        daemon = args.daemon
 
     prev_stats = get_interface_stats()
     iteration = 0
@@ -364,11 +507,13 @@ def main():
             time.sleep(args.interval)
             iteration += 1
             curr_stats = get_interface_stats()
-            utun = find_mlvpn_utun()
-            links = check_mlvpn_links()
-            failover_roles = check_failover_roles()
-            draw(['en8', 'en12', 'en0'], prev_stats, curr_stats,
-                 args.interval, links, utun, iteration, failover_roles)
+            utun = find_tunnel_utun(daemon)
+            links = check_daemon_links(daemon)
+            failover_roles = check_failover_roles(daemon)
+            replicate_active = check_replicate_active(daemon)
+            draw(daemon, prev_stats, curr_stats,
+                 args.interval, links, utun, iteration,
+                 failover_roles, replicate_active)
             prev_stats = curr_stats
     except KeyboardInterrupt:
         print('\n  Saliendo...')
