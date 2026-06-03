@@ -27,7 +27,13 @@ HEALTH_FLAG="${GENERATED_DIR}/ubond_unhealthy"
 
 # Tunables — defaults para AVE noisy
 TICK_S="${WATCHDOG_TICK_S:-5}"
-FAIL_THRESHOLD="${WATCHDOG_FAIL_THRESHOLD:-4}"   # 4 × 5s = 20s sin red → SOS
+# REQ-NET-30 follow-up (SOS investigator 2026-06-03): threshold de 4 (20s)
+# era demasiado agresivo para móvil con expiración NAT en idle. Tras ~10
+# min sin tráfico el operador 4G droppea el UDP mapping; recuperación por
+# el primer paquete real tarda 5-15s, pero el watchdog ya cae a 20s y
+# dispara SOS innecesario. Subido a 8 (40s) para dar margen. Override:
+#   WATCHDOG_FAIL_THRESHOLD=12 ./tools/ubond-watchdog.sh   # 60s sin red
+FAIL_THRESHOLD="${WATCHDOG_FAIL_THRESHOLD:-8}"   # 8 × 5s = 40s sin red → SOS
 PING_TIMEOUT_S="${WATCHDOG_PING_TIMEOUT_S:-2}"
 SOS_COOLDOWN_S="${WATCHDOG_SOS_COOLDOWN_S:-60}"  # evitar spam SOS
 TARGET="${UBOND_TUN_VPS_IP:-10.10.20.1}"
