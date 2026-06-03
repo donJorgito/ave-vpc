@@ -118,7 +118,7 @@ measure_iface() {
     down_bps="${down_bps%.*}"  # quitar parte decimal
 
     # Latencia + jitter (5 paquetes, intervalo 0.3s, timeout 1.5s c/u)
-    ping_out="$(ping -c 5 -i 0.3 -W 1500 -b "${iface}" 1.1.1.1 2>&1 || true)"
+    ping_out="$(ping -c 5 -i 0.3 -W 1500 -b "${iface}" "${HEALTH_PROBE_IP:-1.1.1.1}" 2>&1 || true)"
     loss_pct="$(echo "${ping_out}" | grep -oE '[0-9.]+% packet loss' | grep -oE '^[0-9.]+' || echo "100")"
     if echo "${ping_out}" | grep -q "min/avg/max"; then
         latency_avg="$(echo "${ping_out}" | grep "min/avg" | awk -F'=' '{print $2}' | awk -F'/' '{print $2}' | tr -d ' ')"

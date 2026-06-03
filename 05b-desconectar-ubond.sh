@@ -75,9 +75,10 @@ fi
 
 # Verificar que la conexión vuelve a funcionar
 echo "=> Verificando conectividad externa..."
-if ping -c 1 -t 2 8.8.8.8 >/dev/null 2>&1; then
+PROBE_IP="${HEALTH_PROBE_IP:-1.1.1.1}"
+if ping -c 1 -t 2 "${PROBE_IP}" >/dev/null 2>&1; then
     echo "✓ Internet restaurado"
 else
-    echo "✗ AVISO: ping a 8.8.8.8 sigue fallando"
+    echo "✗ AVISO: ping a ${PROBE_IP} sigue fallando"
     echo "  Comprueba rutas: netstat -rn -f inet | head -20"
 fi

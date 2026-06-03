@@ -41,6 +41,39 @@ env_detect_iface_ip() {
         | awk '$1 == "inet" { print $2; exit }'
 }
 
+# Resuelve hostname a IP. Sistema primero (rápido, normal) y fallback a
+# Cloudflare @${FALLBACK_DNS_RESOLVER} si el sistema falla. Casos donde fallback dispara:
+#  - Split-DNS corp (ej. WiFi Roche bloquea lookup de dyn.io).
+#  - WiFi tren AVE flapping → DNS sistema timeout.
+# Si el input ya es IP literal, retorna tal cual.
+# Salida por stdout. Exit 0 si resolvió, 1 si ambas fallaron.
+#
+# IMPORTANTE: NO modificar /etc/hosts (entries stale inducen errores
+# muy difíciles de trazar). Esta función es la forma correcta de tener
+# resolver resiliente.
+env_detect_resolve_to_ip() {
+    local host="$1" ip
+    local resolver="${FALLBACK_DNS_RESOLVER:?config/env debe definir FALLBACK_DNS_RESOLVER}"
+    if [[ "${host}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "${host}"
+        return 0
+    fi
+    ip="$(dig +short +time=2 +tries=1 "${host}" 2>/dev/null \
+            | grep -E '^[0-9.]+$' | head -1)"
+    if [[ -n "${ip}" ]]; then
+        echo "${ip}"
+        return 0
+    fi
+    log_warn "DNS sistema no resolvió ${host}, fallback a @${resolver}"
+    ip="$(dig "@${resolver}" +short +time=3 +tries=2 "${host}" 2>/dev/null \
+            | grep -E '^[0-9.]+$' | head -1)"
+    if [[ -n "${ip}" ]]; then
+        echo "${ip}"
+        return 0
+    fi
+    return 1
+}
+
 # Detecta captive portal en la WiFi. Devuelve 0 si NO captive (ok),
 # 1 si captive presente. captive.apple.com responde con título "Success"
 # cuando hay internet libre.
@@ -58,9 +91,16 @@ env_detect_rpi_lan_reachable() {
     ping -c 1 -W 1000 "${RPi_IP}" >/dev/null 2>&1
 }
 
-# RPi alcanzable por DDNS: ICMP a VPS_IP en <2s.
+# RPi alcanzable por DDNS: resuelve VPS_IP (puede ser hostname) a IP
+# literal vía resolver resiliente y hace ICMP. Setea DETECTED_VPS_IP
+# como side effect para que los callers (SSH, ubond.conf) usen IP
+# directa, evitando depender del DNS sistema en runtime.
 env_detect_rpi_ddns_reachable() {
-    ping -c 1 -W 2000 "${VPS_IP}" >/dev/null 2>&1
+    DETECTED_VPS_IP="$(env_detect_resolve_to_ip "${VPS_IP}")" || {
+        DETECTED_VPS_IP=""
+        return 1
+    }
+    ping -c 1 -W 2000 "${DETECTED_VPS_IP}" >/dev/null 2>&1
 }
 
 # Pipeline completa: rellena todas las DETECTED_*.
@@ -89,8 +129,11 @@ env_detect_all() {
         DETECTED_SSH_PORT="${RPi_SSH_PORT:-22}"
     elif [[ "${DETECTED_RPI_DDNS_OK}" == "1" ]]; then
         DETECTED_RPI_TARGET="ddns"
-        DETECTED_REMOTE_HOST="${VPS_IP}"
-        DETECTED_SSH_HOST="${VPS_IP}"
+        # Usar la IP literal resuelta (DETECTED_VPS_IP), no el hostname.
+        # Si DETECTED_VPS_IP no se setó (improbable, fallback resiliente),
+        # caer al hostname original.
+        DETECTED_REMOTE_HOST="${DETECTED_VPS_IP:-${VPS_IP}}"
+        DETECTED_SSH_HOST="${DETECTED_VPS_IP:-${VPS_IP}}"
         DETECTED_SSH_PORT="${VPS_SSH_PORT:-2222}"
     else
         DETECTED_RPI_TARGET="none"
@@ -105,7 +148,8 @@ env_detect_all() {
            DETECTED_CAPTIVE \
            DETECTED_RPI_LAN_OK DETECTED_RPI_DDNS_OK \
            DETECTED_RPI_TARGET DETECTED_REMOTE_HOST \
-           DETECTED_SSH_HOST DETECTED_SSH_PORT
+           DETECTED_SSH_HOST DETECTED_SSH_PORT \
+           DETECTED_VPS_IP
 }
 
 # Imprime resumen legible para el usuario.

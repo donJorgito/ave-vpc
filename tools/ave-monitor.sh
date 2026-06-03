@@ -313,8 +313,12 @@ curl_via_utun() {
     [[ -z "${utun}" ]] && { printf '0|0|'; return 0; }
     local body fmt
     fmt='%{http_code}|%{time_total}|%{remote_ip}'
+    # URL configurable vía config/env (HEALTH_PROBE_HTTP). El default
+    # https si HEALTH_PROBE_HTTP es http: forzamos https.
+    local probe_url="${HEALTH_PROBE_HTTP:-http://1.1.1.1/cdn-cgi/trace}"
+    probe_url="${probe_url/http:/https:}"  # forzar TLS para measurement
     body="$(curl --interface "${utun}" --max-time 5 -s \
-        -w "\n${fmt}" "https://1.1.1.1/cdn-cgi/trace" 2>/dev/null || true)"
+        -w "\n${fmt}" "${probe_url}" 2>/dev/null || true)"
     if [[ -z "${body}" ]]; then printf '0|0|'; return 0; fi
     local pub trailer
     pub="$(printf '%s\n' "${body}" | awk -F= '/^ip=/{print $2; exit}' | tr -d '\r')"
@@ -419,8 +423,8 @@ resolve_vps_baseline() {
         return 0
     fi
     if command -v dig >/dev/null 2>&1; then
-        local ip
-        ip="$(dig @1.1.1.1 +time=2 +tries=1 +short "${VPS_IP}" 2>/dev/null \
+        local ip resolver="${FALLBACK_DNS_RESOLVER:-1.1.1.1}"
+        ip="$(dig "@${resolver}" +time=2 +tries=1 +short "${VPS_IP}" 2>/dev/null \
             | awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/{print; exit}')"
         if [[ -n "${ip}" ]]; then
             VPS_BASELINE_IP="${ip}"

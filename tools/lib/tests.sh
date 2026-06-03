@@ -38,7 +38,7 @@ run_ping_test() {
 # que sale por dentro del túnel (en vez de por la WiFi nativa).
 run_curl_tunnel() {
     local utun="${1:?utun iface}"
-    local url="http://1.1.1.1/cdn-cgi/trace"
+    local url="${HEALTH_PROBE_HTTP:-http://1.1.1.1/cdn-cgi/trace}"
     log_info "CURL ${url} via ${utun}"
     local body rc
     body="$(curl --interface "${utun}" -sS --max-time 8 "${url}" 2>&1)"; rc=$?

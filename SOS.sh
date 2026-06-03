@@ -131,11 +131,19 @@ DEF_IFACE="$(route -n get default 2>/dev/null | awk '/interface/{print $2}')"
 DEF_GW="$(route -n get default 2>/dev/null | awk '/gateway/{print $2}')"
 echo "✓ default route: ${DEF_IFACE:-?} → ${DEF_GW:-?}"
 
-# Test internet con sintaxis MACOS correcta (-t segundos, NO -W ms)
-if ping -c 1 -t 2 1.1.1.1 >/dev/null 2>&1; then
-    echo "✓ internet OK"
+# Test internet (IP probe configurable; default 1.1.1.1).
+# Lee HEALTH_PROBE_IP de config/env si existe (parser awk porque SOS no
+# hace `source` defensivo — algunos env pueden tener errores).
+SOS_PROBE_IP=""
+if [[ -f "${SCRIPT_DIR}/config/env" ]]; then
+    SOS_PROBE_IP="$(awk -F'=' '/^HEALTH_PROBE_IP=/{gsub(/["[:space:]]/,"",$2); print $2; exit}' \
+        "${SCRIPT_DIR}/config/env")"
+fi
+SOS_PROBE_IP="${SOS_PROBE_IP:-1.1.1.1}"
+if ping -c 1 -t 2 "${SOS_PROBE_IP}" >/dev/null 2>&1; then
+    echo "✓ internet OK (probe ${SOS_PROBE_IP})"
 else
-    echo "✗ sin internet — apaga/enciende Wi-Fi del menú o reinicia"
+    echo "✗ sin internet (probe ${SOS_PROBE_IP}) — apaga/enciende Wi-Fi del menú o reinicia"
 fi
 
 echo "=== Listo ==="

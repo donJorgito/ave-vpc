@@ -49,10 +49,30 @@ else
     junit_fail "common_funcs" "_common.sh no expone alguna función esperada"
 fi
 
-if check_funcs "env-detect.sh" env_detect_load_config env_detect_iface_ip env_detect_all env_detect_summary env_detect_eligible_links; then
+if check_funcs "env-detect.sh" env_detect_load_config env_detect_iface_ip env_detect_all env_detect_summary env_detect_eligible_links env_detect_resolve_to_ip; then
     junit_pass "env_detect_funcs"
 else
-    junit_fail "env_detect_funcs" "env-detect.sh no expone alguna función esperada"
+    junit_fail "env_detect_funcs" "env-detect.sh no expone alguna función esperada (incluido env_detect_resolve_to_ip)"
+fi
+
+# env-detect.sh tiene resolver resiliente con fallback DNS configurable
+# (NO hardcoded — feedback_no_hardcoding 2026-06-03). Lección Roche:
+# nunca parchear /etc/hosts (entries stale = debug difícil de trazar).
+if grep -qE 'dig.*@[\$\{]+(FALLBACK_DNS_RESOLVER|resolver)' "${LIB_DIR}/env-detect.sh"; then
+    junit_pass "env_detect_has_dns_fallback"
+else
+    junit_fail "env_detect_no_fallback" \
+        "env-detect.sh no usa resolver via FALLBACK_DNS_RESOLVER variable — hardcoded?"
+fi
+
+# Verifica que NO hay IPs DNS hardcoded en el código de la lógica
+# (defaults via :- son OK porque permiten override).
+if grep -nE '"@1\.1\.1\.1"|@1\.1\.1\.1[^}]' "${LIB_DIR}/env-detect.sh" \
+        2>/dev/null | grep -vE ':-1\.1\.1\.1|^[^:]*:#'; then
+    junit_fail "env_detect_hardcoded_dns" \
+        "env-detect.sh tiene IPs DNS hardcoded (debe usar FALLBACK_DNS_RESOLVER)"
+else
+    junit_pass "env_detect_no_hardcoded_dns"
 fi
 
 if check_funcs "conf-gen.sh" conf_gen_write conf_gen_path; then

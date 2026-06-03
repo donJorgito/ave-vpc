@@ -10,6 +10,39 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Resolver DNS resiliente + endpoints configurables (2026-06-03 oficina)
+
+Durante setup pre-test C en oficina Roche, el DNS corp no resolvía
+`200bares.dedyn.io` (split-horizon o filtrado de dyn.io). Inicialmente
+intenté workaround vía `/etc/hosts` — el usuario me corrigió: entry
+stale en hosts induce errores muy difíciles de trazar si el DDNS
+cambia luego (que para eso existe).
+
+Fix arquitectónico (lección guardada en memoria global
+`feedback_no_hardcoding.md`):
+
+- **`tools/lib/env-detect.sh`**: nueva función `env_detect_resolve_to_ip`
+  que intenta system DNS primero (rápido), fallback a resolver público
+  si falla. Setea `DETECTED_VPS_IP` con la IP literal resuelta.
+  `env_detect_rpi_ddns_reachable` y los SSH/scp dependientes ahora
+  usan IP, no hostname — robusto a split-DNS.
+- **`config/env(.example)`**: nuevas variables configurables (NO
+  hardcodear nunca el valor en código):
+  - `FALLBACK_DNS_RESOLVER` (default 1.1.1.1).
+  - `HEALTH_PROBE_IP` (default 1.1.1.1).
+  - `HEALTH_PROBE_HTTP` (default cdn-cgi/trace).
+- **Sustituidos hardcodes** en `tools/medir-enlaces.sh`,
+  `tools/lib/tests.sh`, `tools/ave-monitor.sh`, `05b-desconectar-ubond.sh`,
+  `SOS.sh` — todos usan ahora `${VAR:-default}` permitiendo override
+  via env/config.
+- **Test reforzado** `test_REQ-NET-23_smoke_lib.sh` (+2 checks):
+  `env_detect_has_dns_fallback` (verifica resolver via variable) +
+  `env_detect_no_hardcoded_dns` (regresa si alguien añade un literal).
+
+NO se modificó `/etc/hosts`. Los entries stale en hosts son una clase
+de bug que el usuario explícitamente rechazó (memoria
+`feedback_no_hardcoding.md` y `feedback_canonical_install_paths.md`).
+
 ### Monitor continuo del cliente ubond v2 (REQ-NET-28, 2026-06-02 oficina)
 
 Postmortem multi-agente del incidente AVE 2026-06-01: el usuario explicitó
