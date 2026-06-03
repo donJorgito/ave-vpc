@@ -1,0 +1,21 @@
+--- a/src/config.c
++++ b/src/config.c
+@@ -470,8 +470,17 @@
+     int found_in_config = 0;
+     while (work)
+     {
++        /* REQ-NET-29: comparación EXACTA con "filters" (sin sub-secciones).
++         * Antes: strncmp(section, "filters", 7) == 0 matcheaba TAMBIÉN
++         * filters.replicate y filters.fifo, procesando sus entries como
++         * filtros stock. Eso generaba warnings "(filters) X interface
++         * not found" pero peor — añadía entries con tun=NULL a la tabla
++         * ubond_filters, causando cuelgue silencioso en
++         * ubond_filters_choose. Bug detectado oficina Roche 2026-06-03.
++         * El parser específico de [filters.replicate] vive más abajo
++         * (REQ-NET-12) y procesa esa sección correctamente. */
+         if (work->section != NULL &&
+-                strncmp(work->section, "filters", 7) == 0) {
++                strcmp(work->section, "filters") == 0) {
+             memset(&filter, 0, sizeof(filter));
+             if (pcap_compile(pcap_dead_p, &filter, work->conf->val,
+                     1, PCAP_NETMASK_UNKNOWN) != 0) {

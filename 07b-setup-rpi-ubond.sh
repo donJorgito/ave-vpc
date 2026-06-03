@@ -102,6 +102,7 @@ UBOND_SECRET="$(cat "${KEYS_DIR}/mlvpn.secret")"
 UBOND_PATCH_B64="$(base64 < "${PATCHES_DIR}/ubond_replicate_filter.patch" | tr -d '\n')"
 UBOND_PATCH2_B64="$(base64 < "${PATCHES_DIR}/ubond_per_link_tolerence.patch" | tr -d '\n')"
 UBOND_PATCH3_B64="$(base64 < "${PATCHES_DIR}/ubond_replicate_dedup_fix.patch" | tr -d '\n')"
+UBOND_PATCH4_B64="$(base64 < "${PATCHES_DIR}/ubond_filters_section_exclusion.patch" | tr -d '\n')"
 
 echo "=> Conectando a la Raspberry Pi ${RPi_IP} (puerto SSH ${RPi_SSH_PORT})..."
 echo "=> ubond escuchará en ${UBOND_PORT_1}/${UBOND_PORT_2}/${UBOND_PORT_3} UDP (paralelo a mlvpn 5080-5082)"
@@ -117,6 +118,7 @@ ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     UBOND_PATCH_B64="${UBOND_PATCH_B64}" \
     UBOND_PATCH2_B64="${UBOND_PATCH2_B64}" \
     UBOND_PATCH3_B64="${UBOND_PATCH3_B64}" \
+    UBOND_PATCH4_B64="${UBOND_PATCH4_B64}" \
     bash <<'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -166,6 +168,13 @@ else
         echo "  [RPi] (patch replicate_dedup_fix ya aplicado o no aplicable; continuando)"
     fi
     rm -f /tmp/ubond_replicate_dedup_fix.patch
+
+    # REQ-NET-29: parser [filters] excluye sub-secciones filters.X
+    printf '%s' "${UBOND_PATCH4_B64}" | base64 -d > /tmp/ubond_filters_section_exclusion.patch
+    if ! patch -p1 -N --reject-file=- < /tmp/ubond_filters_section_exclusion.patch 2>&1 | head -10; then
+        echo "  [RPi] (patch filters_section_exclusion ya aplicado o no aplicable; continuando)"
+    fi
+    rm -f /tmp/ubond_filters_section_exclusion.patch
 
     ./autogen.sh
     # --enable-filters: requerido para [filters.replicate]

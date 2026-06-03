@@ -63,7 +63,7 @@ if [[ ! -f "${KEYS_DIR}/mlvpn.secret" ]]; then
     echo "ERROR: No existe keys/mlvpn.secret. Ejecuta primero 01-generar-secreto.sh"
     exit 1
 fi
-for p in ubond_macos_compile.patch tuntap_darwin_utun_ubond.c ubond_replicate_filter.patch ubond_per_link_tolerence.patch ubond_replicate_dedup_fix.patch; do
+for p in ubond_macos_compile.patch tuntap_darwin_utun_ubond.c ubond_replicate_filter.patch ubond_per_link_tolerence.patch ubond_replicate_dedup_fix.patch ubond_filters_section_exclusion.patch; do
     if [[ ! -f "${PATCHES_DIR}/${p}" ]]; then
         echo "ERROR: falta ${PATCHES_DIR}/${p}"
         exit 1
@@ -180,6 +180,15 @@ else
     # 2026-06-01 donde v2+replicación caía a los pocos minutos.
     echo "  Aplicando ubond_replicate_dedup_fix.patch..."
     if ! patch -p1 -N --reject-file=- < "${PATCHES_DIR}/ubond_replicate_dedup_fix.patch" 2>&1 | head -5; then
+        echo "  (patch ya aplicado o no aplicable; continuando)"
+    fi
+
+    # Patch 6 (REQ-NET-29): parser de [filters] excluye sub-secciones
+    # filters.replicate / filters.fifo. Bug detectado oficina Roche
+    # 2026-06-03 — sin esto, entries de filters.replicate también se
+    # procesaban como filters stock con tun=NULL, cuelgue silencioso.
+    echo "  Aplicando ubond_filters_section_exclusion.patch..."
+    if ! patch -p1 -N --reject-file=- < "${PATCHES_DIR}/ubond_filters_section_exclusion.patch" 2>&1 | head -5; then
         echo "  (patch ya aplicado o no aplicable; continuando)"
     fi
 
