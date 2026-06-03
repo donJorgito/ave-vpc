@@ -67,11 +67,11 @@ primero (Python: monitor del usuario en viaje).
 
 **Plan de ejecución incremental (poco a poco):**
 
-| Fase | Cuándo | Tiempo estimado | Bloqueante para |
+| Fase | Cuándo | Estado | Bloqueante para |
 |---|---|---|---|
-| 1 (Python) | Próxima sesión disponible | 30-60 min | — |
-| 2 (Bash) | Tras Fase 1 estable | 2-3 h | — |
-| 3 (C) | Tras primer trayecto AVE OK | 4-6 h | — |
+| 1 (Python) | 2026-06-03 oficina | ✓ HECHA — coverage 48% real, threshold 40% | — |
+| 2 (Bash) | Tras Fase 1 estable >2 semanas | pending | — |
+| 3 (C) | Tras primer trayecto AVE OK | pending | — |
 
 Cada fase aterriza en su propio commit + sub-requirement.
 

@@ -55,3 +55,17 @@ repos:
     hooks:
       - id: ruff
         args: ['--exclude', 'build/', '--exclude', '__pycache__/']
+
+  # pytest + coverage — REQ-NET-33 Fase 1 (Python coverage gating).
+  # Hook local porque pytest necesita el entorno del usuario con
+  # las deps instaladas. cov-fail-under=40 inicial conservador
+  # (cobertura real medida 48% — margen para refactors menores).
+  # Elevar el threshold cuando se estabilice cobertura.
+  - repo: local
+    hooks:
+      - id: pytest-monitor-coverage
+        name: pytest 08-monitor.py with coverage (REQ-NET-33 P1)
+        entry: pytest tests/test_req_net_31_monitor.py --cov=ave_monitor --cov-fail-under=40 -q
+        language: system
+        pass_filenames: false
+        files: ^(08-monitor\.py|tests/test_req_net_31_monitor\.py)$

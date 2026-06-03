@@ -10,6 +10,31 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### REQ-NET-33.1 — Phase 1 code coverage Python (2026-06-03)
+
+Primera fase del roadmap de coverage (REQ-NET-33). Cubre `08-monitor.py`
+(524 LOC) con `pytest` + `pytest-cov`:
+
+- `requirements-dev.txt` con pytest==8.2.2, pytest-cov==6.0.0,
+  coverage==7.6.4 pinneados (R7).
+- `tests/test_req_net_31_monitor.py` con 29 tests pytest puros que
+  cubren todo lo del shell wrapper anterior + tests adicionales para
+  `get_interface_stats` (parsing dual netstat MAC/utun),
+  `check_failover_roles` (full path mlvpn con conf real),
+  `check_replicate_active` (3 escenarios: con regla / vacía /
+  solo comentarios), `fmt_bytes` y `fmt_total`.
+- Coverage real medido: 48% líneas. Líneas no cubiertas son
+  principalmente `draw()` (TUI rendering, GUI-like, hard to mock) y
+  el loop principal `main()`.
+- `tests/test_REQ-NET-31_monitor_dual_mode.sh` reescrito como wrapper
+  thin que invoca pytest, emite JUnit XML del wrapper + JUnit XML
+  detallado de pytest a `reports/REQ-NET-31_pytest.xml`.
+- Pre-commit hook `pytest-monitor-coverage` con
+  `--cov-fail-under=40` (margen conservador bajo el 48% real).
+
+Pendiente Phase 2 (bash kcov) y Phase 3 (C gcov) según roadmap
+`docs/v2-ubond/10-code-coverage-roadmap.md`.
+
 ### REQ-NET-30 — dedup gate por wire signal data_seq!=0 (2026-06-03)
 
 Causa raíz cuelgue dataplane bajo `[filters.replicate]` activo: el gate de
