@@ -10,6 +10,26 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### REQ-NET-34 — Watchdog tolerante a degradación parcial (planificado, 2026-06-03)
+
+Tres SOS espurios reproducibles oficina 2026-06-03 con misma firma:
+`[WARN/net] links.pixel write error` → 26-56s después → watchdog SOS.
+Threshold-8 (REQ-NET-32) solo difirió la muerte 30s vs threshold-4. Subir
+más enmascara caídas legítimas.
+
+Causa raíz: cuando un link móvil falla, ubond no degrada con el resto de
+links de forma que el ping ICMP del watchdog siga viendo el túnel sano.
+
+Fix planificado: lógica del watchdog que distingue:
+
+- 0 links auth + ping KO → SOS (caída total).
+- ≥1 link auth + ping KO transitorio → log warning, NO SOS.
+- ≥1 link auth + ping KO sostenido (>120s) → SOS degradado.
+
+Implementación en `tools/ubond-watchdog.sh` cuando se priorice. Spec
+detallada en `requirements/ave-vpc-REQ-NET-34-requirement.md`. Memoria
+de sesión: `project_persistent_pixel_sos_pattern.md`.
+
 ### REQ-NET-33.1 — Phase 1 code coverage Python (2026-06-03)
 
 Primera fase del roadmap de coverage (REQ-NET-33). Cubre `08-monitor.py`
