@@ -103,6 +103,7 @@ UBOND_PATCH_B64="$(base64 < "${PATCHES_DIR}/ubond_replicate_filter.patch" | tr -
 UBOND_PATCH2_B64="$(base64 < "${PATCHES_DIR}/ubond_per_link_tolerence.patch" | tr -d '\n')"
 UBOND_PATCH3_B64="$(base64 < "${PATCHES_DIR}/ubond_replicate_dedup_fix.patch" | tr -d '\n')"
 UBOND_PATCH4_B64="$(base64 < "${PATCHES_DIR}/ubond_filters_section_exclusion.patch" | tr -d '\n')"
+UBOND_PATCH5_B64="$(base64 < "${PATCHES_DIR}/ubond_dedup_gate_data_seq.patch" | tr -d '\n')"
 
 echo "=> Conectando a la Raspberry Pi ${RPi_IP} (puerto SSH ${RPi_SSH_PORT})..."
 echo "=> ubond escuchará en ${UBOND_PORT_1}/${UBOND_PORT_2}/${UBOND_PORT_3} UDP (paralelo a mlvpn 5080-5082)"
@@ -119,6 +120,7 @@ ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     UBOND_PATCH2_B64="${UBOND_PATCH2_B64}" \
     UBOND_PATCH3_B64="${UBOND_PATCH3_B64}" \
     UBOND_PATCH4_B64="${UBOND_PATCH4_B64}" \
+    UBOND_PATCH5_B64="${UBOND_PATCH5_B64}" \
     bash <<'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -176,6 +178,15 @@ else
     fi
     rm -f /tmp/ubond_filters_section_exclusion.patch
 
+    # REQ-NET-30: gate dedup por wire signal data_seq!=0 (validado
+    # oficina 2026-06-03; sin esto, asimetría client/server cuelga
+    # dataplane bajo replicación).
+    printf '%s' "${UBOND_PATCH5_B64}" | base64 -d > /tmp/ubond_dedup_gate_data_seq.patch
+    if ! patch -p1 -N --reject-file=- < /tmp/ubond_dedup_gate_data_seq.patch 2>&1 | head -10; then
+        echo "  [RPi] (patch dedup_gate_data_seq ya aplicado o no aplicable; continuando)"
+    fi
+    rm -f /tmp/ubond_dedup_gate_data_seq.patch
+
     ./autogen.sh
     # --enable-filters: requerido para [filters.replicate]
     ./configure --sysconfdir=/etc --enable-filters
@@ -210,9 +221,18 @@ statuscommand = "/etc/ubond/ubond_updown.sh"
 [filters]
 [filters.fifo]
 
-# REQ-NET-12: en el servidor la sección puede estar vacía. El dedup
-# LRU se activa en protocol_read independiente del contenido de
-# esta sección. Las reglas las define el cliente.
+# REQ-NET-30 (2026-06-03): el patch C `ubond_dedup_gate_data_seq.patch`
+# (aplicado más arriba en este mismo script) cambia el gate de dedup
+# en ubond.c de `replicate_filters.count > 0` a `proto->data_seq != 0`
+# (señal autoritativa del wire). Eso permite dejar esta sección VACÍA
+# en el servidor — el cliente decide qué replicar via su propia
+# `[filters.replicate]`, marca los clones con `data_seq` en el wire,
+# y el server dedupea sin necesidad de conocer las reglas BPF.
+#
+# Antes del patch (REQ-NET-12), la sección vacía aquí causaba el cuelgue
+# del dataplane bajo replicación (ping 0/N validado oficina 2026-06-03).
+# Tras REQ-NET-30, el comportamiento esperado vuelve a ser: server con
+# sección vacía es válido.
 [filters.replicate]
 
 [links.iphone]

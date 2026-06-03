@@ -1,0 +1,36 @@
+--- a/src/ubond.c
++++ b/src/ubond.c
+@@ -653,11 +653,28 @@
+     }
+
+ #ifdef HAVE_FILTERS
+-    /* REQ-NET-12 dedup DESACTIVADO temporalmente para aislar bug.
+-     * Solo se activa cuando hay filtros activos — antes corría en
+-     * cada paquete y rompía dataplane (auth OK, datos no fluían). */
+-    if (ubond_replicate_filters.count > 0 &&
+-        (proto->type == UBOND_PKT_DATA || proto->type == UBOND_PKT_DATA_RESEND) &&
++    /* REQ-NET-30: gate del dedup determinado por la SEÑAL DEL WIRE, no
++     * por la config local del receptor.
++     *
++     * Antes (REQ-NET-12 + REQ-NET-27): el gate exigía
++     * `ubond_replicate_filters.count > 0` en el receptor. Eso introducía
++     * asimetría: si el cliente tiene `[filters.replicate]` poblado pero
++     * el server lo tiene vacío (default según 07b-setup-rpi-ubond.sh:216),
++     * el server NO dedupea aunque el wire packet traiga clones con
++     * `data_seq != 0`. Resultado en el test de oficina 2026-06-03:
++     * tcpdump RPi muestra duplicados por cada ping → kernel descarta o
++     * confunde el ICMP reply → ping 0/N.
++     *
++     * Diseño: `data_seq != 0` es señal autoritativa de que el SENDER
++     * decidió que el paquete debía sequenciarse para reorder/dedup
++     * (puesta en `ubond_rtun_send` línea 724 para reorder, o en
++     * `ubond_rtun_choose` línea 1885 para clones replicados). El sender
++     * inicializa el contador global `data_seq = 1` (línea 90), así que
++     * 0 está reservado como "no aplica" (paquetes UDP/ICMP no replicados,
++     * keepalives, auth, version<1). El gate por `data_seq != 0` es por
++     * tanto correcto y simétrico: receptor dedupea sii sender marcó. */
++    if ((proto->type == UBOND_PKT_DATA || proto->type == UBOND_PKT_DATA_RESEND) &&
++        proto->data_seq != 0 &&
+         ubond_replicate_dedup_check(proto->data_seq)) {
+         log_debug("replicate", "%s descartando duplicado data_seq=%lu",
+                   tun->name, proto->data_seq);

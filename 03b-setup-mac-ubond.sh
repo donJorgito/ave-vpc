@@ -63,7 +63,7 @@ if [[ ! -f "${KEYS_DIR}/mlvpn.secret" ]]; then
     echo "ERROR: No existe keys/mlvpn.secret. Ejecuta primero 01-generar-secreto.sh"
     exit 1
 fi
-for p in ubond_macos_compile.patch tuntap_darwin_utun_ubond.c ubond_replicate_filter.patch ubond_per_link_tolerence.patch ubond_replicate_dedup_fix.patch ubond_filters_section_exclusion.patch; do
+for p in ubond_macos_compile.patch tuntap_darwin_utun_ubond.c ubond_replicate_filter.patch ubond_per_link_tolerence.patch ubond_replicate_dedup_fix.patch ubond_filters_section_exclusion.patch ubond_dedup_gate_data_seq.patch; do
     if [[ ! -f "${PATCHES_DIR}/${p}" ]]; then
         echo "ERROR: falta ${PATCHES_DIR}/${p}"
         exit 1
@@ -189,6 +189,16 @@ else
     # procesaban como filters stock con tun=NULL, cuelgue silencioso.
     echo "  Aplicando ubond_filters_section_exclusion.patch..."
     if ! patch -p1 -N --reject-file=- < "${PATCHES_DIR}/ubond_filters_section_exclusion.patch" 2>&1 | head -5; then
+        echo "  (patch ya aplicado o no aplicable; continuando)"
+    fi
+
+    # Patch 7 (REQ-NET-30): gate dedup por wire signal data_seq!=0 en
+    # vez de replicate_filters.count>0. Arregla cuelgue dataplane bajo
+    # asimetría cliente/server (validado oficina 2026-06-03 con tcpdump
+    # RPi: ping 0/N pre-patch, 10/10 post-simetría manual; el patch
+    # elimina la dependencia de simetría en la config).
+    echo "  Aplicando ubond_dedup_gate_data_seq.patch..."
+    if ! patch -p1 -N --reject-file=- < "${PATCHES_DIR}/ubond_dedup_gate_data_seq.patch" 2>&1 | head -5; then
         echo "  (patch ya aplicado o no aplicable; continuando)"
     fi
 
