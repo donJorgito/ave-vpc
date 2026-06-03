@@ -10,6 +10,42 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### REQ-NET-30 — dedup gate por wire signal data_seq!=0 (2026-06-03)
+
+Causa raíz cuelgue dataplane bajo `[filters.replicate]` activo: el gate de
+dedup en `ubond.c:659` dependía de `replicate_filters.count > 0`, estado
+LOCAL del receptor. Cliente con sección poblada + server con sección vacía
+(default según `07b-setup-rpi-ubond.sh`) → server NO dedupea aunque el
+wire trae clones con `data_seq != 0` → kernel descarta o confunde
+duplicados → ping 0/N, dataplane roto.
+
+Patch `patches/ubond_dedup_gate_data_seq.patch` cambia el gate a
+`proto->data_seq != 0` — señal autoritativa del sender en el wire.
+Receptor dedupea sii sender marcó. Sin negociación. data_seq=0 reservado
+(counter global empieza en 1) para tráfico que no requiere dedup.
+
+Wire format intacto — patch puramente receiver-side. Validado oficina
+2026-06-03 con tcpdump RPi: pre-patch (con asimetría) = ping 0/10;
+post-patch (con asimetría) = ping 10/10, 0 duplicados en `ubond0` RPi.
+
+Wire en build flow Mac+RPi (`03b`/`07b`). Doc completa en
+`docs/v2-ubond/08-req-net-30-dedup-asymmetry.md` con rollback plan +
+métricas post-deploy. Commit `bf5f2a5`.
+
+### Watchdog FAIL_THRESHOLD 4→8 — tolerancia NAT idle (2026-06-03)
+
+Análisis post-incidente 2026-06-03 12:51:35 (SOS disparado por watchdog
+tras 10 min Mac idle): expiración del UDP mapping en NAT del operador 4G.
+Recuperación por primer paquete real: 5-15s; watchdog con threshold=4 (20s)
+disparaba antes que el propio ubond (timeout=30 en config). Coordinación
+rota.
+
+Threshold subido a 8 (40s) en `tools/ubond-watchdog.sh` — supera el peor
+caso NAT recovery + cushion. Override via `WATCHDOG_FAIL_THRESHOLD` env.
+
+Refuerzo a REQ-NET-26 (watchdog auto-recovery). Mejoras pendientes
+trackeadas como REQ-NET-32 cuando proceda. Commit `b61f345`.
+
 ### 08-monitor.py dual-mode mlvpn/ubond (2026-06-03)
 
 El monitor TUI real-time pasa a soportar v1 (mlvpn) y v2 (ubond) con

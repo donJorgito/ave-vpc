@@ -182,7 +182,7 @@ def check_daemon_links(daemon):
             if pattern in line and '[priv]' not in line:
                 authed = re.findall(r'@(links\.\w+)', line)
                 pending = re.findall(r'!(links\.\w+)', line)
-                return {l: 'OK' for l in authed} | {l: 'AUTH_PENDING' for l in pending}
+                return {lk: 'OK' for lk in authed} | {lk: 'AUTH_PENDING' for lk in pending}
     except Exception:
         pass
     return {}
@@ -489,9 +489,9 @@ def main():
             sys.exit(1)
         if both_alive:
             print(f'{YELLOW}{BOLD}AVISO:{RESET}{YELLOW} mlvpn Y ubond vivos simultáneamente.{RESET}')
-            print(f'  Estado anómalo (transición v1→v2 incompleta o SOS fallido).')
-            print(f'  Mostrando ubond. Para limpiar: ejecuta SOS.sh y relanza.')
-            print(f'  Para forzar mlvpn: --daemon mlvpn')
+            print('  Estado anómalo (transición v1→v2 incompleta o SOS fallido).')
+            print('  Mostrando ubond. Para limpiar: ejecuta SOS.sh y relanza.')
+            print('  Para forzar mlvpn: --daemon mlvpn')
             time.sleep(2)
         else:
             print(f'{DIM}Auto-detected: {daemon}{RESET}')
