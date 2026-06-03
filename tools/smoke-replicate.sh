@@ -80,24 +80,41 @@ ubond_runner_cleanup_stale
 conf_gen_write "${DETECTED_REMOTE_HOST}" "${LINKS[@]}"
 CONF_PATH="$(conf_gen_path)"
 
-REPLICATE_BLOCK="$(cat <<EOF
+# Bloque [filters.replicate] en fichero temporal (awk -v con string
+# multi-línea explota con "newline in string" — bug detectado oficina
+# Roche 2026-06-03 que generaba conf vacío). Mejor escribir el block a
+# fichero y usar awk con `system("cat ...")` o sed con `r file`.
+BLOCK_FILE="${SMOKE_TMPDIR}/replicate_block.conf"
+cat > "${BLOCK_FILE}" <<EOF
 
 [filters.replicate]
 icmp_all = "icmp"
 udp_probe = "udp and port ${REPLICATE_UDP_PORT}"
 
 EOF
-)"
-# Inserta el bloque ANTES de la primera línea "[links." preservando el resto.
-# awk es portable; sed -i en macOS exige sufijo y es más frágil.
+
+# Inserta el bloque ANTES de la primera línea "[links." preservando el
+# resto. Usa awk con getline desde fichero — robusto a multilínea.
 TMP_CONF="${CONF_PATH}.tmp"
-awk -v block="${REPLICATE_BLOCK}" '
-    !inserted && /^\[links\./ { print block; inserted=1 }
+awk -v block_file="${BLOCK_FILE}" '
+    !inserted && /^\[links\./ {
+        while ((getline line < block_file) > 0) print line
+        close(block_file)
+        inserted = 1
+    }
     { print }
 ' "${CONF_PATH}" > "${TMP_CONF}"
 mv "${TMP_CONF}" "${CONF_PATH}"
 chmod 600 "${CONF_PATH}"
 log_info "Inyectado [filters.replicate] (icmp + udp:${REPLICATE_UDP_PORT}) en ${CONF_PATH}"
+
+# Sanity check: el conf debe tener la sección filters.replicate.
+if ! grep -q '^\[filters.replicate\]' "${CONF_PATH}"; then
+    die 1 "conf generado SIN [filters.replicate] — awk falló silencioso"
+fi
+if ! grep -q '^\[links\.' "${CONF_PATH}"; then
+    die 1 "conf generado SIN [links.X] — replicación no observable"
+fi
 
 # Captura RPi: solo lo necesario para diagnóstico de paquetes — el grueso
 # de la evidencia viene del journal, no del pcap.
