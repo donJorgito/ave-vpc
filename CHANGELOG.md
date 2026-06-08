@@ -10,6 +10,44 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### WiFi tren AVE — UBOND_PORT_3_REMOTE=443 + DNS pre-resolución (2026-06-08)
+
+Renfe filtra UDP outbound a puertos no estándar en la WiFi del AVE
+(confirmado pcap 2026-06-01 + test 2026-06-05). UDP/443 (HTTPS QUIC)
+pasa.
+
+Cambios:
+
+- Router ZTE F6640 (Playwright UI 2026-06-08): regla `mlvpn-443`
+  repurposed a `ubond-wifi-443` — External 443/UDP →
+  192.168.1.101:5085 (era 5082 mlvpn legacy).
+- `config/env`: `UBOND_PORT_3_REMOTE=443` (commit `8fbfac3`). 04b ya
+  soporta este override (líneas 81, 221, 229) y genera
+  `[links.wifi]` con `remoteport=443` automáticamente cuando WiFi es
+  elegible.
+- `config/env.example`: documenta la variable como opt-in.
+- Memoria `reference_ddns.md`: chain completo del router (6 reglas).
+
+Mejora 04b DNS (commit `95fc97d`): pre-resolución `VPS_IP` a IP literal
+en `ubond_active.conf` antes de lanzar ubond. Si DNS roto al inicio
+(captive sin auth típico), abort limpio con mensaje. Antes: ubond
+quedaba en bucle close/reconnect sin diagnóstico claro.
+`resolve_vps_public_ip` también usa fallback secuencial sobre
+`FALLBACK_DNS_RESOLVERS`.
+
+Rollback wifi tren si la regla del router molesta:
+
+1. SSH RPi → router (LAN 192.168.1.1) Playwright UI.
+2. Internet → Security → Port Forwarding → editar `ubond-wifi-443`:
+   cambiar `Internal Port = 5082` y rename a `mlvpn-443` (estado
+   previo). Apply.
+3. Mac: comentar `UBOND_PORT_3_REMOTE=443` en `config/env`.
+4. Relanzar 04b.
+
+Validación pendiente: próximo trayecto AVE — confirmar `@links.wifi`
+auth con captive Renfe autenticado. Test runtime: ver
+`tools/test-rebind-runtime.sh`.
+
 ### REQ-NET-35.1 — fix time-based rebind (counter-based bug, 2026-06-08)
 
 Test runtime de REQ-NET-35 con `iptables DROP` simulando NAT pinhole

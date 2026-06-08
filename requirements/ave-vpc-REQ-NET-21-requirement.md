@@ -45,7 +45,12 @@ Layout en RPi:
   con mensaje claro si falta `RPi_IP`.
 - Define puertos UDP `UBOND_PORT_1=5083`, `UBOND_PORT_2=5084`,
   `UBOND_PORT_3=5085` (con override por env vars), distintos a los
-  de mlvpn.
+  de mlvpn. El cliente Mac soporta `UBOND_PORT_3_REMOTE` (default =
+  `UBOND_PORT_3`) para conectar el link wifi a un puerto público
+  distinto del bind interno del RPi — necesario en AVE WiFi (Renfe
+  filtra UDP outbound a puertos no estándar). Configurar
+  `UBOND_PORT_3_REMOTE=443` y router NAT 443/UDP → 192.168.1.101:5085
+  bypass-ea el filtro (regla `ubond-wifi-443` añadida 2026-06-08).
 - Verifica que existe `patches/ubond_replicate_filter.patch` antes
   de conectar al RPi.
 - Comparte `keys/mlvpn.secret` (mismo password que mlvpn — un único
