@@ -58,6 +58,23 @@ else
         "patch sin gate '!t->server_mode' - riesgo: server intentaria rebindar su listener UDP"
 fi
 
+# 5.1 REQ-NET-35.1 fix verification: condicion time-based (no counter-based).
+# El bug original era counter-based atascado en 1 bajo silencio sostenido.
+# Fix usa UBOND_REBIND_SILENCE_S + last_keepalive_ack delta. Si alguien
+# revierte al patch viejo, este test falla.
+if grep -q "UBOND_REBIND_SILENCE_S" "${PATCH}"; then
+    junit_pass "fix_v35_1_silence_constant"
+else
+    junit_fail "fix_v35_1_silence_constant_missing" \
+        "patch sin UBOND_REBIND_SILENCE_S — regresion al patch counter-based buggy"
+fi
+if grep -qE "now - t->last_keepalive_ack|last_keepalive_ack.*>" "${PATCH}"; then
+    junit_pass "fix_v35_1_time_based_condition"
+else
+    junit_fail "fix_v35_1_time_based_missing" \
+        "patch sin condicion time-based 'now - last_keepalive_ack' — regresion"
+fi
+
 # 6. Patch contiene `UBOND_REBIND_THRESHOLD` (constante de gating).
 if grep -q "UBOND_REBIND_THRESHOLD" "${PATCH}"; then
     junit_pass "threshold_constant_present"
