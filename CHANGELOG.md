@@ -10,6 +10,16 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Watchdog threshold 8→12 (REQ-NET-32 enmienda, 2026-06-08)
+
+Análisis pcap AVE 2026-06-05 reveló 6 SOS automáticos del watchdog
+general durante el trayecto pese al threshold=8. Los handovers
+celulares AVE pueden durar >40s; threshold=12 (60s tolerance) cubre
+hasta el doble del timeout ubond (30s) sin enmascarar caídas
+legítimas (>60s = ya no es handover, es caída real).
+
+Override sigue activo via `WATCHDOG_FAIL_THRESHOLD` env var.
+
 ### REQ-NET-34 — Auto-recovery iphone NAT carrier expiry (implementado + validado AVE, 2026-06-08)
 
 Sub-síntoma específico y recurrente de la familia "watchdog tolerante a

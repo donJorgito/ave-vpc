@@ -1,7 +1,9 @@
 #!/bin/sh
 # Validates ave-vpc.REQ-NET-32: watchdog FAIL_THRESHOLD NAT-tolerant.
 # Static + sourcing harness para verificar default + override env +
-# invariante FAIL_THRESHOLD * TICK_S >= 40 (NAT recovery típico móvil).
+# invariante FAIL_THRESHOLD * TICK_S >= 60 (REQ-NET-32.1 enmienda
+# 2026-06-08 tras AVE 2026-06-05: handovers AVE pueden durar >40s,
+# threshold subido 8→12 = 60s tolerance).
 # shellcheck disable=SC1091
 . "$(dirname "$0")/_lib_junit.sh"
 junit_init "REQ-NET-32_watchdog_threshold"
@@ -17,12 +19,13 @@ else
     junit_finalize
 fi
 
-# 2. Default FAIL_THRESHOLD = 8 en el código.
-if grep -qE 'FAIL_THRESHOLD="\$\{WATCHDOG_FAIL_THRESHOLD:-8\}"' "${WATCHDOG}"; then
-    junit_pass "default_threshold_8"
+# 2. Default FAIL_THRESHOLD = 12 en el código (REQ-NET-32.1 enmienda
+# 2026-06-08 — AVE 2026-06-05 reveló 6 SOS automáticos con threshold=8).
+if grep -qE 'FAIL_THRESHOLD="\$\{WATCHDOG_FAIL_THRESHOLD:-12\}"' "${WATCHDOG}"; then
+    junit_pass "default_threshold_12"
 else
     junit_fail "default_threshold_wrong" \
-        "FAIL_THRESHOLD default no es 8 (esperado tras REQ-NET-32)"
+        "FAIL_THRESHOLD default no es 12 (esperado tras REQ-NET-32.1)"
 fi
 
 # 3. Default TICK_S = 5.
@@ -33,17 +36,18 @@ else
         "TICK_S default no es 5"
 fi
 
-# 4. Invariante FAIL_THRESHOLD * TICK_S >= 40 (NAT-tolerant).
+# 4. Invariante FAIL_THRESHOLD * TICK_S >= 60 (REQ-NET-32.1 — AVE
+# handover-tolerant; cubre hasta el doble del timeout interno de ubond=30s).
 # Extraer valores y multiplicar.
 THRESHOLD="$(grep -E 'FAIL_THRESHOLD="\$\{WATCHDOG_FAIL_THRESHOLD:-[0-9]+\}"' "${WATCHDOG}" | sed -E 's/.*:-([0-9]+)\}".*/\1/')"
 TICK="$(grep -E 'TICK_S="\$\{WATCHDOG_TICK_S:-[0-9]+\}"' "${WATCHDOG}" | sed -E 's/.*:-([0-9]+)\}".*/\1/')"
 if [ -n "${THRESHOLD}" ] && [ -n "${TICK}" ]; then
     PRODUCT="$((THRESHOLD * TICK))"
-    if [ "${PRODUCT}" -ge 40 ]; then
-        junit_pass "invariant_nat_tolerant"
+    if [ "${PRODUCT}" -ge 60 ]; then
+        junit_pass "invariant_ave_handover_tolerant"
     else
         junit_fail "invariant_violated" \
-            "FAIL_THRESHOLD * TICK_S = ${PRODUCT}s, debe ser >=40s para tolerar NAT recovery"
+            "FAIL_THRESHOLD * TICK_S = ${PRODUCT}s, debe ser >=60s para tolerar handovers AVE (REQ-NET-32.1)"
     fi
 else
     junit_fail "values_unparseable" \

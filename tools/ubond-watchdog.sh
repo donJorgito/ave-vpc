@@ -31,9 +31,17 @@ TICK_S="${WATCHDOG_TICK_S:-5}"
 # era demasiado agresivo para móvil con expiración NAT en idle. Tras ~10
 # min sin tráfico el operador 4G droppea el UDP mapping; recuperación por
 # el primer paquete real tarda 5-15s, pero el watchdog ya cae a 20s y
-# dispara SOS innecesario. Subido a 8 (40s) para dar margen. Override:
-#   WATCHDOG_FAIL_THRESHOLD=12 ./tools/ubond-watchdog.sh   # 60s sin red
-FAIL_THRESHOLD="${WATCHDOG_FAIL_THRESHOLD:-8}"   # 8 × 5s = 40s sin red → SOS
+# dispara SOS innecesario. Subido a 8 (40s) para dar margen.
+#
+# REQ-NET-32.1 enmienda (AVE 2026-06-05): análisis pcap del trayecto
+# reveló 6 SOS automáticos pese al threshold=8. Los handovers celulares
+# AVE pueden durar >40s (cambio de celda + autenticación + reconvergencia
+# de NAT del operador en alta velocidad). Subido a 12 (60s tolerance)
+# para cubrir hasta el doble del timeout interno de ubond (30s) sin
+# enmascarar caídas legítimas: una caída real durará >60s y aún
+# disparará SOS. Override:
+#   WATCHDOG_FAIL_THRESHOLD=8 ./tools/ubond-watchdog.sh   # legacy 40s
+FAIL_THRESHOLD="${WATCHDOG_FAIL_THRESHOLD:-12}"  # 12 × 5s = 60s sin red → SOS
 PING_TIMEOUT_S="${WATCHDOG_PING_TIMEOUT_S:-2}"
 SOS_COOLDOWN_S="${WATCHDOG_SOS_COOLDOWN_S:-60}"  # evitar spam SOS
 TARGET="${UBOND_TUN_VPS_IP:-10.10.20.1}"
