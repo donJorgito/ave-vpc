@@ -10,6 +10,33 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### REQ-NET-35.1 — fix time-based rebind (counter-based bug, 2026-06-08)
+
+Test runtime de REQ-NET-35 con `iptables DROP` simulando NAT pinhole
+death sostenido expuso un bug en el diseño original:
+`reauth_attempts_no_inbound` solo incrementaba en transición
+AUTHOK→DOWN; tras la primera vez status quedaba <AUTHOK
+permanentemente bajo silencio sostenido (sin re-auth posible), counter
+atascado en 1, rebind nunca disparaba. Test concreto: 190s después
+del DROP el sport del Mac seguía siendo 52237 (sin cambio), log no
+mostraba "silence threshold reached".
+
+Fix REQ-NET-35.1: condición time-based en vez de counter. Nueva
+constante `UBOND_REBIND_SILENCE_S=90` (segundos). Cuando
+`(now - last_keepalive_ack) > 90s` y `status < UBOND_AUTHOK` y
+`fd >= 0`, dispara `ubond_rtun_rebind_socket_internal`. Funciona
+con silencio sostenido O intermitente. Preserva semántica original
+"3 ciclos sin respuesta" pero basada en tiempo, no en counter buggy.
+
+`patches/ubond_rebind_on_silence.patch` actualizado. Mac (binario
+13:36) y RPi (binario tras rebuild) redeployed con el fix .1.
+Sintoma observable nuevo: log `%s silence %.0fs reached (>= 90s),
+rebinding socket`.
+
+Validación runtime completa pendiente: requiere iphone tethering
+activo, iptables DROP en RPi durante >90s, observar rebind log,
+verificar sport efímero cambió Mac-side.
+
 ### Mecanismo REQ-NET-34 corregido + REQ-NET-35 NO sustituye NET-34 (2026-06-08)
 
 Investigación dedicada del mecanismo de recovery REQ-NET-34

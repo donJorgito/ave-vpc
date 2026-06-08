@@ -27,7 +27,7 @@
  int ubond_filters_add(const struct bpf_program *filter, ubond_tunnel_t *tun);
 --- a/src/ubond.c
 +++ b/src/ubond.c
-@@ -240,6 +240,17 @@
+@@ -240,6 +240,22 @@
      {0,               0,                 0, 0 }
  };
 
@@ -41,6 +41,11 @@
 + * Mas bajo: rebind agresivo, churn de sport innecesario.
 + * Mas alto: tarda mas en recuperar tras NAT expiry. */
 +#define UBOND_REBIND_THRESHOLD 3
++/* REQ-NET-35.1 (2026-06-08): segundos de silencio inbound antes de
++ * rebind socket. 90s = 3 timeouts ubond (timeout=30 default) — preserva
++ * la semantica original "3 ciclos sin respuesta", pero usando
++ * tiempo en vez del counter buggy AUTHOK->DOWN-only. */
++#define UBOND_REBIND_SILENCE_S 90
 +
  static int ubond_rtun_start(ubond_tunnel_t *t);
  static void ubond_rtun_read(EV_P_ ev_io *w, int revents);
@@ -102,7 +107,7 @@
              ubond_rtun_status_down(t);
          } else {
              if (now > t->next_keepalive)
-@@ -2060,8 +2086,51 @@
+@@ -2060,8 +2086,58 @@
          }
      }
      if (t->status < UBOND_AUTHOK) {
@@ -113,13 +118,20 @@
 +         * por un sport efimero fresco. Gate por !server_mode: el
 +         * servidor no tiene control sobre el sport del peer, no hay
 +         * nada que rebindear. */
-+        if (!t->server_mode &&
-+            t->reauth_attempts_no_inbound >= UBOND_REBIND_THRESHOLD) {
-+            log_info("net",
-+                "%s silence threshold reached (%d), rebinding socket",
-+                t->name, t->reauth_attempts_no_inbound);
-+            ubond_rtun_rebind_socket_internal(t);
-+            t->reauth_attempts_no_inbound = 0;
++        /* REQ-NET-35.1 (fix 2026-06-08): condicion time-based en vez de
++         * counter-based. La version original incrementaba reauth_attempts
++         * solo en transicion AUTHOK->DOWN; con silencio sostenido el
++         * counter quedaba atascado en 1 y nunca disparaba rebind. */
++        if (!t->server_mode && t->fd >= 0 && t->last_keepalive_ack > 0) {
++            ev_tstamp silence = now - t->last_keepalive_ack;
++            if (silence > UBOND_REBIND_SILENCE_S) {
++                log_info("net",
++                    "%s silence %.0fs reached (>= %ds), rebinding socket",
++                    t->name, silence, UBOND_REBIND_SILENCE_S);
++                ubond_rtun_rebind_socket_internal(t);
++                t->reauth_attempts_no_inbound = 0;
++                t->last_keepalive_ack = now;
++            }
 +        }
          ubond_rtun_tick_connect(t);
      }

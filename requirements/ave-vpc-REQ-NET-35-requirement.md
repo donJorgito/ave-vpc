@@ -94,6 +94,26 @@ otros procesos.
   cualquier patch resuelve uno pero no el otro, la decision de
   deprecar NET-34 queda en `false`.
 
+**Validacion runtime parcial (2026-06-08, REQ-NET-35.1):**
+
+Test runtime con `iptables -I INPUT -p udp --sport <SPORT> --dport 5085
+-j DROP` simulando NAT pinhole death sostenido expuso un bug en el
+diseno original counter-based: `reauth_attempts_no_inbound` solo
+incrementaba en transicion AUTHOK -> DOWN, despues de la primera vez
+status quedaba <AUTHOK con silencio sostenido (sin re-auth posible) y
+el counter atascado en 1 -> rebind nunca disparaba. Counter no
+crece >1 bajo iptables DROP.
+
+**Fix REQ-NET-35.1 (commit 2026-06-08)**: condicion time-based en vez
+de counter. Nueva constante `UBOND_REBIND_SILENCE_S=90` (segundos).
+Cuando `(now - last_keepalive_ack) > 90s` y `status < UBOND_AUTHOK` y
+`fd >= 0`, dispara `rebind_socket_internal`. Funciona tanto con
+silencio sostenido como intermitente. Mantiene la semantica original
+"3 ciclos sin respuesta" pero usando tiempo, no counter buggy.
+
+Mac y RPi rebuilt + redeployed con el fix .1. Sintoma observable:
+nuevo log `%s silence %.0fs reached (>= 90s), rebinding socket`.
+
 **Validacion pendiente (runtime):**
 
 1. Rebuild en RPi y Mac con el patch aplicado.
