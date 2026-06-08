@@ -104,6 +104,7 @@ UBOND_PATCH2_B64="$(base64 < "${PATCHES_DIR}/ubond_per_link_tolerence.patch" | t
 UBOND_PATCH3_B64="$(base64 < "${PATCHES_DIR}/ubond_replicate_dedup_fix.patch" | tr -d '\n')"
 UBOND_PATCH4_B64="$(base64 < "${PATCHES_DIR}/ubond_filters_section_exclusion.patch" | tr -d '\n')"
 UBOND_PATCH5_B64="$(base64 < "${PATCHES_DIR}/ubond_dedup_gate_data_seq.patch" | tr -d '\n')"
+UBOND_PATCH6_B64="$(base64 < "${PATCHES_DIR}/ubond_rebind_on_silence.patch" | tr -d '\n')"
 
 echo "=> Conectando a la Raspberry Pi ${RPi_IP} (puerto SSH ${RPi_SSH_PORT})..."
 echo "=> ubond escuchará en ${UBOND_PORT_1}/${UBOND_PORT_2}/${UBOND_PORT_3} UDP (paralelo a mlvpn 5080-5082)"
@@ -121,6 +122,7 @@ ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     UBOND_PATCH3_B64="${UBOND_PATCH3_B64}" \
     UBOND_PATCH4_B64="${UBOND_PATCH4_B64}" \
     UBOND_PATCH5_B64="${UBOND_PATCH5_B64}" \
+    UBOND_PATCH6_B64="${UBOND_PATCH6_B64}" \
     bash <<'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -186,6 +188,18 @@ else
         echo "  [RPi] (patch dedup_gate_data_seq ya aplicado o no aplicable; continuando)"
     fi
     rm -f /tmp/ubond_dedup_gate_data_seq.patch
+
+    # REQ-NET-35: rebind socket UDP en silencio inbound. Fix C
+    # definitivo del NAT carrier expiry. En el RPi (server_mode) el
+    # gating !t->server_mode hace que el listener UDP NO se rebinde
+    # nunca; el patch sirve para mantener simetría de fuente y permitir
+    # que cualquier futuro ubond corriendo en modo cliente desde el RPi
+    # tambien se beneficie. Supersede de REQ-NET-34 (watchdog bash).
+    printf '%s' "${UBOND_PATCH6_B64}" | base64 -d > /tmp/ubond_rebind_on_silence.patch
+    if ! patch -p1 -N --reject-file=- < /tmp/ubond_rebind_on_silence.patch 2>&1 | head -10; then
+        echo "  [RPi] (patch rebind_on_silence ya aplicado o no aplicable; continuando)"
+    fi
+    rm -f /tmp/ubond_rebind_on_silence.patch
 
     ./autogen.sh
     # --enable-filters: requerido para [filters.replicate]

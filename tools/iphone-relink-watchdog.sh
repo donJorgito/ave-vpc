@@ -31,9 +31,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GENERATED_DIR="${SCRIPT_DIR}/generated"
 LOG="${GENERATED_DIR}/iphone_relink_watchdog.log"
 PID_FILE="${GENERATED_DIR}/iphone_relink_watchdog.pid"
+CONFIG_FILE="${SCRIPT_DIR}/config/env"
+
+# Cargar config/env para defaults coherentes con resto de scripts
+# (IFACE_IPHONE, etc.). Silenciar si no existe — fallback a defaults.
+# shellcheck source=/dev/null
+[[ -r "${CONFIG_FILE}" ]] && source "${CONFIG_FILE}" 2>/dev/null || true
 
 LINK_NAME="${RELINK_LINK_NAME:-iphone}"
-IFACE="${RELINK_IFACE:-en8}"
+# IDLC R4 (no hardcoding): usar IFACE_IPHONE de config/env si existe,
+# fallback a en8 (default histórico para tethering iPhone via USB en
+# este Mac). Override explícito vía RELINK_IFACE.
+IFACE="${RELINK_IFACE:-${IFACE_IPHONE:-en8}}"
 TICK_S="${RELINK_TICK_S:-5}"
 FAIL_THRESHOLD="${RELINK_FAIL_THRESHOLD:-12}"
 COOLDOWN_S="${RELINK_COOLDOWN_S:-90}"
@@ -45,6 +54,19 @@ cleanup() { rm -f "$PID_FILE"; exit 0; }
 trap cleanup INT TERM
 
 mkdir -p "$GENERATED_DIR"
+
+# Anti doble-lanzamiento: si ya hay un watchdog activo (PID file fresco
+# y proceso vivo), salir limpio. Evita que dos invocaciones de 04b
+# (relaunch tras SOS, debug session, etc.) generen dos watchdogs
+# pisándose en ifconfig down/up. Caveat C/network supervisor 2026-06-08.
+if [[ -e "${PID_FILE}" ]]; then
+    OLD_PID="$(cat "${PID_FILE}" 2>/dev/null || echo)"
+    if [[ -n "${OLD_PID}" ]] && kill -0 "${OLD_PID}" 2>/dev/null; then
+        echo "iphone-relink-watchdog ya corriendo (pid=${OLD_PID}); exit" >&2
+        exit 0
+    fi
+fi
+
 echo $$ > "$PID_FILE"
 log "start link=$LINK_NAME iface=$IFACE threshold=${FAIL_THRESHOLD}x${TICK_S}s cooldown=${COOLDOWN_S}s"
 

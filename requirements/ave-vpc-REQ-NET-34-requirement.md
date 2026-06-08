@@ -51,16 +51,43 @@ manual no es operativamente viable durante una llamada o sesión SSH.
 
 **Validación AVE 2026-06-05 (`generated/iphone_relink_watchdog.log`):**
 
-Dos actuaciones exitosas en un mismo trayecto Madrid → Orihuela:
+Tres actuaciones exitosas en un mismo trayecto Madrid → Orihuela:
 
 | Actuación | Trigger (DOWN 12/12) | ACTION ifconfig | Recovery |
 |---|---|---|---|
 | 1 | 09:30:54Z | 09:30:54Z → 09:30:56Z | DOWN 4/12 a las 09:31:36Z, recovered 09:31:56Z |
 | 2 | 09:39:04Z | 09:39:04Z → 09:39:06Z | DOWN 1/12 a las 09:39:11Z, recovered 09:39:16Z |
+| 3 | 10:05:11Z | 10:05:11Z → 10:05:13Z | DOWN 2/12 a las 10:05:23Z, recovered 10:05:28Z |
 
-Tercera actuación a las 10:05:11Z también recuperó link en <17s
-(`recovered fail_count was 2` a las 10:05:28Z). Sin intervención humana
-en ninguno de los tres episodios; sesión AVE continuó sin corte.
+Las tres actuaciones recuperaron `@links.iphone` autenticado sin
+intervención humana.
+
+**Limitación documentada — mecanismo real de recovery por confirmar
+(análisis pcap 2026-06-08):**
+
+Análisis de `evidence/ave-2026-06-05/iphone-4g.pcap0` (parser pcap nativo,
+1.05M paquetes) reveló que tras `ifconfig en8 down/up` el sport efímero
+del iPhone NO cambió (siguió siendo 55478). El supuesto mecanismo
+"nueva IP local → nuevo bind → nuevo sport efímero → NAT mapping fresco"
+NO se observa en wire. La recuperación ocurre, pero la causa
+microscópica es otra (pendiente investigación: posiblemente CGNAT
+Movistar refresh por evento link-down detectado en el módem 4G, o
+ubond reusa el mismo socket tras ver IP nueva en `getifaddr` y el
+gateway 4G acepta reanudar).
+
+REQ-NET-35 (rebind socket en C, en diseño) implementará el mecanismo
+"sport efímero nuevo" de forma explícita — no asumiendo que `ifconfig
+down/up` lo provoque indirectamente.
+
+**Limitación REQ-NET-32 (threshold=8) confirmada insuficiente para AVE
+2026-06-05**: el watchdog general (`tools/ubond-watchdog.sh`) disparó
+**6 SOS automáticos** durante el trayecto (10:52, 11:27, 11:57, 12:07,
+12:19, 12:21 CEST) pese al fix del threshold. iphone-relink-watchdog
+solo cubre el sub-síntoma iphone-down; cuando ambos links 4G fallan
+simultáneamente (cobertura cero o handover bidireccional), el túnel
+cae completo y el watchdog general escala 8/8. Pendiente subir
+threshold general a 12 + considerar REQ-NET-34/35 cubriendo también
+pixel.
 
 **Related:**
 

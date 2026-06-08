@@ -63,7 +63,7 @@ if [[ ! -f "${KEYS_DIR}/mlvpn.secret" ]]; then
     echo "ERROR: No existe keys/mlvpn.secret. Ejecuta primero 01-generar-secreto.sh"
     exit 1
 fi
-for p in ubond_macos_compile.patch tuntap_darwin_utun_ubond.c ubond_replicate_filter.patch ubond_per_link_tolerence.patch ubond_replicate_dedup_fix.patch ubond_filters_section_exclusion.patch ubond_dedup_gate_data_seq.patch; do
+for p in ubond_macos_compile.patch tuntap_darwin_utun_ubond.c ubond_replicate_filter.patch ubond_per_link_tolerence.patch ubond_replicate_dedup_fix.patch ubond_filters_section_exclusion.patch ubond_dedup_gate_data_seq.patch ubond_rebind_on_silence.patch; do
     if [[ ! -f "${PATCHES_DIR}/${p}" ]]; then
         echo "ERROR: falta ${PATCHES_DIR}/${p}"
         exit 1
@@ -199,6 +199,17 @@ else
     # elimina la dependencia de simetría en la config).
     echo "  Aplicando ubond_dedup_gate_data_seq.patch..."
     if ! patch -p1 -N --reject-file=- < "${PATCHES_DIR}/ubond_dedup_gate_data_seq.patch" 2>&1 | head -5; then
+        echo "  (patch ya aplicado o no aplicable; continuando)"
+    fi
+
+    # Patch 8 (REQ-NET-35): rebind socket UDP en silencio inbound.
+    # Fix C definitivo del NAT carrier expiry — supersede del watchdog
+    # bash REQ-NET-34. Cliente cierra el socket y reabre con sport
+    # efímero fresco tras UBOND_REBIND_THRESHOLD ticks (~750ms post
+    # primer status_down) sin DATA/KEEPALIVE inbound. Server-mode
+    # gated: el listener UDP del servidor NO se rebinda.
+    echo "  Aplicando ubond_rebind_on_silence.patch..."
+    if ! patch -p1 -N --reject-file=- < "${PATCHES_DIR}/ubond_rebind_on_silence.patch" 2>&1 | head -5; then
         echo "  (patch ya aplicado o no aplicable; continuando)"
     fi
 

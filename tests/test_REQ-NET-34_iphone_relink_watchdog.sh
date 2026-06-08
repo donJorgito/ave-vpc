@@ -33,10 +33,13 @@ if grep -qE 'LINK_NAME="\$\{RELINK_LINK_NAME:-iphone\}"' "${WATCHDOG}"; then
 else
     junit_fail "default_link_wrong" "default RELINK_LINK_NAME no es 'iphone'"
 fi
-if grep -qE 'IFACE="\$\{RELINK_IFACE:-en8\}"' "${WATCHDOG}"; then
-    junit_pass "default_iface_en8"
+if grep -qE 'IFACE="\$\{RELINK_IFACE:-\$\{IFACE_IPHONE:-en8\}\}"' "${WATCHDOG}"; then
+    junit_pass "default_iface_with_iface_iphone_fallback"
+elif grep -qE 'IFACE="\$\{RELINK_IFACE:-en8\}"' "${WATCHDOG}"; then
+    junit_pass "default_iface_en8_literal"
 else
-    junit_fail "default_iface_wrong" "default RELINK_IFACE no es 'en8'"
+    junit_fail "default_iface_wrong" \
+        "default RELINK_IFACE no es 'en8' (ni literal ni con IFACE_IPHONE fallback)"
 fi
 if grep -qE 'TICK_S="\$\{RELINK_TICK_S:-5\}"' "${WATCHDOG}"; then
     junit_pass "default_tick_5"
