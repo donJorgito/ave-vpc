@@ -10,25 +10,59 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
-### REQ-NET-34 — Watchdog tolerante a degradación parcial (planificado, 2026-06-03)
+### REQ-NET-34 — Auto-recovery iphone NAT carrier expiry (implementado + validado AVE, 2026-06-08)
 
-Tres SOS espurios reproducibles oficina 2026-06-03 con misma firma:
-`[WARN/net] links.pixel write error` → 26-56s después → watchdog SOS.
-Threshold-8 (REQ-NET-32) solo difirió la muerte 30s vs threshold-4. Subir
-más enmascara caídas legítimas.
+Sub-síntoma específico y recurrente de la familia "watchdog tolerante a
+degradación parcial": tras varios minutos de trayecto el operador 4G del
+iPhone (Movistar) expira el pinhole UDP del NAT carrier. ubond v2 no
+tiene rebind logic — el link queda `!links.iphone` permanente hasta que
+el usuario interviene manualmente con `ifconfig en8 down/up`.
 
-Causa raíz: cuando un link móvil falla, ubond no degrada con el resto de
-links de forma que el ping ICMP del watchdog siga viendo el túnel sano.
+`tools/iphone-relink-watchdog.sh` (nuevo) automatiza esa secuencia:
 
-Fix planificado: lógica del watchdog que distingue:
+- Lee proctitle ubond cada 5s buscando `!links.${RELINK_LINK_NAME}`.
+- Tras 12 ticks consecutivos (60s = 2 timeouts ubond) ejecuta
+  `ifconfig $IFACE down → sleep 2s → up`. Recovery <30s.
+- Cooldown 90s post-acción para evitar flap-loop.
+- Reset de `fail_count` si el proceso ubond no corre o si el link se
+  recupera por sí solo antes de cruzar el threshold.
+- Variables override: `RELINK_LINK_NAME`, `RELINK_IFACE`, `RELINK_TICK_S`,
+  `RELINK_FAIL_THRESHOLD`, `RELINK_COOLDOWN_S`, `RELINK_GAP_S`.
 
-- 0 links auth + ping KO → SOS (caída total).
-- ≥1 link auth + ping KO transitorio → log warning, NO SOS.
-- ≥1 link auth + ping KO sostenido (>120s) → SOS degradado.
+`04b-conectar-ubond.sh` lo arranca en background tras configurar el utun,
+solo si el iPhone tiene IP detectada. Complementa el watchdog general
+(REQ-NET-26) — aquí el remedio es ligero (down/up de la iface), allí es
+SOS full-restart.
 
-Implementación en `tools/ubond-watchdog.sh` cuando se priorice. Spec
-detallada en `requirements/ave-vpc-REQ-NET-34-requirement.md`. Memoria
-de sesión: `project_persistent_pixel_sos_pattern.md`.
+**Validación AVE 2026-06-05** (log
+`generated/iphone_relink_watchdog.log`): tres actuaciones exitosas en un
+mismo trayecto (09:30:54Z, 09:39:04Z, 10:05:11Z), las tres recuperaron
+el link en <17s tras el down/up. Sin intervención humana. Sesión AVE
+continuó sin corte.
+
+Test estático `tests/test_REQ-NET-34_iphone_relink_watchdog.sh` (20 PASS)
+verifica defaults, overrides, lógica de cooldown, reset cuando ubond no
+corre, sintaxis bash y lanzamiento desde 04b.
+
+### Fix 04b silent route-add — verificación explícita rutas /1 (2026-06-08)
+
+Bug detectado oficina 2026-06-03 + reproducido AVE 2026-06-05:
+`04b-conectar-ubond.sh` instalaba las rutas `0.0.0.0/1` y `128.0.0.0/1`
+con el patrón silencioso `route -n add ... 2>/dev/null || true`. Si
+`route add` fallaba (utun no listo, race con ifconfig, política
+sandbox), el error se descartaba y el script seguía. Resultado: las /1
+no existían en la tabla de routing → el tráfico NO iba por el túnel
+aunque el ping al gateway interno funcionase (ese sí va por la /32 a
+`UBOND_TUN_VPS_IP`). Tests pasaban falsamente.
+
+Fix: nueva función `add_tun_route` que captura stderr, verifica con
+`netstat -rn` que la ruta esperada (`0/1`, `128/1`) aparece en la tabla
+de routing tras el add, y reintenta una vez con `sleep 2` si no. Si
+ambos intentos fallan, log `ERROR` explícito (sin abortar el script —
+el watchdog REQ-NET-26 lo detectará en runtime).
+
+Sin variables nuevas. Comportamiento normal (rutas /1 instaladas a la
+primera) idéntico al previo, solo añade observabilidad y reintento.
 
 ### REQ-NET-33.1 — Phase 1 code coverage Python (2026-06-03)
 

@@ -1,68 +1,72 @@
-### ave-vpc.REQ-NET-34 - Watchdog tolerante a degradación parcial
+### ave-vpc.REQ-NET-34 - Auto-recovery iphone NAT carrier expiry
+
+**Status:** Implementado y validado en producción AVE 2026-06-05.
 
 **Description:**
 
-REQ-NET-32 (threshold=8) DEMOSTRADO insuficiente. Validación oficina
-2026-06-03 (3 SOS espurios consecutivos en una tarde con misma firma):
-cada vez que `[WARN/net] links.pixel write error` aparece en `ubond.log`,
-26-56 segundos después el watchdog dispara SOS — exactamente cuando
-el threshold (20s o 40s) se cumple.
+Sub-síntoma observable y recurrente del problema general "watchdog tolerante
+a degradación parcial": cuando el túnel ubond v2 lleva varios minutos de
+trayecto AVE con cobertura cambiante, el operador 4G del iPhone (Movistar)
+expira el pinhole UDP del NAT carrier. El binario ubond NO tiene rebind
+logic — sigue mandando keepalives al sport efímero ya muerto, el servidor
+en la RPi nunca los recibe, y el link queda como `!links.iphone`
+(AUTH_PENDING) de forma permanente, hasta que el usuario interviene
+manualmente bajando y subiendo la interfaz en macOS.
 
-| Evento | pixel write error | SOS | Delta | Threshold |
-|---|---|---|---|---|
-| 1 | 12:51:09 | 12:51:35 | 26s | 4 (20s) |
-| 3 | 16:44:38 | 16:45:34 | 56s | 8 (40s) |
+Mecanismo del fix: forzar re-DHCP en la iface tethering (`ifconfig en8 down`
+seguido de `ifconfig en8 up`) regenera el mapping NAT del operador,
+ubond ve `getifaddr` sin IP → bind socket nuevo → el siguiente keepalive
+sale por un sport fresco que el operador acepta. Recuperación en <30s
+sin tocar el binario.
 
-Subir threshold solo difiere la muerte ~30s. NO es la solución correcta:
-threshold alto enmascara caídas legítimas (downtime real largo) y
-solo posterga el síntoma.
+`tools/iphone-relink-watchdog.sh` automatiza esa secuencia: lee el
+proctitle de ubond cada 5s, contabiliza cuántos ticks consecutivos el
+link aparece como `!links.${LINK_NAME}`, y tras `FAIL_THRESHOLD` ticks
+ejecuta `ifconfig down/up` con cooldown de 90s para evitar flap-loop.
 
-**Causa raíz aproximada**: cuando un link móvil del bonding (pixel)
-experimenta `write error` (NAT 4G expirado, drop celular, write socket
-ENETUNREACH), ubond NO degrada con iphone solo de forma que el watchdog
-ICMP siga viendo el túnel sano. Aunque iphone sigue `@links.iphone`
-autenticado, el ping al utun no vuelve.
+**Why:** Sin esta recuperación automática, una expiración de NAT en
+medio del AVE rompe la sesión durante minutos hasta que el usuario nota
+la degradación, abre terminal, identifica el link caído y actúa. El
+patrón se reproduce cada 6-15 min en trayectos largos. La recuperación
+manual no es operativamente viable durante una llamada o sesión SSH.
 
-Fix propuesto: lógica de health del watchdog que distingue entre:
+**Acceptance Criteria (implementación):**
 
-- **0 links auth + ping KO** → caída total → SOS legítimo.
-- **≥1 link auth + ping KO transitorio (<60s)** → degradación, LOG warning, NO SOS.
-- **≥1 link auth + ping KO sostenido (>120s)** → degradación seria, SOS.
+- `tools/iphone-relink-watchdog.sh` existe, ejecutable, requiere root
+  (exit 1 si EUID != 0).
+- Variables override `RELINK_LINK_NAME` (default `iphone`),
+  `RELINK_IFACE` (default `en8`), `RELINK_TICK_S` (default 5),
+  `RELINK_FAIL_THRESHOLD` (default 12 = 60s), `RELINK_COOLDOWN_S`
+  (default 90), `RELINK_GAP_S` (default 2 entre down y up).
+- Detecta link DOWN parseando proctitle ubond en busca de
+  `!links.${LINK_NAME}` (no usa exit code de ping ni del binario).
+- Reset de `fail_count` cuando el proceso ubond no corre (no actúa
+  sobre falso positivo si el túnel está apagado).
+- Reset de `fail_count` cuando el link se recupera por sí solo antes
+  de cruzar el threshold.
+- Cooldown post-acción: tras `ifconfig down/up`, no actúa de nuevo
+  durante `RELINK_COOLDOWN_S` aunque el link siga `!`.
+- Lanzado automáticamente por `04b-conectar-ubond.sh` en background
+  tras configurar el utun, junto al watchdog general.
 
-Implementación candidata en `tools/ubond-watchdog.sh`:
+**Validación AVE 2026-06-05 (`generated/iphone_relink_watchdog.log`):**
 
-```bash
-# Antes de incrementar fails, verificar count de links auth.
-auth_count=$(pgrep -f "ubond: ubond0 @" | head -1 | xargs -I{} ps -o command= -p {} | grep -oE "@links\.\w+" | wc -l | tr -d ' ')
-if [[ "${auth_count}" -ge 1 && "${fails}" -lt $((FAIL_THRESHOLD * 3)) ]]; then
-    log "health degradado fails=${fails}/$((FAIL_THRESHOLD*3)) (${auth_count} link auth, NO SOS)"
-    continue
-fi
-```
+Dos actuaciones exitosas en un mismo trayecto Madrid → Orihuela:
 
-**Why:** Sin este fix, el patrón "pixel falla → 30-60s después SOS" rompe
-cualquier sesión >10 min en oficina/AVE. Ya validado tres veces hoy.
+| Actuación | Trigger (DOWN 12/12) | ACTION ifconfig | Recovery |
+|---|---|---|---|
+| 1 | 09:30:54Z | 09:30:54Z → 09:30:56Z | DOWN 4/12 a las 09:31:36Z, recovered 09:31:56Z |
+| 2 | 09:39:04Z | 09:39:04Z → 09:39:06Z | DOWN 1/12 a las 09:39:11Z, recovered 09:39:16Z |
 
-**Acceptance Criteria:**
-
-- `tools/ubond-watchdog.sh` lee count de `@links.X` autenticados antes
-  de cada fail count.
-- Si `auth_count >= 1`, escala a 3× threshold antes de SOS.
-- Mensaje `health degradado` en log para distinguir de fail real.
-- Test (estático): verificar que el script tiene la lógica auth_count.
-- Test (runtime, opcional): forzar `links.pixel write error` (matar pixel
-  tethering) y validar que watchdog NO dispara SOS si iphone sigue auth
-  pero ping KO.
-
-**Validación pendiente:**
-
-- Reproducir el escenario en oficina o AVE.
-- Confirmar que el patrón post-fix es "degradación tolerada" no "SOS espurio".
+Tercera actuación a las 10:05:11Z también recuperó link en <17s
+(`recovered fail_count was 2` a las 10:05:28Z). Sin intervención humana
+en ninguno de los tres episodios; sesión AVE continuó sin corte.
 
 **Related:**
 
-- [[REQ-NET-26]] — watchdog auto-recovery base.
-- [[REQ-NET-32]] — threshold 4→8 (necesario pero NO suficiente).
-- `~/.claude/projects/.../memory/project_persistent_pixel_sos_pattern.md`
-  — el patrón observado y por qué subir threshold no funciona.
-- Próxima investigación: `links.pixel write error` causa raíz (NAT 4G timeout?).
+- [[REQ-NET-26]] — watchdog auto-recovery base (vía SOS.sh).
+- [[REQ-NET-32]] — threshold 4→8 en watchdog general (NAT-tolerant).
+- `tools/ubond-watchdog.sh` — watchdog general (este es complementario,
+  específico de la iface iphone porque el remedio es distinto: ahí
+  SOS.sh full-restart, aquí solo `ifconfig down/up` que es mucho más
+  ligero).

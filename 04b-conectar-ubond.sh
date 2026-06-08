@@ -302,8 +302,36 @@ done
 if [[ -n "${UTUN_IFACE}" ]]; then
     echo "  Configurando ${UTUN_IFACE} con IP del túnel..."
     ifconfig "${UTUN_IFACE}" "${UBOND_TUN_MAC_IP}" "${UBOND_TUN_VPS_IP}" mtu "${TUN_MTU}" up 2>/dev/null || true
-    route -n add -net 0.0.0.0/1   -interface "${UTUN_IFACE}" 2>/dev/null || true
-    route -n add -net 128.0.0.0/1 -interface "${UTUN_IFACE}" 2>/dev/null || true
+
+    # Bug detectado oficina 2026-06-03 + AVE 2026-06-05: el patrón
+    # `route ... 2>/dev/null || true` original se comía silenciosamente
+    # errores de instalación de las rutas /1. Resultado: tests pasaban
+    # pero el tráfico NO iba por el túnel (las /1 no existían realmente
+    # en la tabla de routing). Verificar explícitamente y reintentar.
+    # macOS netstat -rn imprime estas rutas como '0/1' y '128/1'.
+    add_tun_route() {
+        local net="$1" expected="$2" iface="$3" attempt route_err
+        for attempt in 1 2; do
+            route_err="$(route -n add -net "${net}" -interface "${iface}" 2>&1 1>/dev/null)" || true
+            if netstat -rn -f inet | awk '{print $1}' | grep -qx "${expected}"; then
+                return 0
+            fi
+            echo "    ADVERTENCIA: route add ${net} via ${iface} falló (intento ${attempt}): ${route_err:-sin stderr}" >&2
+            sleep 2
+        done
+        return 1
+    }
+    ROUTES_OK=true
+    if ! add_tun_route "0.0.0.0/1"   "0/1"   "${UTUN_IFACE}"; then
+        echo "    ERROR: ruta 0/1 NO instalada — tráfico NO va por túnel" >&2
+        ROUTES_OK=false
+    fi
+    if ! add_tun_route "128.0.0.0/1" "128/1" "${UTUN_IFACE}"; then
+        echo "    ERROR: ruta 128/1 NO instalada — tráfico NO va por túnel" >&2
+        ROUTES_OK=false
+    fi
+    "${ROUTES_OK}" && echo "  Rutas /1 verificadas: 0/1 + 128/1 vía ${UTUN_IFACE}"
+
     echo "  Túnel ubond activo en ${UTUN_IFACE}"
 
     # REQ-NET-26: arrancar watchdog de salud. Detecta pérdida del túnel
@@ -315,6 +343,23 @@ if [[ -n "${UTUN_IFACE}" ]]; then
         UBOND_TUN_VPS_IP="${UBOND_TUN_VPS_IP}" \
             "${SCRIPT_DIR}/tools/ubond-watchdog.sh" >/dev/null 2>&1 &
         echo "    watchdog pid=$!"
+    fi
+
+    # REQ-NET-34: arrancar watchdog específico para iphone NAT carrier
+    # expiry. Validado AVE 2026-06-05 con dos actuaciones exitosas
+    # (09:30:54Z + 09:39:04Z). Recovery <30s vía `ifconfig en8 down/up`
+    # — más ligero que SOS full-restart, complementa el watchdog general.
+    # Overrides via env (config/env opcional): RELINK_LINK_NAME,
+    # RELINK_IFACE, RELINK_TICK_S, RELINK_FAIL_THRESHOLD, RELINK_COOLDOWN_S.
+    if [[ -x "${SCRIPT_DIR}/tools/iphone-relink-watchdog.sh" && -n "${IP_IPHONE}" ]]; then
+        echo "  Arrancando iphone-relink-watchdog (auto-recovery NAT carrier expiry)..."
+        RELINK_LINK_NAME="${RELINK_LINK_NAME:-iphone}" \
+        RELINK_IFACE="${RELINK_IFACE:-${IFACE_IPHONE}}" \
+        RELINK_TICK_S="${RELINK_TICK_S:-5}" \
+        RELINK_FAIL_THRESHOLD="${RELINK_FAIL_THRESHOLD:-12}" \
+        RELINK_COOLDOWN_S="${RELINK_COOLDOWN_S:-90}" \
+            "${SCRIPT_DIR}/tools/iphone-relink-watchdog.sh" >/dev/null 2>&1 &
+        echo "    iphone-relink-watchdog pid=$!"
     fi
 else
     echo "  AVISO: No se pudo detectar utun de ubond — ningún enlace autenticó"
