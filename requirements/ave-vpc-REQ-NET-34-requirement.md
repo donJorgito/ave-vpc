@@ -62,22 +62,33 @@ Tres actuaciones exitosas en un mismo trayecto Madrid → Orihuela:
 Las tres actuaciones recuperaron `@links.iphone` autenticado sin
 intervención humana.
 
-**Limitación documentada — mecanismo real de recovery por confirmar
-(análisis pcap 2026-06-08):**
+**Mecanismo real de recovery — Hipótesis A confirmada (análisis pcap +
+investigación dedicada 2026-06-08):**
 
 Análisis de `evidence/ave-2026-06-05/iphone-4g.pcap0` (parser pcap nativo,
-1.05M paquetes) reveló que tras `ifconfig en8 down/up` el sport efímero
-del iPhone NO cambió (siguió siendo 55478). El supuesto mecanismo
-"nueva IP local → nuevo bind → nuevo sport efímero → NAT mapping fresco"
-NO se observa en wire. La recuperación ocurre, pero la causa
-microscópica es otra (pendiente investigación: posiblemente CGNAT
-Movistar refresh por evento link-down detectado en el módem 4G, o
-ubond reusa el mismo socket tras ver IP nueva en `getifaddr` y el
-gateway 4G acepta reanudar).
+1.05M paquetes) + análisis de discriminación A/B/C en sesión 2026-06-08
+confirmó:
 
-REQ-NET-35 (rebind socket en C, en diseño) implementará el mecanismo
-"sport efímero nuevo" de forma explícita — no asumiendo que `ifconfig
-down/up` lo provoque indirectamente.
+- **Sport del Mac NO cambia**: siguió siendo 55478 antes Y después del
+  `ifconfig en8 down/up`. El kernel del Mac mantiene el socket UDP
+  exacto; ubond no rebinda nada.
+- **Recovery es causal con la acción**: último RX antes de action a
+  delta=−88.7s, primer RX post-action a +2.54s (110ms tras el primer
+  TX post-up). Tight coupling temporal descarta hipótesis "operador
+  recupera solo" (placebo).
+- **Mecanismo: PDP/CGNAT refresh carrier-side**. El `ifconfig down`
+  notifica vía USB-CDC al iPhone que su iface tethering se cierra;
+  al `up` el iPhone renegocia session PDP en Movistar; el operador
+  ve session-teardown y crea NAT mapping nuevo al primer paquete
+  TX post-up. La "frescura" es carrier-side, no Mac-side.
+
+**Implicación para REQ-NET-35**: NO es sustituto. NET-35 (rebind socket
+en C) genera nuevo sport efímero local — distinto mecanismo. Cubre el
+escenario "operador acepta nuevo 5-tuple" (CGNAT mapping table-stuck).
+NET-34 cubre "operador tiene PDP context muerto" (modem-side issue).
+Son **complementarios** — el AC original "mover NET-34 a tools/legacy/
+cuando NET-35 entre en build" queda **descartado**. Test runtime
+pendiente para confirmar definitivamente independencia.
 
 **Limitación REQ-NET-32 (threshold=8) confirmada insuficiente para AVE
 2026-06-05**: el watchdog general (`tools/ubond-watchdog.sh`) disparó

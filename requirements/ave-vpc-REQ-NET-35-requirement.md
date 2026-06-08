@@ -85,10 +85,14 @@ otros procesos.
   Linux: REQ-NET-12/25/27/29/30).
 - Test estatico `tests/test_REQ-NET-35_rebind_on_silence.sh` pasa en CI
   (existencia patch, contenido, wire en scripts setup).
-- Cuando el patch entre en build verificado en produccion, mover
-  `tools/iphone-relink-watchdog.sh` a `tools/legacy/` y eliminar su
-  invocacion desde `04b-conectar-ubond.sh`. REQ-NET-34 queda
-  superseded.
+- REQ-NET-34 (`tools/iphone-relink-watchdog.sh`) NO se desactiva
+  automaticamente al validar este patch — investigacion mecanismo
+  2026-06-08 confirmo que ambos son **complementarios**, no
+  sustitutivos. NET-34 cubre PDP/CGNAT refresh carrier-side via
+  USB-CDC teardown; NET-35 cubre rebind sport efimero local. Test
+  runtime debera ejecutar ambos escenarios independientemente: si
+  cualquier patch resuelve uno pero no el otro, la decision de
+  deprecar NET-34 queda en `false`.
 
 **Validacion pendiente (runtime):**
 
@@ -144,8 +148,12 @@ otros procesos.
 
 **Related:**
 
-- [[REQ-NET-34]] - **superseded por este**: cuando REQ-NET-35 entre en
-  build verificado, REQ-NET-34 se mueve a legacy.
+- [[REQ-NET-34]] - **complementario** (NO superseded): investigacion
+  mecanismo 2026-06-08 confirmo que NET-34 actua via PDP refresh
+  carrier-side (USB-CDC teardown del modem iPhone), NO via rebind
+  socket. NET-35 actua via rebind sport efimero local. Cubren
+  escenarios distintos. Ambos coexisten salvo que test runtime
+  demuestre redundancia.
 - [[REQ-NET-12]] - patch replicacion 5-tupla (parte del chain).
 - [[REQ-NET-25]] - per-link loss/latency tolerences (parte del chain).
 - [[REQ-NET-27]] - data_seq compartido + dedup return contract (parte

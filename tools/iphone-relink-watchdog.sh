@@ -1,14 +1,27 @@
 #!/usr/bin/env bash
 # tools/iphone-relink-watchdog.sh — REQ-NET-34
-# Detecta link ubond down >N segundos y fuerza re-DHCP en la iface
-# tethering para regenerar mapping NAT del operador 4G. Recupera link
-# (iphone, pixel) tras expiración de pinhole UDP sin intervención humana.
+# Detecta link ubond down >N segundos y fuerza un evento de
+# desconexión-reconexión USB de la iface tethering. Esto provoca al
+# modem del iPhone una renegociación PDP/CGNAT en el operador 4G,
+# que crea un mapping NAT fresco al primer paquete post-up — sin que
+# el sport efímero del Mac cambie.
 #
-# Causa raíz: ubond v2 NO tiene rebind logic — cuando NAT del operador
-# 4G expira el pinhole UDP, ubond sigue mandando keepalives al sport
-# efímero ya muerto, server nunca recibe, link queda `!` permanente.
-# `ifconfig down/up` fuerza re-DHCP → nueva IP local → ubond rebinda
-# socket nuevo → NAT mapping fresco. Validado AVE 2026-06-05.
+# Mecanismo real (validado análisis pcap AVE 2026-06-05, sesión
+# 2026-06-08): el `ifconfig en8 down` notifica vía USB-CDC al iPhone
+# que su iface tethering se cierra; al `up`, el iPhone renegocia
+# session PDP. Movistar (CGNAT) ve session-teardown, descarta el
+# mapping muerto, y crea uno nuevo al primer paquete TX post-up.
+# El sport del Mac (55478 en el trayecto observado) NO cambia —
+# la "frescura" es carrier-side. Hipótesis original "ubond rebinda
+# socket nuevo → sport fresco" descartada (los pcaps muestran sport
+# idéntico antes y después de la actuación).
+#
+# Complementario a REQ-NET-35 (rebind socket en C, futuro): NET-35
+# fuerza nuevo sport efímero local (caso "operador acepta nueva
+# 5-tupla"); NET-34 fuerza PDP refresh carrier-side (caso "operador
+# tiene PDP context muerto"). Ambos cubren escenarios distintos.
+# Validado AVE 2026-06-05 — 3 actuaciones recuperaron el link sin
+# intervención humana.
 #
 # Diseño: lee proctitle ubond ("ubond: ubond0 @links.X !links.Y ~links.Z").
 # Si LINK_NAME aparece como `!` durante FAIL_THRESHOLD ticks consecutivos,

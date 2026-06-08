@@ -10,6 +10,33 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Mecanismo REQ-NET-34 corregido + REQ-NET-35 NO sustituye NET-34 (2026-06-08)
+
+Investigación dedicada del mecanismo de recovery REQ-NET-34
+(`tools/iphone-relink-watchdog.sh`) tras hallazgo del análisis pcap
+inicial de que el sport del Mac NO cambiaba post-`ifconfig down/up`.
+
+Hipótesis A confirmada: el mecanismo real es **PDP/CGNAT refresh
+carrier-side**. El `ifconfig en8 down` notifica vía USB-CDC al iPhone
+que su iface tethering se cierra; al `up`, el modem renegocia session
+PDP en Movistar; el operador (CGNAT) ve session-teardown y crea NAT
+mapping nuevo al primer paquete TX post-up. La "frescura" es
+carrier-side, no Mac-side. Sport efímero del Mac (55478 en el
+trayecto AVE 2026-06-05) sigue siendo el mismo.
+
+Implicación: REQ-NET-35 (rebind socket en C, futuro) NO es sustituto
+de NET-34. NET-35 fuerza nuevo sport efímero LOCAL, distinto
+mecanismo. Cubre el escenario "operador acepta nueva 5-tupla" (CGNAT
+mapping table-stuck). NET-34 cubre "operador tiene PDP context muerto"
+(modem-side issue). Ambos son **complementarios**.
+
+AC original "mover REQ-NET-34 a tools/legacy/ cuando REQ-NET-35 entre
+en build" descartado en `requirements/ave-vpc-REQ-NET-35-requirement.md`.
+Header docstring de `tools/iphone-relink-watchdog.sh` reescrito con el
+mecanismo real. `requirements/ave-vpc-REQ-NET-34-requirement.md`
+sección "Limitación documentada" reescrita como "Mecanismo real
+confirmado" con datos pcap.
+
 ### Watchdog threshold 8→12 (REQ-NET-32 enmienda, 2026-06-08)
 
 Análisis pcap AVE 2026-06-05 reveló 6 SOS automáticos del watchdog
