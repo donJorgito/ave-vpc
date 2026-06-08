@@ -423,9 +423,13 @@ resolve_vps_baseline() {
         return 0
     fi
     if command -v dig >/dev/null 2>&1; then
-        local ip resolver="${FALLBACK_DNS_RESOLVER:-1.1.1.1}"
-        ip="$(dig "@${resolver}" +time=2 +tries=1 +short "${VPS_IP}" 2>/dev/null \
-            | awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/{print; exit}')"
+        local ip resolver
+        local resolvers="${FALLBACK_DNS_RESOLVERS:-1.1.1.1 8.8.8.8 9.9.9.9}"
+        for resolver in ${resolvers}; do
+            ip="$(dig "@${resolver}" +time=2 +tries=1 +short "${VPS_IP}" 2>/dev/null \
+                | awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/{print; exit}')"
+            [[ -n "${ip}" ]] && break
+        done
         if [[ -n "${ip}" ]]; then
             VPS_BASELINE_IP="${ip}"
             DNS_LAST_RESOLVE_TS="${now}"

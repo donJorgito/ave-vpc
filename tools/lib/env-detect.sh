@@ -41,8 +41,9 @@ env_detect_iface_ip() {
         | awk '$1 == "inet" { print $2; exit }'
 }
 
-# Resuelve hostname a IP. Sistema primero (rápido, normal) y fallback a
-# Cloudflare @${FALLBACK_DNS_RESOLVER} si el sistema falla. Casos donde fallback dispara:
+# Resuelve hostname a IP. Sistema primero (rápido, normal) y fallback
+# secuencial a los resolvers de ${FALLBACK_DNS_RESOLVERS} si el sistema
+# falla. Casos donde fallback dispara:
 #  - Split-DNS corp (ej. WiFi Roche bloquea lookup de dyn.io).
 #  - WiFi tren AVE flapping → DNS sistema timeout.
 # Si el input ya es IP literal, retorna tal cual.
@@ -52,25 +53,31 @@ env_detect_iface_ip() {
 # muy difíciles de trazar). Esta función es la forma correcta de tener
 # resolver resiliente.
 env_detect_resolve_to_ip() {
-    local host="$1" ip
-    local resolver="${FALLBACK_DNS_RESOLVER:?config/env debe definir FALLBACK_DNS_RESOLVER}"
+    local host="$1" ip resolver
+    local resolvers="${FALLBACK_DNS_RESOLVERS:?config/env debe definir FALLBACK_DNS_RESOLVERS}"
     if [[ "${host}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "${host}"
         return 0
     fi
+    # 1) System resolver (rápido, normal).
     ip="$(dig +short +time=2 +tries=1 "${host}" 2>/dev/null \
             | grep -E '^[0-9.]+$' | head -1)"
     if [[ -n "${ip}" ]]; then
         echo "${ip}"
         return 0
     fi
-    log_warn "DNS sistema no resolvió ${host}, fallback a @${resolver}"
-    ip="$(dig "@${resolver}" +short +time=3 +tries=2 "${host}" 2>/dev/null \
-            | grep -E '^[0-9.]+$' | head -1)"
-    if [[ -n "${ip}" ]]; then
-        echo "${ip}"
-        return 0
-    fi
+    # 2) Fallbacks públicos en orden — Roche bloquea 1.1.1.1 pero
+    #    deja 8.8.8.8; redes restrictivas pueden invertir esto. Probar
+    #    cada uno hasta que responda.
+    for resolver in ${resolvers}; do
+        log_warn "DNS sistema KO, fallback @${resolver} para ${host}"
+        ip="$(dig "@${resolver}" +short +time=2 +tries=1 "${host}" 2>/dev/null \
+                | grep -E '^[0-9.]+$' | head -1)"
+        if [[ -n "${ip}" ]]; then
+            echo "${ip}"
+            return 0
+        fi
+    done
     return 1
 }
 
