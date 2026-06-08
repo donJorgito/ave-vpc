@@ -125,8 +125,26 @@ resolve_vps_public_ip() {
     if [[ "${VPS_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "${VPS_IP}"; return 0
     fi
-    dig +short +time=2 +tries=1 "${VPS_IP}" A 2>/dev/null \
-        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | tail -1
+    # Resolver con system DNS primero, fallback a la lista de
+    # resolvers externos (FALLBACK_DNS_RESOLVERS) si falla. AVE típico:
+    # WiFi tren bloquea su DNS antes de captive auth, system DNS
+    # timeout. Sin pre-warm aquí, ubond's getaddrinfo() interno también
+    # falla y los links no levantan — auditor C/network 2026-06-08.
+    local ip resolvers
+    ip="$(dig +short +time=2 +tries=1 "${VPS_IP}" A 2>/dev/null \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | tail -1)"
+    if [[ -n "${ip}" ]]; then
+        echo "${ip}"; return 0
+    fi
+    resolvers="${FALLBACK_DNS_RESOLVERS:-1.1.1.1 8.8.8.8 9.9.9.9}"
+    for r in ${resolvers}; do
+        ip="$(dig "@${r}" +short +time=2 +tries=1 "${VPS_IP}" A 2>/dev/null \
+                | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | tail -1)"
+        if [[ -n "${ip}" ]]; then
+            echo "${ip}"; return 0
+        fi
+    done
+    return 1
 }
 
 check_wifi_eligibility() {
@@ -231,6 +249,29 @@ EOF
     else
         echo "  WiFi añadido (puerto ${UBOND_PORT_3})"
     fi
+fi
+
+# =====================================================================
+# Paso 3.5: Pre-resolución DNS de remotehost en ubond_active.conf
+# =====================================================================
+# Auditor C/network 2026-06-08: si DNS está roto al arrancar (típico
+# AVE WiFi pre-captive), getaddrinfo() interno de ubond falla y los
+# links no levantan. Pre-resolvemos VPS_IP a literal aquí y
+# sustituimos en el conf — ubond ya no depende de DNS sistema. Si
+# además FALLBACK_DNS_RESOLVERS no resuelve nada, abortamos limpio
+# antes que ubond entre en bucle close/reconnect.
+RESOLVED_VPS_IP="$(resolve_vps_public_ip)"
+if [[ -z "${RESOLVED_VPS_IP}" ]]; then
+    echo "ERROR: no pude resolver ${VPS_IP} ni con system DNS ni con"
+    echo "       FALLBACK_DNS_RESOLVERS. ¿Estás detrás de captive sin"
+    echo "       autenticar? Abre Safari y haz login antes de relanzar."
+    exit 1
+fi
+if [[ "${RESOLVED_VPS_IP}" != "${VPS_IP}" ]]; then
+    echo "  DNS pre-resolved: ${VPS_IP} -> ${RESOLVED_VPS_IP}"
+    sed -i.bak "s|remotehost = \"${VPS_IP}\"|remotehost = \"${RESOLVED_VPS_IP}\"|g" \
+        "${GENERATED_DIR}/ubond_active.conf"
+    rm -f "${GENERATED_DIR}/ubond_active.conf.bak"
 fi
 
 # =====================================================================
