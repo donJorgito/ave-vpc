@@ -74,6 +74,13 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-26](ave-vpc-REQ-NET-26-requirement.md) | Watchdog ubond v2 con auto-recovery + visibilidad |
 | [REQ-NET-27](ave-vpc-REQ-NET-27-requirement.md) | Fix replicación selectiva (H1+H2+NULL check) |
 | [REQ-NET-28](ave-vpc-REQ-NET-28-requirement.md) | Monitor continuo del cliente ubond v2 (ALCOA++) |
+| [REQ-NET-29](ave-vpc-REQ-NET-29-requirement.md) | Parser de [filters] excluye sub-secciones filters.X |
+| [REQ-NET-30](ave-vpc-REQ-NET-30-requirement.md) | Dedup gate por wire signal data_seq!=0 |
+| [REQ-NET-31](ave-vpc-REQ-NET-31-requirement.md) | Monitor TUI 08-monitor.py dual-mode mlvpn/ubond |
+| [REQ-NET-32](ave-vpc-REQ-NET-32-requirement.md) | Watchdog FAIL_THRESHOLD AVE-handover-tolerant |
+| [REQ-NET-33](ave-vpc-REQ-NET-33-requirement.md) | Code coverage roadmap (Python/Bash/C, 3 fases) |
+| [REQ-NET-34](ave-vpc-REQ-NET-34-requirement.md) | Auto-recovery iphone NAT carrier expiry (PDP refresh) |
+| [REQ-NET-35](ave-vpc-REQ-NET-35-requirement.md) | Rebind socket on silence (fix C nativo, complementario NET-34) |
 
 ## Restricciones macOS (REQ-MAC)
 
