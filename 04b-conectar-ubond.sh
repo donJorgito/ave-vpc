@@ -438,7 +438,7 @@ if [[ -n "${UTUN_IFACE}" ]]; then
         echo "    ERROR: ruta 0/1 NO instalada — tráfico NO va por túnel" >&2
         ROUTES_OK=false
     fi
-    if ! add_tun_route "128.0.0.0/1" "128/1" "${UTUN_IFACE}"; then
+    if ! add_tun_route "128.0.0.0/1" "128.0/1" "${UTUN_IFACE}"; then
         echo "    ERROR: ruta 128/1 NO instalada — tráfico NO va por túnel" >&2
         ROUTES_OK=false
     fi
