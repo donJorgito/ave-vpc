@@ -81,6 +81,8 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-33](ave-vpc-REQ-NET-33-requirement.md) | Code coverage roadmap (Python/Bash/C, 3 fases) |
 | [REQ-NET-34](ave-vpc-REQ-NET-34-requirement.md) | Auto-recovery iphone NAT carrier expiry (PDP refresh) |
 | [REQ-NET-35](ave-vpc-REQ-NET-35-requirement.md) | Rebind socket on silence (fix C nativo, complementario NET-34) |
+| [REQ-NET-36](ave-vpc-REQ-NET-36-requirement.md) | SIGHUP purga filters.count antes de re-añadir (fix duplicate filters bug) |
+| [REQ-NET-37](ave-vpc-REQ-NET-37-requirement.md) | Pre-resolución DNS de hosts en filters.replicate antes de lanzar ubond |
 
 ## Restricciones macOS (REQ-MAC)
 

@@ -88,7 +88,7 @@ ssh TU_USUARIO@mi-rpi.local
 
 En el router: **Internet → Security → Port Forwarding**
 
-Añade tres reglas:
+### 3.1 Reglas mlvpn v1 (legacy)
 
 | Nombre | Protocolo | Puerto externo | IP interna | Puerto interno |
 |---|---|---|---|---|
@@ -105,6 +105,40 @@ Añade tres reglas:
 > define `MLVPN_PORT_3_REMOTE="443"` en `config/env`.
 > El router ZTE F6640 admite port translation (puerto externo distinto
 > del interno) sin problema.
+
+### 3.2 Reglas ubond v2
+
+A partir de v2, ubond corre en paralelo a mlvpn usando un rango de puertos
+distinto (5083/5084/5085) para evitar colisiones con el endpoint legacy.
+Añade las siguientes reglas además de las de v1:
+
+| Nombre | Protocolo | Puerto externo | IP interna | Puerto interno |
+|---|---|---|---|---|
+| ubond-iphone | UDP | 5083 | IP_LOCAL_RPi | 5083 |
+| ubond-pixel | UDP | 5084 | IP_LOCAL_RPi | 5084 |
+| ubond-wifi | UDP | 5085 | IP_LOCAL_RPi | 5085 |
+| ubond-wifi-443 | UDP | 443 | IP_LOCAL_RPi | **5085** |
+
+> La regla **`ubond-wifi-443`** es el equivalente ubond de `mlvpn-443` y
+> resuelve el mismo problema en el WiFi del AVE: Renfe filtra UDP outbound
+> hacia puertos no estándar, pero deja pasar 443/UDP (HTTPS QUIC). Mapea
+> el 443/UDP público al 5085/UDP interno donde escucha el 3er enlace WiFi
+> de ubond. Para activar el bypass en el cliente, define
+> `UBOND_PORT_3_REMOTE="443"` en `config/env`.
+
+### 3.3 Acceso SSH remoto
+
+| Nombre | Protocolo | Puerto externo | IP interna | Puerto interno |
+|---|---|---|---|---|
+| ssh-rpi | TCP | 2222 | IP_LOCAL_RPi | 22 |
+
+> Permite administrar la RPi desde fuera de casa sin exponer el 22 estándar.
+> Usa autenticación por clave (sin password) y considera fail2ban si la
+> mantienes abierta de forma permanente.
+
+Tras aplicar 3.1, 3.2 y 3.3 el router tendrá **8 reglas** activas (4 de
+mlvpn, 3 de ubond y 1 de SSH). Verifica el listado en **Internet →
+Security → Port Forwarding** antes de salir de viaje.
 
 ## Paso 4: DDNS
 

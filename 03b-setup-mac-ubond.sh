@@ -213,6 +213,19 @@ else
         echo "  (patch ya aplicado o no aplicable; continuando)"
     fi
 
+    # Patch 9 (REQ-NET-36): purga del pool de replicación en SIGHUP.
+    # Bug colateral descubierto durante DNS-investigation 2026-06-08:
+    # ubond_replicate_filters.count crece sin límite en cada reload
+    # exitoso porque ubond_config NO resetea el array antes de
+    # re-añadir filtros. Memory leak (bpf_program no liberados via
+    # pcap_freecode) + doble match en ubond_replicate_filter_match.
+    # Inocuo en cold start, problemático bajo SIGHUP repetido (DNS
+    # retry watchdog futuro).
+    echo "  Aplicando ubond_filters_count_purge.patch..."
+    if ! patch -p1 -N --reject-file=- < "${PATCHES_DIR}/ubond_filters_count_purge.patch" 2>&1 | head -5; then
+        echo "  (patch ya aplicado o no aplicable; continuando)"
+    fi
+
     ./autogen.sh
 
     PKG_CONFIG_PATH="$(brew --prefix libev)/lib/pkgconfig:$(brew --prefix libsodium)/lib/pkgconfig"

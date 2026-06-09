@@ -275,6 +275,77 @@ if [[ "${RESOLVED_VPS_IP}" != "${VPS_IP}" ]]; then
 fi
 
 # =====================================================================
+# Paso 3.7: Pre-resolución filter hosts en [filters.replicate] (REQ-NET-37)
+# =====================================================================
+# Auditor C/network 2026-06-08 (pcap AVE 2026-06-05): los filters
+# replicate con cláusula `host <fqdn>` (api.anthropic.com, claude.ai)
+# se compilan via pcap_compile() → pcap_nametoaddr(), que invoca
+# getaddrinfo() del sistema. Si DNS está roto al startup (típico AVE
+# WiFi pre-captive, o todavía sin link de móvil estabilizado), el
+# compile falla con "unknown host", ubond emite log_warnx("invalid
+# replicate filter ...") y la entrada se descarta SIN reintento.
+# Resultado: replicación efectivamente off para el resto de la sesión
+# aunque DNS recupere después.
+#
+# Fix Opción C: pre-resolvemos cada `host <fqdn>` aquí (con
+# FALLBACK_DNS_RESOLVERS si system DNS falla) y sustituimos in-place
+# por `host <ip>` literal. pcap_compile() ya no toca DNS. Si NINGÚN
+# resolver responde, comentamos la línea para que ubond.log no se
+# llene de WARN — los demás filtros (icmp/zoom/rtp) siguen activos.
+echo ""
+echo "=> Pre-resolución filter hosts (replicate)..."
+
+resolve_filter_host() {
+    # Resuelve un fqdn usando system DNS primero, fallback a la lista
+    # FALLBACK_DNS_RESOLVERS. Devuelve la IP por stdout o status !=0.
+    local fqdn="$1" ip resolvers r
+    ip="$(dig +short +time=2 +tries=1 "${fqdn}" A 2>/dev/null \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | tail -1)"
+    if [[ -n "${ip}" ]]; then
+        echo "${ip}"; return 0
+    fi
+    resolvers="${FALLBACK_DNS_RESOLVERS:-1.1.1.1 8.8.8.8 9.9.9.9}"
+    for r in ${resolvers}; do
+        ip="$(dig "@${r}" +short +time=2 +tries=1 "${fqdn}" A 2>/dev/null \
+                | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | tail -1)"
+        if [[ -n "${ip}" ]]; then
+            echo "${ip}"; return 0
+        fi
+    done
+    return 1
+}
+
+# Extraer fqdns únicos de cláusulas BPF `host <fqdn>` en
+# ubond_active.conf, dedup vía sort -u. Solo letras/dígitos/./- (FQDN
+# válido, no IP literal — las IPs no necesitan resolución).
+FILTER_FQDNS="$(grep -oE 'host [a-zA-Z][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}' \
+    "${GENERATED_DIR}/ubond_active.conf" 2>/dev/null \
+    | awk '{print $2}' | sort -u || true)"
+
+if [[ -z "${FILTER_FQDNS}" ]]; then
+    echo "  Sin hostnames en filters — nada que resolver"
+else
+    for fqdn in ${FILTER_FQDNS}; do
+        FILTER_IP="$(resolve_filter_host "${fqdn}" || true)"
+        if [[ -n "${FILTER_IP}" ]]; then
+            echo "  filter host: ${fqdn} -> ${FILTER_IP}"
+            sed -i.bak "s|host ${fqdn}|host ${FILTER_IP}|g" \
+                "${GENERATED_DIR}/ubond_active.conf"
+            rm -f "${GENERATED_DIR}/ubond_active.conf.bak"
+        else
+            echo "  AVISO: ${fqdn} no resuelve ni con system DNS ni con FALLBACK_DNS_RESOLVERS"
+            echo "         comentando líneas con 'host ${fqdn}' (replicate filter desactivado para esta entrada)"
+            # Comentamos la línea entera: prefijo `# REQ-NET-37 dns-fail: `
+            # marca el motivo para auditoría posterior. Los demás filtros
+            # siguen vivos.
+            sed -i.bak -E "s|^([^#].*host ${fqdn}.*)$|# REQ-NET-37 dns-fail: \1|" \
+                "${GENERATED_DIR}/ubond_active.conf"
+            rm -f "${GENERATED_DIR}/ubond_active.conf.bak"
+        fi
+    done
+fi
+
+# =====================================================================
 # Paso 4: Arrancar ubond
 # =====================================================================
 echo ""

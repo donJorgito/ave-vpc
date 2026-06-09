@@ -1,0 +1,55 @@
+diff --git a/src/filters.c b/src/filters.c
+--- a/src/filters.c
++++ b/src/filters.c
+@@ -81,3 +81,23 @@ ubond_replicate_filter_add(const struct bpf_program *filter, const char *name) {
+     ubond_replicate_filters.count++;
+     return 0;
+ }
++
++/*
++ * REQ-NET-36: libera los bpf_program compilados del pool de
++ * replicación y resetea count a 0. Necesario antes de re-añadir
++ * filtros en SIGHUP / config reload — sin esto, cada reload
++ * exitoso DUPLICA los filtros previos en el array (memory leak +
++ * doble match en ubond_replicate_filter_match). Bug colateral
++ * descubierto durante DNS-investigation 2026-06-08.
++ */
++void
++ubond_replicate_filters_clear(void) {
++    int i;
++    for (i = 0; i < ubond_replicate_filters.count; i++) {
++        pcap_freecode(&ubond_replicate_filters.filter[i]);
++        memset(&ubond_replicate_filters.filter[i], 0,
++               sizeof(ubond_replicate_filters.filter[i]));
++        ubond_replicate_filters.name[i][0] = '\0';
++    }
++    ubond_replicate_filters.count = 0;
++}
+diff --git a/src/ubond.h b/src/ubond.h
+--- a/src/ubond.h
++++ b/src/ubond.h
+@@ -266,5 +266,7 @@ ubond_tunnel_t *ubond_filters_choose(uint32_t pktlen, const u_char *pktdata);
+ /* REQ-NET-12 */
+ int ubond_replicate_filter_add(const struct bpf_program *filter, const char *name);
+ int ubond_replicate_filter_match(uint32_t pktlen, const u_char *pktdata);
++/* REQ-NET-36: purga el pool de replicación antes de re-añadir en SIGHUP. */
++void ubond_replicate_filters_clear(void);
+ void ubond_send_buffer_write(ubond_pkt_t *p);
+ #endif
+diff --git a/src/config.c b/src/config.c
+--- a/src/config.c
++++ b/src/config.c
+@@ -513,7 +513,13 @@ ubond_config(int config_file_fd, int first_time)
+     /* REQ-NET-12: parser de la sección [filters.replicate].
+      * Cada entrada `name = "bpf expr"` añade una regla al pool de
+      * replicación. Cuando un paquete matchea, se duplica a TODOS
+      * los túneles activos (no solo a uno como en [filters]). */
++    /* REQ-NET-36: purga el pool ANTES de re-parsear. ubond_filters
++     * se resetea via memset al inicio de ubond_config (línea ~73);
++     * ubond_replicate_filters quedaba sin limpiar, así cada SIGHUP
++     * exitoso duplicaba filtros (count crecía sin liberar bpf_program
++     * compilados). Este clear() es idempotente en first_time=1. */
++    ubond_replicate_filters_clear();
+     work = config;
+     while (work)
+     {
