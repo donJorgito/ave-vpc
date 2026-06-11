@@ -10,6 +10,41 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Bypass firewall WiFi AVE — toolkit reconocimiento + túneles UDP-over-X (2026-06-11)
+
+Reorientación tras evidencia 2026-06-09 (UDP bloqueado + DNAT tcp/80+443
+al portal). En vez de descartar la WiFi del tren, se construye la fontanería
+para tunelar ubond a través del firewall y mapear qué transporte sobrevive.
+Toda producción revisada en doble agente (IDLC v6 + redes/C/Python) y con
+tests estáticos/funcionales (144 checks PASS). Pendiente de validación
+runtime (oficina + trayecto AVE).
+
+- **REQ-NET-38** — `tools/rpi-multiport-listener.sh` (eco TCP+UDP multipuerto,
+  python3-stdlib + systemd) + `tools/probe-firewall.sh` (clasifica
+  PASS/DNAT/SILENT por puerto/proto; egress fijado por ruta `-ifscope`).
+- **REQ-NET-39** — wrappers UDP-over-X: `wrap-socat.sh` (baseline),
+  `wrap-udp2raw.sh` (faketcp puerto no estándar), `wrap-wstunnel.sh`
+  (WSS/TLS; verify de cert obligatorio salvo opt-in lab, para no quedar
+  ciego al MitM de Renfe).
+- **REQ-NET-40** — `tools/captive-watchdog.py` (canary tri-valor
+  online/offline/None + re-login estilo wifionice con guard anti-SSRF
+  same-origin). Test sintético 8/8.
+- **REQ-NET-41** — modo OPT-IN `WIFI_VIA_WRAPPER` en `04b-conectar-ubond.sh`
+  y `wifi-reintegrator.sh`: el `[links.wifi]` apunta a la boca local del
+  wrapper. Aditivo, default OFF, path productivo byte-idéntico (sin regresión).
+- **REQ-NET-42 / 43** — `wrap-iodine.sh` (DNS tunnel) y `wrap-ptunnel.sh`
+  (ICMP tunnel) como "link de vida". Secretos generados + chmod 600, nunca
+  en log. iodine requiere delegación NS (prerequisito del operador).
+- **REQ-NET-44** — `tools/mac-rotate.sh` (rotación MAC locally-administered
+  para resetear la cuota Icomera ~209MB; desasocia vía networksetup en
+  macOS 26 donde `airport` fue eliminado).
+- **REQ-NET-45** — `tools/bench-wrappers.sh` (latencia/jitter/loss/throughput
+  por el utun, iperf3 + fallback, para ranquear las vías).
+- Doc `docs/v2-ubond/13-plan-bypass-wifi-tren.md` (plan + modelo de amenaza).
+- Repos de referencia del captive clonados en `build/` (gitignored).
+- Pendiente on-device: flags ptunnel-ng 1.42, integración dns0 de iodine,
+  eficacia real de la rotación MAC en macOS 26.
+
 ### WiFi tren AVE — UBOND_PORT_3_REMOTE=443 + DNS pre-resolución (2026-06-08)
 
 Renfe filtra UDP outbound a puertos no estándar en la WiFi del AVE

@@ -80,6 +80,17 @@ UBOND_PORT_2="${UBOND_PORT_2:-5084}"
 UBOND_PORT_3="${UBOND_PORT_3:-5085}"
 UBOND_PORT_3_REMOTE="${UBOND_PORT_3_REMOTE:-${UBOND_PORT_3}}"
 
+# REQ-NET-41: modo OPT-IN para tunelar el enlace WiFi a través de un wrapper
+# local (tools/wrap-*.sh) que cruza el firewall del AVE. Por defecto OFF →
+# comportamiento EXACTO de siempre (WiFi apunta directo a VPS_IP:443/udp).
+# Con WIFI_VIA_WRAPPER=1 el [links.wifi] apunta a 127.0.0.1:<WRAP_LOCAL_PORT>
+# (la boca UDP local del wrapper), no a la RPi. El wrapper se arranca POR
+# SEPARADO (este script NO lo lanza — solo imprime el hint). Ver doc 13.
+WIFI_VIA_WRAPPER="${WIFI_VIA_WRAPPER:-0}"
+# Puerto UDP local que expone el wrapper. Mismo default y misma variable que
+# tools/wrap-socat.sh / wrap-udp2raw.sh / wrap-wstunnel.sh (coherencia).
+WRAP_LOCAL_PORT="${WRAP_LOCAL_PORT:-${UBOND_PORT_3}}"
+
 # Subnet del túnel ubond (REQ-NET-24) — distinta de mlvpn para
 # evitar colisión de routing en el RPi (Bug #5).
 UBOND_TUN_VPS_IP="${UBOND_TUN_VPS_IP:-10.10.20.1}"
@@ -231,7 +242,33 @@ sed -i '' "s/PLACEHOLDER_IPHONE_IP/${IP_IPHONE:-0.0.0.0}/" "${GENERATED_DIR}/ubo
 sed -i '' "s/PLACEHOLDER_PIXEL_IP/${IP_PIXEL:-0.0.0.0}/" "${GENERATED_DIR}/ubond_active.conf"
 
 if "${WIFI_ELIGIBLE}"; then
-    cat >> "${GENERATED_DIR}/ubond_active.conf" <<EOF
+    if [[ "${WIFI_VIA_WRAPPER}" == "1" ]]; then
+        # REQ-NET-41 (OPT-IN): el WiFi NO va directo a la RPi; va a la boca
+        # UDP local del wrapper (127.0.0.1:WRAP_LOCAL_PORT), que cruza el
+        # firewall por TCP/WSS/faketcp/etc. bindhost también es loopback:
+        # el tráfico ubond↔wrapper nunca sale por la iface física, lo hace
+        # el wrapper. Nota: remotehost es literal 127.0.0.1, así que la
+        # pre-resolución DNS del Paso 3.5 (que sustituye "${VPS_IP}") NO
+        # toca este bloque — correcto, no hay DNS que resolver aquí.
+        cat >> "${GENERATED_DIR}/ubond_active.conf" <<EOF
+
+[links.wifi]
+bindhost = "127.0.0.1"
+remotehost = "127.0.0.1"
+remoteport = ${WRAP_LOCAL_PORT}
+bandwidth_upload = 50000000
+timeout = 8
+# REQ-NET-25: WiFi del AVE/hotel suele ser muy noisy.
+# Descomentar si hay loss cycling en trayecto.
+# loss_tolerence    = 80
+# latency_tolerence = 2000
+EOF
+        echo "  WiFi añadido VIA WRAPPER (REQ-NET-41): 127.0.0.1:${WRAP_LOCAL_PORT}"
+        echo "  AVISO: arranca TÚ el wrapper ANTES de que ubond use el enlace, p.ej.:"
+        echo "         WRAP_LOCAL_PORT=${WRAP_LOCAL_PORT} ${SCRIPT_DIR}/tools/wrap-socat.sh"
+        echo "         (o wrap-udp2raw.sh / wrap-wstunnel.sh). Este script NO lo lanza."
+    else
+        cat >> "${GENERATED_DIR}/ubond_active.conf" <<EOF
 
 [links.wifi]
 bindhost = "${IP_WIFI}"
@@ -244,10 +281,11 @@ timeout = 8
 # loss_tolerence    = 80
 # latency_tolerence = 2000
 EOF
-    if [[ "${UBOND_PORT_3_REMOTE}" != "${UBOND_PORT_3}" ]]; then
-        echo "  WiFi añadido (cliente :${UBOND_PORT_3_REMOTE} → router → RPi:${UBOND_PORT_3})"
-    else
-        echo "  WiFi añadido (puerto ${UBOND_PORT_3})"
+        if [[ "${UBOND_PORT_3_REMOTE}" != "${UBOND_PORT_3}" ]]; then
+            echo "  WiFi añadido (cliente :${UBOND_PORT_3_REMOTE} → router → RPi:${UBOND_PORT_3})"
+        else
+            echo "  WiFi añadido (puerto ${UBOND_PORT_3})"
+        fi
     fi
 fi
 
@@ -502,7 +540,13 @@ echo "  Túnel:   ${UBOND_TUN_MAC_IP} <-> ${UBOND_TUN_VPS_IP}"
 echo "  Enlaces: ${ACTIVE_LINKS}"
 [[ -n "${IP_IPHONE}" ]] && echo "    - iPhone (${IFACE_IPHONE}): ${IP_IPHONE} -> VPS:${UBOND_PORT_1}"
 [[ -n "${IP_PIXEL}" ]]  && echo "    - Pixel  (${IFACE_PIXEL}):  ${IP_PIXEL}  -> VPS:${UBOND_PORT_2}"
-"${WIFI_ELIGIBLE}"      && echo "    - WiFi   (${IFACE_WIFI}):   ${IP_WIFI}  -> VPS:${UBOND_PORT_3_REMOTE}"
+if "${WIFI_ELIGIBLE}"; then
+    if [[ "${WIFI_VIA_WRAPPER}" == "1" ]]; then
+        echo "    - WiFi   (${IFACE_WIFI}):   ${IP_WIFI}  -> wrapper 127.0.0.1:${WRAP_LOCAL_PORT} (REQ-NET-41)"
+    else
+        echo "    - WiFi   (${IFACE_WIFI}):   ${IP_WIFI}  -> VPS:${UBOND_PORT_3_REMOTE}"
+    fi
+fi
 echo ""
 echo "  PID:     ${UBOND_PID}"
 echo "  Log:     ${GENERATED_DIR}/ubond.log"
