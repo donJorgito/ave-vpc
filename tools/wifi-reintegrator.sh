@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 ###############################################################################
-# tools/wifi-reintegrator.sh — REQ-NET-13
+# tools/wifi-reintegrator.sh — REQ-NET-13 (versión mlvpn v1)
+#
+# NOTA (2026-06-12): este fichero es la versión mlvpn v1 — la consumen
+# 04-conectar.sh, los tests REQ-NET-13/41, README y verificar-setup.sh; NO
+# cambiar su comportamiento. El equivalente ubond v2 vive en
+# tools/wifi-reintegrator_ubond.sh (decisión "duplicar vs parametrizar" =
+# duplicar, REQ-NET-22). Lo lanza 04b-conectar-ubond.sh; SOS.sh ya lo limpia.
 #
 # Watcher en background que reintenta los pre-flight checks del WiFi cada
 # 30 s. Si pasan todos (captive autenticado, no es red de casa, sigue con

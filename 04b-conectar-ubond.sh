@@ -158,12 +158,56 @@ resolve_vps_public_ip() {
     return 1
 }
 
+# REQ-NET-41 / 2026-06-12: cuando el WiFi va VIA WRAPPER el gate de
+# elegibilidad NO es el mismo que en el path directo. Motivo (validado a
+# bordo del AVE 2026-06-12): el tráfico WiFi de ubond ya NO sale directo a
+# internet por en0 — va a la boca local del wrapper (127.0.0.1:WRAP_LOCAL_PORT,
+# udp2raw faketcp), que es quien cruza el firewall del tren. Por eso el check
+# clásico "¿en0 llega limpio a captive.apple.com y no es red de casa?" da
+# FALSOS NEGATIVOS intermitentes: la WiFi del AVE es inestable/lenta y esos
+# curls fallan por timing aunque el captive ESTÉ autenticado y el wrapper esté
+# cruzando bien. El gate correcto en modo wrapper es: (a) en0 tiene IP, y (b)
+# el wrapper local está vivo escuchando en 127.0.0.1:WRAP_LOCAL_PORT. Si el
+# wrapper está arriba, ubond tiene a dónde mandar — la salud del túnel real la
+# vigilan el watchdog y ubond mismo, no este pre-flight.
+wrapper_listener_ready() {
+    # Verifica que algo escucha en 127.0.0.1:WRAP_LOCAL_PORT (la boca UDP local
+    # del wrapper). Doble vía sin depender de un binario concreto:
+    #   1) PID file del wrapper en generated/ (wrap_udp2raw.pid u otros
+    #      wrap_*.pid) con proceso vivo (kill -0).
+    #   2) lsof: hay un socket UDP escuchando en esa boca loopback.
+    # Cualquiera de las dos basta. Esto NO arranca el wrapper — solo comprueba.
+    local pf pid
+    for pf in "${GENERATED_DIR}"/wrap_*.pid; do
+        [[ -f "${pf}" ]] || continue
+        pid="$(cat "${pf}" 2>/dev/null || true)"
+        if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+            return 0
+        fi
+    done
+    if lsof -nP -iUDP@127.0.0.1:"${WRAP_LOCAL_PORT}" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
 check_wifi_eligibility() {
     if "${SIN_WIFI}"; then
         echo "  WiFi descartado por --sin-wifi"; return 1
     fi
     if [[ -z "${IP_WIFI}" ]]; then
         echo "  WiFi sin IP en ${IFACE_WIFI}"; return 1
+    fi
+    # REQ-NET-41 / 2026-06-12: rama wrapper-aware. Solo se activa con
+    # WIFI_VIA_WRAPPER=1; con =0 el flujo cae al gate clásico de abajo SIN
+    # cambios (path directo móvil+wifi intacto, no regresiona).
+    if [[ "${WIFI_VIA_WRAPPER}" == "1" ]]; then
+        if wrapper_listener_ready; then
+            echo "  WiFi VIA WRAPPER: en0 con IP + wrapper vivo en 127.0.0.1:${WRAP_LOCAL_PORT} (REQ-NET-41)"
+            return 0
+        fi
+        echo "  WiFi VIA WRAPPER: nada escucha en 127.0.0.1:${WRAP_LOCAL_PORT} — arranca el wrapper (p.ej. tools/wrap-udp2raw.sh) y reejecuta"
+        return 1
     fi
     if ! curl --interface "${IFACE_WIFI}" -s --max-time 2 \
             "http://captive.apple.com/hotspot-detect.html" 2>/dev/null | \

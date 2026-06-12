@@ -47,6 +47,48 @@ SOS_COOLDOWN_S="${WATCHDOG_SOS_COOLDOWN_S:-60}"  # evitar spam SOS
 TARGET="${UBOND_TUN_VPS_IP:-10.10.20.1}"
 SOS_SCRIPT="${SCRIPT_DIR}/SOS.sh"
 
+# REQ-NET-34 (incidente AVE 2026-06-12): con la WiFi del tren integrada como
+# tercer enlace ubond (vía wrapper udp2raw faketcp), una caída TRANSITORIA de
+# la WiFi disparaba SOS y MATABA todo el túnel, pese a que iPhone y Pixel
+# seguían activos (@). Eso es incorrecto: ubond hace bonding multi-enlace y
+# sobrevive perfectamente con 1-2 enlaces. El criterio de SOS pasa a ser
+# tolerante a degradación parcial: solo se considera "túnel muerto" si CERO
+# enlaces están activos (ningún `@links.*` en el process title de ubond). Si
+# queda al menos un link `@`, se LOGUEA la degradación pero NO se dispara SOS.
+# El check de ping al gateway interno se mantiene como segunda señal: ambos
+# (cero-links Y ping KO sostenido) deben combinarse antes de tirar el túnel.
+#
+# Estado de links leído del título del proceso, p.ej.:
+#   ubond: ubond0 @links.wifi @links.pixel !links.iphone
+# donde `@` = activo y `!` = caído. Devuelve el nº de enlaces `@` activos
+# (o -1 si no se puede leer ningún título de worker ubond).
+count_active_links() {
+    local titles n
+    # ps muestra el setproctitle COMPLETO con los tokens @links.*/!links.*;
+    # pgrep solo da PIDs/nombre y no expone el título, así que aquí grepear
+    # ps es deliberado (no sustituible por pgrep). SC2009 silenciado a propósito.
+    #
+    # 2026-06-12 (review a bordo AVE): el patrón anterior 'ubond0 @' exigía que
+    # el PRIMER link del título fuera `@`. Pero ubond lista los links en orden
+    # de config y la WiFi va primera; si la WiFi cae (escenario que REQ-NET-34
+    # debe TOLERAR) el título es `ubond0 !links.wifi @links.pixel @links.iphone`
+    # → no matcheaba → 0 links → SOS falso que mata un túnel con 2 enlaces vivos.
+    # Fix: matchear la línea del worker (no la [priv]) sin anclar al primer `@`.
+    # shellcheck disable=SC2009
+    titles="$(ps -axo command 2>/dev/null \
+        | grep -E 'ubond: ubond[0-9]*( |$)' \
+        | grep -vE '\[priv\]|grep' || true)"
+    if [[ -z "${titles}" ]]; then
+        echo -1
+        return
+    fi
+    # Contar tokens `@links.*` en TODOS los títulos (el worker activo suele
+    # llevar el listado completo de links con su prefijo @/!).
+    n="$(printf '%s\n' "${titles}" | grep -oE '@links\.[A-Za-z0-9_]+' \
+        | sort -u | wc -l | tr -d ' ')"
+    echo "${n:-0}"
+}
+
 log() { printf '%s %s\n' "$(date -Iseconds)" "$*" >>"${LOG}"; }
 notify() {
     osascript -e "display notification \"$1\" with title \"ubond-watchdog\"" \
@@ -145,7 +187,20 @@ while :; do
     fi
 
     if (( fails >= FAIL_THRESHOLD )); then
-        if trigger_sos "sin respuesta ${TARGET} ${fails}×${TICK_S}s"; then
+        # REQ-NET-34 (2026-06-12): tolerancia a degradación parcial. El ping
+        # sostenido KO ya no basta para tirar el túnel — comprobamos cuántos
+        # enlaces siguen activos (@). Si queda al menos uno, el bonding está
+        # vivo (p.ej. WiFi caída pero iPhone+Pixel @): logueamos la
+        # degradación, reseteamos el contador y NO disparamos SOS. Solo si
+        # CERO enlaces están activos combinamos ambas señales y restauramos.
+        active_links="$(count_active_links)"
+        if (( active_links > 0 )); then
+            log "degradación tolerada: ping ${TARGET} KO ${fails}×${TICK_S}s pero ${active_links} enlace(s) @ activos — NO SOS (bonding vivo)"
+            fails=0
+            continue
+        fi
+        # active_links == 0 (o -1, sin worker legible): túnel sin enlaces.
+        if trigger_sos "sin respuesta ${TARGET} ${fails}×${TICK_S}s y 0 enlaces activos"; then
             exit 0
         fi
         # cooldown impide SOS — resetear contador para no logear spam

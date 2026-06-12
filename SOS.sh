@@ -112,6 +112,80 @@ for i in $(seq 0 15); do
     fi
 done
 
+# 4.5 Rearranque del wrapper udp2raw cliente (REQ-NET-41, 2026-06-12).
+#
+# MOTIVO: desde que la WiFi del AVE entra como tercer enlace ubond vía el
+# wrapper EXTERIOR udp2raw faketcp, el [links.wifi] apunta a 127.0.0.1:5085
+# (boca local del wrapper), NO directo al RPi. Si el wrapper udp2raw cliente
+# muere, ese link NUNCA recupera por sí solo aunque ubond rearranque. Por eso
+# SOS debe relanzarlo. Es ADITIVO/CONDICIONAL: en modo móvil-solo (sin
+# wrapper) no se ejecuta nada nuevo y el comportamiento previo es idéntico.
+#
+# Detección del modo wrapper (cualquiera basta):
+#   a) WIFI_VIA_WRAPPER=1 en el entorno
+#   b) ubond_active.conf tiene un [links.wifi] con remotehost="127.0.0.1"
+# El proceso udp2raw previo ya se mató en el paso 1 (PID files / pkill).
+#
+# NOTA macOS: el binario es udp2raw_mp y NO soporta -a (auto-iptables: macOS
+# no tiene iptables; -a es FATAL). Por eso lanzamos el cliente directamente
+# con el comando macOS-correcto SIN -a, en vez de delegar en wrap-udp2raw.sh
+# (que pasa -a incondicional, válido en la RPi pero letal aquí). KEY y puertos
+# se leen de disco/env — NO se hardcodean (Rule IDLC: sin secretos/IPs fijas).
+ACTIVE_CONF="${GENERATED_DIR}/ubond_active.conf"
+wrapper_mode=0
+if [[ "${WIFI_VIA_WRAPPER:-0}" == "1" ]]; then
+    wrapper_mode=1
+elif [[ -f "${ACTIVE_CONF}" ]] && awk '
+        /^\[links\.wifi\]/ { inwifi=1; next }
+        /^\[/             { inwifi=0 }
+        inwifi && /^[[:space:]]*remotehost[[:space:]]*=[[:space:]]*"127\.0\.0\.1"/ { found=1 }
+        END { exit !found }' "${ACTIVE_CONF}"; then
+    wrapper_mode=1
+fi
+
+if (( wrapper_mode == 1 )); then
+    # Resolver binario (udp2raw o udp2raw_mp), KEY y puertos sin hardcodear.
+    WRAP_BIN=""
+    for cand in /opt/homebrew/bin/udp2raw_mp /opt/homebrew/bin/udp2raw udp2raw_mp udp2raw; do
+        if command -v "${cand}" >/dev/null 2>&1; then WRAP_BIN="${cand}"; break; fi
+    done
+    WRAP_KEY_FILE="${GENERATED_DIR}/wrap_udp2raw.key"
+    WRAP_KEY=""
+    [[ -s "${WRAP_KEY_FILE}" ]] && WRAP_KEY="$(cat "${WRAP_KEY_FILE}" 2>/dev/null || true)"
+    # Puertos: WRAP_LOCAL_PORT (boca local, default 5085) y UDP2RAW_PORT
+    # (faketcp TCP, default 8443). Vienen de env si están exportados; si no,
+    # los leemos de config/env con awk (sin source). RPI/host destino = VPS_IP.
+    sos_env() {  # awk-extract de config/env, sin source (defensivo)
+        [[ -f "${SCRIPT_DIR}/config/env" ]] || return 0
+        awk -F'=' '/^'"$1"'=/{gsub(/["[:space:]]/,"",$2); print $2; exit}' \
+            "${SCRIPT_DIR}/config/env"
+    }
+    WRAP_LOCAL_PORT="${WRAP_LOCAL_PORT:-$(sos_env UBOND_PORT_3)}"; WRAP_LOCAL_PORT="${WRAP_LOCAL_PORT:-5085}"
+    WRAP_RAW_PORT="${UDP2RAW_PORT:-$(sos_env UDP2RAW_PORT)}";     WRAP_RAW_PORT="${WRAP_RAW_PORT:-8443}"
+    WRAP_RHOST="${WRAP_REMOTE_HOST:-$(sos_env VPS_IP)}"
+
+    if [[ -z "${WRAP_BIN}" ]]; then
+        echo "✗ udp2raw no instalado — link WiFi vía wrapper no recuperará"
+    elif [[ -z "${WRAP_KEY}" || -z "${WRAP_RHOST}" ]]; then
+        echo "✗ falta KEY (${WRAP_KEY_FILE}) o VPS_IP — wrapper WiFi no rearrancado"
+    else
+        # Lanzar cliente faketcp SIN -a (macOS). Log a wrap_udp2raw.log.
+        nohup "${WRAP_BIN}" -c \
+            -l "127.0.0.1:${WRAP_LOCAL_PORT}" \
+            -r "${WRAP_RHOST}:${WRAP_RAW_PORT}" \
+            --raw-mode faketcp \
+            -k "${WRAP_KEY}" \
+            >>"${GENERATED_DIR}/wrap_udp2raw.log" 2>&1 &
+        wrap_pid=$!
+        disown 2>/dev/null || true
+        # 2026-06-12 (review): persistir el PID. El kill del wrapper viejo (paso
+        # 1) lee generated/wrap_udp2raw.pid; sin esto, un SOS posterior no podría
+        # matar este cliente y colisionarían dos en 127.0.0.1:WRAP_LOCAL_PORT.
+        echo "${wrap_pid}" > "${GENERATED_DIR}/wrap_udp2raw.pid"
+        echo "✓ wrapper udp2raw cliente rearrancado (pid ${wrap_pid}): 127.0.0.1:${WRAP_LOCAL_PORT} -> ${WRAP_RHOST}:${WRAP_RAW_PORT} (faketcp, sin -a)"
+    fi
+fi
+
 # 5. Verificación final
 echo ""
 if pgrep -f "mlvpn: mlvpn0" >/dev/null 2>&1; then

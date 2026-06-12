@@ -10,6 +10,50 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### WiFi tren AVE integrada en ubond — bonding 3 enlaces a bordo (2026-06-12)
+
+Hito objetivo del proyecto: **la WiFi del AVE entra al túnel ubond como
+tercer enlace**, validado a bordo con los tres links activos
+simultáneamente (`@links.wifi @links.pixel @links.iphone`). Vía
+ganadora: **udp2raw faketcp** (Vía A), no wstunnel/WSS (Vía B) como se
+había previsto. Evidencia y análisis en
+`docs/v2-ubond/16-wifi-tren-tercer-link-2026-06-12.md`.
+
+Hallazgo que **invierte** la hipótesis del doc 12: el firewall del tren
+NO hace MitM universal ni bloquea todo TCP. Completa el handshake TLS y
+sostiene TCP persistente (SSH 8s+), pero **inspecciona capa 7 y corta el
+Upgrade WebSocket** — por eso WSS muere y faketcp (que no es TLS real)
+cruza limpio. Eco UDP end-to-end verificado con tag infalsificable
+(~90 ms). La pérdida observada (~25-54%) es del enlace WiFi del tren en
+sí (ping ICMP base pierde igual), no del túnel faketcp.
+
+- **REQ-NET-34** — `tools/ubond-watchdog.sh` ahora tolerante a
+  degradación parcial: solo dispara SOS si CERO enlaces `@` activos.
+  Corrige incidente a bordo donde una caída transitoria de la WiFi
+  (primer link) mataba un túnel con 2 enlaces vivos.
+- **REQ-NET-41** — `SOS.sh` rearranca el wrapper udp2raw cliente
+  (con su PID file) cuando está en modo wrapper; KEY/puertos leídos de
+  disco/env, comando `udp2raw` sin `-a` (FATAL en binario macOS).
+  `04b-conectar-ubond.sh`: la elegibilidad WiFi con `WIFI_VIA_WRAPPER=1`
+  pasa a "en0 con IP + wrapper vivo en 127.0.0.1", evitando los falsos
+  negativos del check captive bajo WiFi inestable.
+- `tools/wifi-reintegrator_ubond.sh` (nuevo) — port ubond-aware del
+  reintegrador (mlvpn v1 intacto, decisión duplicar REQ-NET-22).
+- Doble review (técnico C/redes + IDLC v6); 1 bug crítico + 1 menor
+  detectados y corregidos antes del cierre.
+
+#### Mejoras pendientes (próxima iteración / roadmap)
+
+- **Monitorizar latencia y ancho de banda real** del túnel a bordo: hoy
+  se notó latencia alta subjetiva pero NO se midió RTT/jitter/throughput
+  por enlace ni agregado. `08-monitor.py` no mide latencia (solo refleja
+  estado de links y contadores de bytes). Falta instrumentación de
+  latencia/BW por link.
+- **Re-login automático del captive WiFi**: en el trayecto la WiFi se
+  quedó en `auth` (sesión del portal expirada) y no recuperó sola. El
+  `captive-watchdog.py` (REQ-NET-40) existe pero falta integrarlo con el
+  arranque del link WiFi de ubond (canary tri-valor + re-POST inputs).
+
 ### Bypass firewall WiFi AVE — toolkit reconocimiento + túneles UDP-over-X (2026-06-11)
 
 Reorientación tras evidencia 2026-06-09 (UDP bloqueado + DNAT tcp/80+443
