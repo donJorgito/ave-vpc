@@ -83,6 +83,15 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-35](ave-vpc-REQ-NET-35-requirement.md) | Rebind socket on silence (fix C nativo, complementario NET-34) |
 | [REQ-NET-36](ave-vpc-REQ-NET-36-requirement.md) | SIGHUP purga filters.count antes de re-añadir (fix duplicate filters bug) |
 | [REQ-NET-37](ave-vpc-REQ-NET-37-requirement.md) | Pre-resolución DNS de hosts en filters.replicate antes de lanzar ubond |
+| [REQ-NET-38](ave-vpc-REQ-NET-38-requirement.md) | Listener multipuerto en RPi + probe sistemático del firewall WiFi |
+| [REQ-NET-39](ave-vpc-REQ-NET-39-requirement.md) | Wrappers UDP-over-X para tunelar ubond a través del firewall del WiFi del AVE |
+| [REQ-NET-40](ave-vpc-REQ-NET-40-requirement.md) | Watchdog de captive portal + re-login automático estilo wifionice |
+| [REQ-NET-41](ave-vpc-REQ-NET-41-requirement.md) | Enlace WiFi de ubond enrutable a través de un wrapper local (bypass firewall AVE) |
+| [REQ-NET-42](ave-vpc-REQ-NET-42-requirement.md) | Vía D: launcher de túnel DNS (iodine) como link de vida para ubond |
+| [REQ-NET-43](ave-vpc-REQ-NET-43-requirement.md) | Vía E: launcher de túnel ICMP (ptunnel-ng) como link de vida para ubond |
+| [REQ-NET-44](ave-vpc-REQ-NET-44-requirement.md) | Rotación de MAC del WiFi para resetear la cuota de datos del portal Icomera |
+| [REQ-NET-45](ave-vpc-REQ-NET-45-requirement.md) | Banco de medida throughput/latencia/jitter/loss de ubond por cada wrapper |
+| [REQ-NET-46](ave-vpc-REQ-NET-46-requirement.md) | Elimina busy-wait CPU 99% en ubond (pacing por lotes, 3 spinners libev) |
 
 ## Restricciones macOS (REQ-MAC)
 
