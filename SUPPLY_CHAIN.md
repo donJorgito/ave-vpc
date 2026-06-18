@@ -43,6 +43,7 @@ Orden de aplicación según `03b-setup-mac-ubond.sh:66` y bloque
 | 6 | `ubond_filters_section_exclusion.patch`     | 1092  | REQ-NET-29     | macOS+Linux|
 | 7 | `ubond_dedup_gate_data_seq.patch`           | 1988  | REQ-NET-30     | macOS+Linux|
 | 8 | `ubond_rebind_on_silence.patch`             | 7748  | REQ-NET-35 + REQ-NET-35.1 | macOS+Linux |
+| 9 | `ubond_cpu_pacing_busywait.patch`           | 157   | REQ-NET-46     | macOS+Linux|
 
 Notas:
 

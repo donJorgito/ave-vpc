@@ -289,8 +289,10 @@ A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con Oracle 
 sudo ./04-conectar.sh
 
 # Desde Claude Code (Macs con Jamf/MDM donde sudo sin TTY falla):
-SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A ./04-conectar.sh
-# El askpass lo crea 03-setup-mac.sh automáticamente
+SUDO_ASKPASS="$(./tools/ensure-askpass.sh)" sudo -A ./04-conectar.sh
+# ensure-askpass.sh recrea /tmp/sudo-askpass.sh si falta y devuelve su ruta.
+# Necesario porque macOS purga /tmp al reiniciar (lo crea 03-setup-mac.sh la
+# primera vez, pero desaparece tras cada arranque).
 ```
 
 Verifica que el tráfico pasa por el tunel:

@@ -10,6 +10,35 @@ de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
 en memoria del proyecto. Plan en 6 fases, ejecutándose
 incrementalmente sin romper la v1.0.0 actual.
 
+### Fix CPU 99% busy-wait en ubond — pacing por lotes (2026-06-18)
+
+**REQ-NET-46** — Corregidos TRES spinners en el fork ubond que forzaban
+`select(timeout=0)` en libev y clavaban un núcleo al 99% incluso en reposo
+con un solo enlace autenticado:
+
+1. `ubond_rtun_do_send` (rama "too soon"): sustituye el `ev_check` por un
+   `ev_timer` durmiente (floor 5 ms, techo `BANDWIDTHCALCTIME`) y envía
+   **en lote** (`while` mientras haya presupuesto) en vez de un paquete por
+   disparo de timer.
+2. `ubond_rtun_recalc_weight`: floor de 5 ms (200 Hz) al `send_timer.repeat`,
+   antes ~0.12 ms (≈8 kHz a 10 Mbps) por `DEFAULT_MTU/10 / bytes_per_sec`.
+3. `reorder.c:reorder_drain_check`: `ev_check` → `ev_timer` durmiente
+   (mismo anti-patrón; el autor original ya tenía la variante `ev_timer`
+   comentada en el código).
+
+Bug de **diseño del upstream** ubond/mlvpn, no introducido por el proyecto.
+
+**Evidencia runtime** (`sudo sample`): antes CPU 99 % clavado, `__select`
+83 % a 99 % CPU; después oscila 23-73 % con la carga, 0 % pérdida de
+paquetes, latencia 60-148 ms estable. En el RPi (servidor) el binario viejo
+había consumido **4 h 5 min de CPU en ~9 días** mayormente con los enlaces
+caídos (`systemd` accounting) — confirmación cuantitativa del spin.
+
+Desplegado en Mac (cliente, arm64) y RPi (servidor, aarch64). Patch en
+`patches/ubond_cpu_pacing_busywait.patch`, integrado en
+`07b-setup-rpi-ubond.sh` como patch nº 8. Doble review: experto C/libev +
+auditoría IDLC v6.
+
 ### WiFi tren AVE integrada en ubond — bonding 3 enlaces a bordo (2026-06-12)
 
 Hito objetivo del proyecto: **la WiFi del AVE entra al túnel ubond como

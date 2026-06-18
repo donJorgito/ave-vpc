@@ -106,6 +106,7 @@ UBOND_PATCH4_B64="$(base64 < "${PATCHES_DIR}/ubond_filters_section_exclusion.pat
 UBOND_PATCH5_B64="$(base64 < "${PATCHES_DIR}/ubond_dedup_gate_data_seq.patch" | tr -d '\n')"
 UBOND_PATCH6_B64="$(base64 < "${PATCHES_DIR}/ubond_rebind_on_silence.patch" | tr -d '\n')"
 UBOND_PATCH7_B64="$(base64 < "${PATCHES_DIR}/ubond_filters_count_purge.patch" | tr -d '\n')"
+UBOND_PATCH8_B64="$(base64 < "${PATCHES_DIR}/ubond_cpu_pacing_busywait.patch" | tr -d '\n')"
 
 echo "=> Conectando a la Raspberry Pi ${RPi_IP} (puerto SSH ${RPi_SSH_PORT})..."
 echo "=> ubond escuchará en ${UBOND_PORT_1}/${UBOND_PORT_2}/${UBOND_PORT_3} UDP (paralelo a mlvpn 5080-5082)"
@@ -125,6 +126,7 @@ ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     UBOND_PATCH5_B64="${UBOND_PATCH5_B64}" \
     UBOND_PATCH6_B64="${UBOND_PATCH6_B64}" \
     UBOND_PATCH7_B64="${UBOND_PATCH7_B64}" \
+    UBOND_PATCH8_B64="${UBOND_PATCH8_B64}" \
     bash <<'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -212,6 +214,17 @@ else
         echo "  [RPi] (patch filters_count_purge ya aplicado o no aplicable; continuando)"
     fi
     rm -f /tmp/ubond_filters_count_purge.patch
+
+    # REQ-NET-46: elimina busy-wait CPU 99% (pacing por lotes). Tres spinners
+    # que forzaban select(timeout=0) en libev: do_send rama "too soon"
+    # (ev_check->ev_timer + envío en lote), recalc_weight (floor 5ms al
+    # send_timer.repeat, antes ~8kHz) y reorder_drain_check (ev_check->ev_timer).
+    # Bug de diseño upstream. Validado: CPU 99%->oscila con carga, 0% pérdida.
+    printf '%s' "${UBOND_PATCH8_B64}" | base64 -d > /tmp/ubond_cpu_pacing_busywait.patch
+    if ! patch -p1 -N --reject-file=- < /tmp/ubond_cpu_pacing_busywait.patch 2>&1 | head -10; then
+        echo "  [RPi] (patch cpu_pacing_busywait ya aplicado o no aplicable; continuando)"
+    fi
+    rm -f /tmp/ubond_cpu_pacing_busywait.patch
 
     ./autogen.sh
     # --enable-filters: requerido para [filters.replicate]

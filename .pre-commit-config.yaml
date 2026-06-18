@@ -4,7 +4,11 @@ repos:
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
+        # Los .patch deben preservarse byte a byte: un diff con espacios de
+        # contexto significativos deja de aplicar si se le quita whitespace.
+        exclude: '\.patch$'
       - id: end-of-file-fixer
+        exclude: '\.patch$'
       - id: check-yaml
       - id: check-added-large-files
         args: ['--maxkb=500']

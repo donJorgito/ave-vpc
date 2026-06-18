@@ -1,0 +1,157 @@
+diff --git a/src/reorder.c b/src/reorder.c
+index 25598d7..b02d1d8 100644
+--- a/src/reorder.c
++++ b/src/reorder.c
+@@ -64,7 +64,7 @@ struct ubond_reorder_buffer {
+ 
+   ubond_pkt_list_t list;
+ 
+-  ev_check reorder_drain_check;
++  ev_timer reorder_drain_check;
+ 
+ };
+ static struct ubond_reorder_buffer *reorder_buffer;
+@@ -111,16 +111,30 @@ double ubond_total_loss()
+   return r;
+ }
+   
+-void ubond_reorder_drain_check(EV_P_ ev_check *w, int revents)
++void ubond_reorder_drain_check(EV_P_ ev_timer *w, int revents)
+ {
+   struct ubond_reorder_buffer *b=reorder_buffer;
+   ev_tstamp now=ev_now(EV_DEFAULT_UC);
+   ev_tstamp diff=now - b->last_tick;
+-  
++
+   if (b->pkts_sent < b->pkts_per_sec * diff) {
+     b->pkts_sent++;
+     ubond_reorder_drain();
+   }
++
++  // This used to be an ev_check, which runs every loop iteration without ever
++  // sleeping -> forced select(timeout=0) and pinned a CPU core at 100% the
++  // whole time the buffer was non-empty. Now it's an ev_timer: if the buffer
++  // still has packets, re-arm to sleep exactly until the next packet is due at
++  // the current pkts_per_sec rate (the budget that the `if` above gates on).
++  // ubond_reorder_drain() stops the timer when the buffer empties.
++  if (!UBOND_TAILQ_EMPTY(&b->list)) {
++    ev_tstamp wait = ((double)(b->pkts_sent + 1) / b->pkts_per_sec) - diff;
++    if (wait < 0.001) wait = 0.001;   // floor>0: ev_timer_again with repeat==0 STOPS the timer
++    if (wait > 0.25) wait = 0.25;     // never sleep past the reorder tick that resets the budget
++    w->repeat = wait;
++    ev_timer_again(EV_A_ w);
++  }
+ }
+ 
+ void ubond_reorder_tick(EV_P_ ev_timer *w, int revents)
+@@ -195,7 +209,7 @@ void ubond_reorder_init()
+   reorder_buffer->enabled=0;
+   ubond_reorder_reset();
+ 
+-  ev_check_init(&reorder_buffer->reorder_drain_check, ubond_reorder_drain_check);
++  ev_init(&reorder_buffer->reorder_drain_check, ubond_reorder_drain_check);
+ 
+   ev_timer_init(&reorder_timeout_tick, &ubond_reorder_tick, 0., 0.25);
+   ev_timer_start(EV_A_ &reorder_timeout_tick);
+@@ -307,7 +321,8 @@ void ubond_reorder_insert(ubond_tunnel_t *tun, ubond_pkt_t *pkt)
+   }
+ 
+   if (!ev_is_active(&b->reorder_drain_check)) {
+-    ev_check_start(EV_A_ &b->reorder_drain_check);
++    b->reorder_drain_check.repeat = 0.001;  // wake almost immediately to start draining
++    ev_timer_again(EV_A_ &b->reorder_drain_check);
+   }
+ //  ubond_reorder_drain();
+ }
+@@ -406,7 +421,7 @@ void ubond_reorder_drain()
+ 
+   if (UBOND_TAILQ_EMPTY(&b->list)) {
+     if (ev_is_active(&b->reorder_drain_check)) {
+-      ev_check_stop(EV_A_ &b->reorder_drain_check);
++      ev_timer_stop(EV_A_ &b->reorder_drain_check);
+     }
+   }
+ 
+diff --git a/src/ubond.c b/src/ubond.c
+index 4d50433..faf7b88 100644
+--- a/src/ubond.c
++++ b/src/ubond.c
+@@ -919,25 +919,58 @@ ubond_rtun_do_send(ubond_tunnel_t *tun)
+ 
+   tun->idle=0;
+   if ( tun->bytes_since_adjust < b ) {
+-    if (! UBOND_TAILQ_EMPTY(&tun->hpsbuf)) {
+-      ubond_pkt_t *pkt=UBOND_TAILQ_POP_LAST(&tun->hpsbuf);
+-      len = ubond_rtun_send(tun, pkt);
+-    } else {
+-      ubond_rtun_choose(tun);//EV_P_ ev_timer *w, int revents);
+-      if (! UBOND_TAILQ_EMPTY(&tun->sbuf)) {
+-        ubond_pkt_t *pkt=UBOND_TAILQ_POP_LAST(&tun->sbuf);
++    // Drain as many packets as the byte budget allows in ONE wakeup, instead of
++    // one-packet-per-timer-fire. recalc_weight set send_timer.repeat as low as
++    // ~0.12ms at 10Mbps (DEFAULT_MTU/10 / bytes_per_sec), so the old single-shot
++    // model fired the timer at ~8kHz and pinned a CPU core. Batching decouples
++    // the timer frequency from the packet rate. bytes_since_adjust is updated
++    // below from `len`, so we re-test the budget each iteration.
++    do {
++      len = 0;
++      if (! UBOND_TAILQ_EMPTY(&tun->hpsbuf)) {
++        ubond_pkt_t *pkt=UBOND_TAILQ_POP_LAST(&tun->hpsbuf);
+         len = ubond_rtun_send(tun, pkt);
+       } else {
+-        tun->idle=1;
++        ubond_rtun_choose(tun);
++        if (! UBOND_TAILQ_EMPTY(&tun->sbuf)) {
++          ubond_pkt_t *pkt=UBOND_TAILQ_POP_LAST(&tun->sbuf);
++          len = ubond_rtun_send(tun, pkt);
++        } else {
++          tun->idle=1;
++        }
+       }
+-    }
++      if (len > 0) {
++        tun->bytes_since_adjust += len + IP4_UDP_OVERHEAD;
++        tun->busy_writing++;
++        if (!ev_is_active(&tun->io_write)) ev_io_start(EV_A_ &tun->io_write);
++      }
++    } while (len > 0 && tun->bytes_since_adjust < b);
++
+     if (ev_is_active(&tun->check_ev)) {
+       ev_check_stop(EV_A_ &tun->check_ev);
+     }
++    return;   // budget accounting handled inline above; skip single-shot tail
+   } else {
+-// we're too soon, use a checker to wait for the right time
+-    if (!ev_is_active(&tun->check_ev)) {
+-      ev_check_start(EV_A_ &tun->check_ev);
++    // We're too soon. The original code armed an ev_check here, but an active
++    // ev_check forces libev's loop into select(timeout=0) and spins a whole
++    // CPU core (confirmed via `sample`: __select 83% at 99% CPU). Instead,
++    // sleep exactly until enough byte budget has accrued: budget grows at
++    // bytes_per_sec, and we need (bytes_since_adjust - b) more bytes.
++    if (ev_is_active(&tun->check_ev)) {
++      ev_check_stop(EV_A_ &tun->check_ev);
++    }
++    if (tun->bytes_per_sec > 0) {
++      ev_tstamp wait = ((double)tun->bytes_since_adjust - b) / tun->bytes_per_sec;
++      // Floor strictly above 0: ev_timer_again with repeat==0 STOPS the timer
++      // (libev semantics), which would kill this link's send pump in idle.
++      // 5ms matches the recalc_weight floor (200Hz cap); do_send batches so
++      // this never throttles throughput, it just stops the loop spinning.
++      if (wait < 0.005) wait = 0.005;
++      // Never sleep past the next bandwidth-budget reset (BANDWIDTHCALCTIME),
++      // which zeroes bytes_since_adjust and would let us send anyway.
++      if (wait > BANDWIDTHCALCTIME) wait = BANDWIDTHCALCTIME;
++      tun->send_timer.repeat = wait;
++      ev_timer_again(EV_A_ &tun->send_timer);
+     }
+   }
+ 
+@@ -1208,6 +1241,7 @@ ubond_rtun_recalc_weight()
+ 
+           ev_tstamp repeat = (float)(DEFAULT_MTU/10) / t->bytes_per_sec;
+ 
++          if (repeat < 0.005) repeat = 0.005;   // floor: cap timer at 200Hz; do_send batches throughput per wakeup
+           if (repeat > UBOND_IO_TIMEOUT_DEFAULT) repeat=UBOND_IO_TIMEOUT_DEFAULT;
+           t->send_timer.repeat = repeat;//*/((t->send_timer.repeat * 19) + repeat
+           //*)/20;
