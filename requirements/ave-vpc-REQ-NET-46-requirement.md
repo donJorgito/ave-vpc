@@ -70,6 +70,21 @@ proyecto. El patch se aplica DESPUÉS de los 7 patches REQ-NET previos.
     en ~9 días** mayormente con enlaces caídos (confirmación del spin). Binario
     nuevo compilado e instalado, servicio `active`.
 
+**Regresión detectada y corregida (2026-06-18):**
+
+El cambio `ev_check`→`ev_timer` en `reorder_drain_check` introdujo pérdida en
+arranque. Tras `ubond_reorder_reset`, `pkts_per_sec=1`; el rearme del timer
+calculaba `wait=(pkts_sent+1)/pkts_per_sec` que con tasa 1 saturaba a 0.25 s
+por paquete → el reorder buffer drenaba 1 pkt/250 ms durante la ventana fría
+(hasta que `reorder_tick`, cada 0.25 s, sube `pkts_per_sec` a ≥1000) → los
+paquetes en ráfaga del arranque caducaban y se contaban como pérdida (~80 %
+los primeros segundos). El `ev_check` original no lo sufría porque corría en
+cada iteración del loop (drenaba por fuerza bruta de frecuencia). **Fix:**
+mientras `pkts_per_sec < 1000` (sin calentar) usar `wait=0.001`; el cálculo
+por tasa solo en régimen. Verificado: pérdida por túnel **80 % → 0.0 %**.
+Diagnóstico por agente experto (lectura estática), validación runtime con
+`tools/safe-loss-test.sh` (dead-man's switch).
+
 **Riesgos:**
 
 - **Jitter de pacing:** los lotes cada ≥5 ms añaden ≤5 ms de burst-shaping.

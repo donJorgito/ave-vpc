@@ -39,6 +39,20 @@ Desplegado en Mac (cliente, arm64) y RPi (servidor, aarch64). Patch en
 `07b-setup-rpi-ubond.sh` como patch nº 8. Doble review: experto C/libev +
 auditoría IDLC v6.
 
+**Corrección de regresión (2026-06-18, mismo REQ-NET-46):** la validación
+runtime reveló que el cambio `ev_check`→`ev_timer` en `reorder_drain_check`
+estrangulaba el drain del reorder buffer en arranque: tras
+`ubond_reorder_reset`, `pkts_per_sec=1`, y el rearme del timer saturaba el
+wait a 0.25 s/paquete → el buffer drenaba 1 paquete cada 250 ms durante la
+ventana fría → los paquetes en ráfaga caducaban = **~80 % de pérdida los
+primeros segundos** (medido por el túnel pese a tener el enlace móvil sano).
+Fix: drenar agresivamente (`wait=0.001`) mientras `pkts_per_sec<1000` (sin
+calentar); el cálculo por tasa solo aplica en régimen. Además se para
+`io_write` si el lote de `do_send` no envía nada (evita girar en vacío).
+Validado: pérdida por el túnel **80 % → 0.0 %**, latencia 42-46 ms estable.
+Diagnóstico por agente experto C/libev (lectura estática) + validación
+runtime con dead-man's switch (`tools/safe-loss-test.sh`).
+
 ### WiFi tren AVE integrada en ubond — bonding 3 enlaces a bordo (2026-06-12)
 
 Hito objetivo del proyecto: **la WiFi del AVE entra al túnel ubond como

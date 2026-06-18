@@ -1,5 +1,5 @@
 diff --git a/src/reorder.c b/src/reorder.c
-index 25598d7..b02d1d8 100644
+index 25598d7..b748ec0 100644
 --- a/src/reorder.c
 +++ b/src/reorder.c
 @@ -64,7 +64,7 @@ struct ubond_reorder_buffer {
@@ -11,7 +11,7 @@ index 25598d7..b02d1d8 100644
  
  };
  static struct ubond_reorder_buffer *reorder_buffer;
-@@ -111,16 +111,30 @@ double ubond_total_loss()
+@@ -111,16 +111,42 @@ double ubond_total_loss()
    return r;
  }
    
@@ -35,16 +35,28 @@ index 25598d7..b02d1d8 100644
 +  // the current pkts_per_sec rate (the budget that the `if` above gates on).
 +  // ubond_reorder_drain() stops the timer when the buffer empties.
 +  if (!UBOND_TAILQ_EMPTY(&b->list)) {
-+    ev_tstamp wait = ((double)(b->pkts_sent + 1) / b->pkts_per_sec) - diff;
-+    if (wait < 0.001) wait = 0.001;   // floor>0: ev_timer_again with repeat==0 STOPS the timer
-+    if (wait > 0.25) wait = 0.25;     // never sleep past the reorder tick that resets the budget
++    ev_tstamp wait;
++    // Arranque: ubond_reorder_reset deja pkts_per_sec=1 y reorder_tick (cada
++    // 0.25s) aún no lo ha subido. El ev_check original reevaluaba el budget en
++    // CADA iteración del loop; con pkts_per_sec=1 el cálculo de abajo satura el
++    // wait a 0.25s/paquete y estrangula el drain (1 pkt/250ms) → los pings en
++    // ráfaga del arranque caducan y se cuentan como pérdida (~80% los primeros
++    // segundos). Mientras el rate no esté caliente (>=1000, piso que impone
++    // reorder_tick en régimen), drenar agresivamente.
++    if (b->pkts_per_sec < 1000.0) {
++      wait = 0.001;
++    } else {
++      wait = ((double)(b->pkts_sent + 1) / b->pkts_per_sec) - diff;
++      if (wait < 0.001) wait = 0.001;   // floor>0: ev_timer_again con repeat==0 PARA el timer
++      if (wait > 0.25) wait = 0.25;     // no dormir más allá del tick que resetea el budget
++    }
 +    w->repeat = wait;
 +    ev_timer_again(EV_A_ w);
 +  }
  }
  
  void ubond_reorder_tick(EV_P_ ev_timer *w, int revents)
-@@ -195,7 +209,7 @@ void ubond_reorder_init()
+@@ -195,7 +221,7 @@ void ubond_reorder_init()
    reorder_buffer->enabled=0;
    ubond_reorder_reset();
  
@@ -53,7 +65,7 @@ index 25598d7..b02d1d8 100644
  
    ev_timer_init(&reorder_timeout_tick, &ubond_reorder_tick, 0., 0.25);
    ev_timer_start(EV_A_ &reorder_timeout_tick);
-@@ -307,7 +321,8 @@ void ubond_reorder_insert(ubond_tunnel_t *tun, ubond_pkt_t *pkt)
+@@ -307,7 +333,8 @@ void ubond_reorder_insert(ubond_tunnel_t *tun, ubond_pkt_t *pkt)
    }
  
    if (!ev_is_active(&b->reorder_drain_check)) {
@@ -63,7 +75,7 @@ index 25598d7..b02d1d8 100644
    }
  //  ubond_reorder_drain();
  }
-@@ -406,7 +421,7 @@ void ubond_reorder_drain()
+@@ -406,7 +433,7 @@ void ubond_reorder_drain()
  
    if (UBOND_TAILQ_EMPTY(&b->list)) {
      if (ev_is_active(&b->reorder_drain_check)) {
@@ -73,10 +85,10 @@ index 25598d7..b02d1d8 100644
    }
  
 diff --git a/src/ubond.c b/src/ubond.c
-index 4d50433..faf7b88 100644
+index 4d50433..8c18d1d 100644
 --- a/src/ubond.c
 +++ b/src/ubond.c
-@@ -919,25 +919,58 @@ ubond_rtun_do_send(ubond_tunnel_t *tun)
+@@ -919,25 +919,63 @@ ubond_rtun_do_send(ubond_tunnel_t *tun)
  
    tun->idle=0;
    if ( tun->bytes_since_adjust < b ) {
@@ -108,7 +120,6 @@ index 4d50433..faf7b88 100644
 +          tun->idle=1;
 +        }
        }
--    }
 +      if (len > 0) {
 +        tun->bytes_since_adjust += len + IP4_UDP_OVERHEAD;
 +        tun->busy_writing++;
@@ -116,6 +127,11 @@ index 4d50433..faf7b88 100644
 +      }
 +    } while (len > 0 && tun->bytes_since_adjust < b);
 +
++    // Si el lote no envió nada (idle), parar io_write para no dejarlo girando
++    // en vacío (el tail original hacía este ev_io_stop; el return lo saltaba).
++    if (!tun->busy_writing && ev_is_active(&tun->io_write)) {
++      ev_io_stop(EV_A_ &tun->io_write);
+     }
      if (ev_is_active(&tun->check_ev)) {
        ev_check_stop(EV_A_ &tun->check_ev);
      }
@@ -147,7 +163,7 @@ index 4d50433..faf7b88 100644
      }
    }
  
-@@ -1208,6 +1241,7 @@ ubond_rtun_recalc_weight()
+@@ -1208,6 +1246,7 @@ ubond_rtun_recalc_weight()
  
            ev_tstamp repeat = (float)(DEFAULT_MTU/10) / t->bytes_per_sec;
  
