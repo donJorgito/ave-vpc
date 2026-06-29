@@ -5,6 +5,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [2.0.1] — 2026-06-29
+
 ### Cambiado
 
 - Dependencias actualizadas vía Dependabot (PRs #2–#8), revisadas por
