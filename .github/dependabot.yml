@@ -1,0 +1,85 @@
+# Gestión automatizada de dependencias — IDLC v6 Golden Rule 10
+# ("Automate Everything: Security, Deps & Releases" → dependency bots
+# at repo o org level). Complementa el Secret Scanning + SAST del CI.
+#
+# Ecosistemas declarados (verificados contra el árbol del repo 2026-06-29):
+#   - github-actions : .github/workflows/ci.yml (actions pinneadas a SHA, R7)
+#   - pip            : requirements-dev.txt (raíz)
+#   - terraform      : terraform/*.tf (providers/módulos)
+#
+# Política de aprobación (IDLC v6 §6.2 / §7.4): los PRs Minor/Patch del bot
+# pueden auto-mergearse cuando TODOS los automated gates (Secret Scan, SAST,
+# Lint, Unit Tests) pasen. Los Major requieren Peer + PO/Delegate (+ ITQA).
+# Aquí solo se configura la generación de PRs; el auto-merge se gobierna por
+# branch protection + reviews, no por este archivo.
+#
+# Commits: prefijo Conventional Commits (App. D.3, MANDATORY).
+
+version: 2
+
+updates:
+  # --- GitHub Actions ---------------------------------------------------
+  # Mantiene los SHA pinneados del CI al día (R7: sigue pinneando a hash,
+  # actualiza el comentario # vX.Y.Z).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      # Agrupa minor+patch en un solo PR para reducir ruido; los major
+      # quedan fuera del grupo (PR individual → revisión reforzada).
+      actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # --- Python (pip) -----------------------------------------------------
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 5
+    versioning-strategy: "increase"  # respeta el pin == de requirements-dev.txt
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    labels:
+      - "dependencies"
+      - "python"
+    groups:
+      pip-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # --- Terraform --------------------------------------------------------
+  - package-ecosystem: "terraform"
+    directory: "/terraform"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "terraform"
+    groups:
+      terraform-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
