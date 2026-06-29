@@ -19,7 +19,7 @@ como servidor **mlvpn**. La VM ARM del free tier es gratis **para siempre**
 
 ### 1. Crear cuenta
 
-1. Ve a https://cloud.oracle.com/
+1. Ve a <https://cloud.oracle.com/>
 2. Crea una cuenta (necesitas tarjeta de crédito pero NO te cobran)
 3. Elige región: **eu-madrid-1** o **eu-frankfurt-1** (la más cercana a la
    ruta AVE)
@@ -84,6 +84,7 @@ cp config/env.example config/env
 ### "Out of capacity" al crear la VM ARM
 
 El free tier ARM es muy demandado. Si te da este error:
+
 - Intenta a diferentes horas (madrugada suele funcionar)
 - Prueba con otro Availability Domain si tu región tiene varios
   (`eu-madrid-1` solo tiene AD-0)

@@ -1,0 +1,262 @@
+diff --git a/src/config.c b/src/config.c
+index 28342ed..8a25d69 100644
+--- a/src/config.c
++++ b/src/config.c
+@@ -479,6 +479,31 @@ ubond_config(int config_file_fd, int first_time)
+         }
+         work = work->next;
+     }
++
++    /* REQ-NET-12: parser de la sección [filters.replicate].
++     * Cada entrada `name = "bpf expr"` añade una regla al pool de
++     * replicación. Cuando un paquete matchea, se duplica a TODOS
++     * los túneles activos (no solo a uno como en [filters]). */
++    work = config;
++    while (work)
++    {
++        if (work->section != NULL &&
++                strncmp(work->section, "filters.replicate", 17) == 0) {
++            memset(&filter, 0, sizeof(filter));
++            if (pcap_compile(pcap_dead_p, &filter, work->conf->val,
++                    1, PCAP_NETMASK_UNKNOWN) != 0) {
++                log_warnx("config", "invalid replicate filter %s = %s: %s",
++                    work->conf->var, work->conf->val, pcap_geterr(pcap_dead_p));
++            } else if (ubond_replicate_filter_add(&filter, work->conf->var) != 0) {
++                log_warnx("config", "replicate filter %s error: too many filters",
++                    work->conf->var);
++            } else {
++                log_info("config", "added replicate filter %s: %s",
++                    work->conf->var, work->conf->val);
++            }
++        }
++        work = work->next;
++    }
+ #endif
+
+     //_conf_printConfig(config);
+diff --git a/src/filters.c b/src/filters.c
+index 9f85e46..24e7668 100644
+--- a/src/filters.c
++++ b/src/filters.c
+@@ -1,6 +1,10 @@
++#include <string.h>
+ #include "ubond.h"
+
+ extern struct ubond_filters_s ubond_filters;
++/* REQ-NET-12: filtros de replicación selectiva. Definida globalmente
++ * en ubond.c igual que ubond_filters. */
++extern struct ubond_replicate_filters_s ubond_replicate_filters;
+
+ ubond_tunnel_t *
+ ubond_filters_choose(uint32_t pktlen, const u_char *pktdata) {
+@@ -35,3 +39,45 @@ ubond_filters_add(const struct bpf_program *filter, ubond_tunnel_t *tun) {
+     ubond_filters.count++;
+     return 0;
+ }
++
++/*
++ * REQ-NET-12: comprueba si un paquete matchea alguna regla de
++ * replicación. Devuelve 1 si match (paquete debe duplicarse a N
++ * túneles), 0 si no (camino normal de routing).
++ */
++int
++ubond_replicate_filter_match(uint32_t pktlen, const u_char *pktdata) {
++    int i;
++    struct pcap_pkthdr hdr;
++    memset(&hdr, 0, sizeof(hdr));
++    hdr.caplen = pktlen;
++    hdr.len = pktlen;
++    for (i = 0; i < ubond_replicate_filters.count; i++) {
++        if (pcap_offline_filter(&ubond_replicate_filters.filter[i],
++                                &hdr, pktdata) != 0) {
++            return 1;
++        }
++    }
++    return 0;
++}
++
++/*
++ * REQ-NET-12: añade una regla compilada al pool de replicación.
++ * El `name` es solo informativo (logs); no se usa para lookup.
++ */
++int
++ubond_replicate_filter_add(const struct bpf_program *filter, const char *name) {
++    if (ubond_replicate_filters.count >= 255) {
++        return -1;
++    }
++    memcpy(&ubond_replicate_filters.filter[ubond_replicate_filters.count],
++           filter, sizeof(*filter));
++    if (name) {
++        strncpy(ubond_replicate_filters.name[ubond_replicate_filters.count],
++                name, UBOND_REPLICATE_NAME_MAX - 1);
++        ubond_replicate_filters.name[ubond_replicate_filters.count]
++                                    [UBOND_REPLICATE_NAME_MAX - 1] = '\0';
++    }
++    ubond_replicate_filters.count++;
++    return 0;
++}
+diff --git a/src/ubond.c b/src/ubond.c
+index b29383a..65d1e03 100644
+--- a/src/ubond.c
++++ b/src/ubond.c
+@@ -191,6 +191,29 @@ struct ubond_options_s ubond_options = {
+ struct ubond_filters_s ubond_filters = {
+     .count = 0
+ };
++/* REQ-NET-12: replicación selectiva por 5-tupla */
++struct ubond_replicate_filters_s ubond_replicate_filters = {
++    .count = 0
++};
++
++/* Set LRU circular para descartar paquetes replicados duplicados en el
++ * receptor. 1024 × uint64_t = 8 KB. Búsqueda lineal O(1024) ~= 1µs. */
++#define REPLICATE_DEDUP_SIZE 1024
++static uint64_t replicate_dedup_seen[REPLICATE_DEDUP_SIZE] = {0};
++static uint16_t replicate_dedup_idx = 0;
++
++static int
++ubond_replicate_dedup_check(uint64_t data_seq)
++{
++    int i;
++    if (data_seq == 0) return 0;  /* paquetes sin reorder no se dedupean */
++    for (i = 0; i < REPLICATE_DEDUP_SIZE; i++) {
++        if (replicate_dedup_seen[i] == data_seq) return 1;
++    }
++    replicate_dedup_seen[replicate_dedup_idx] = data_seq;
++    replicate_dedup_idx = (replicate_dedup_idx + 1) % REPLICATE_DEDUP_SIZE;
++    return 0;
++}
+ #endif
+
+ static char *optstr = "c:n:u:hvVD:p:";
+@@ -616,6 +639,19 @@ ubond_protocol_read(ubond_tunnel_t *tun, ubond_pkt_t *pkt)
+         proto->data_seq = 0;
+         proto->tun_seq = 0;
+     }
++
++#ifdef HAVE_FILTERS
++    /* REQ-NET-12 dedup DESACTIVADO temporalmente para aislar bug.
++     * Solo se activa cuando hay filtros activos — antes corría en
++     * cada paquete y rompía dataplane (auth OK, datos no fluían). */
++    if (ubond_replicate_filters.count > 0 &&
++        (proto->type == UBOND_PKT_DATA || proto->type == UBOND_PKT_DATA_RESEND) &&
++        ubond_replicate_dedup_check(proto->data_seq)) {
++        log_debug("replicate", "%s descartando duplicado data_seq=%lu",
++                  tun->name, proto->data_seq);
++        return 0;
++    }
++#endif
+     if (proto->timestamp != (uint16_t)-1) {
+         tun->saved_timestamp = proto->timestamp;
+         tun->saved_timestamp_received_at = now64;
+@@ -1114,7 +1150,12 @@ static int
+ ubond_rtun_bind(ubond_tunnel_t *t)
+ {
+     struct addrinfo hints, *res;
++#ifdef __linux__
++    /* struct ifreq solo se usa con SO_BINDTODEVICE (Linux). En macOS y BSD
++     * SO_BINDTODEVICE no existe y declarar la struct daría "incomplete type"
++     * porque <net/if.h> no la define completa sin headers Linux-specific. */
+     struct ifreq ifr;
++#endif
+     char bindifstr[UBOND_IFNAMSIZ+5];
+     int n, fd;
+
+@@ -1148,6 +1189,7 @@ ubond_rtun_bind(ubond_tunnel_t *t)
+              t->name, t->bindaddr ? t->bindaddr : "any",
+              bindifstr);
+
++#ifdef __linux__
+     if (*t->binddev) {
+       memset(&ifr, 0, sizeof(ifr));
+       snprintf(ifr.ifr_name, sizeof(ifr.ifr_name) - 1, t->binddev);
+@@ -1155,6 +1197,16 @@ ubond_rtun_bind(ubond_tunnel_t *t)
+         log_warn(NULL, "failed to bind on interface %s", t->binddev);
+       }
+     }
++#else
++    /* macOS / BSD no tienen SO_BINDTODEVICE. ave-vpc usa bindhost (IP)
++     * en lugar de binddev (nombre interfaz), así que esto solo es un
++     * skip silencioso documentado. Si binddev se intenta usar en
++     * macOS, queda inactivo — no rompe el túnel. */
++    if (*t->binddev) {
++      log_warnx(NULL, "binddev '%s' ignored on this platform (use bindhost instead)",
++                t->binddev);
++    }
++#endif
+     if (*t->bindaddr) {
+       n = bind(fd, res->ai_addr, res->ai_addrlen);
+       freeaddrinfo(res);
+@@ -1786,6 +1838,41 @@ ubond_rtun_choose(ubond_tunnel_t *rtun)
+   u_char *data=(u_char *)(spkt->p.data);
+   uint32_t len=spkt->p.len;
+
++  /* REQ-NET-12: replicación selectiva — si el paquete matchea un
++   * filtro de replicación, lo enviamos por TODOS los túneles
++   * activos (no solo por uno). data_seq se asigna UNA vez aquí y
++   * todas las copias lo comparten para que el receptor pueda
++   * dedupearlas.
++   * Gated por count > 0 para evitar overhead/side-effects cuando no
++   * hay filtros activos. */
++  if (ubond_replicate_filters.count > 0 &&
++      spkt->p.type == UBOND_PKT_DATA &&
++      ubond_replicate_filter_match(len, data)) {
++    spkt->p.reorder = 1;
++    spkt->p.data_seq = data_seq++;
++
++    int copies = 0;
++    ubond_tunnel_t *t;
++    LIST_FOREACH(t, &rtuns, entries) {
++      if (t->status != UBOND_AUTHOK) continue;
++      if (t->fallback_only) continue;       /* respeta --failover */
++      if (ubond_pkt_list_is_full(&t->hpsbuf)) continue;
++
++      ubond_pkt_t *clone = ubond_pkt_get();
++      /* Copia COMPLETA: p (payload+headers), timestamp y len (wire
++       * length, crítica para enviar). El campo entry (TAILQ) se
++       * sobrescribe inmediatamente por UBOND_TAILQ_INSERT_HEAD,
++       * así que copiarlo no hace daño. */
++      memcpy(clone, spkt, sizeof(*spkt));
++      UBOND_TAILQ_INSERT_HEAD(&t->hpsbuf, clone);
++      copies++;
++    }
++    log_debug("replicate", "data_seq=%lu enviado a %d tuneles",
++              spkt->p.data_seq, copies);
++    ubond_pkt_release(spkt);
++    return;
++  }
++
+   ubond_tunnel_t *frtun = ubond_filters_choose((uint32_t)len,data);
+   if (frtun) {
+     /* High priority buffer, not reorderd when a filter applies */
+diff --git a/src/ubond.h b/src/ubond.h
+index c67c648..11a3efb 100644
+--- a/src/ubond.h
++++ b/src/ubond.h
+@@ -211,6 +211,17 @@ struct ubond_filters_s {
+     struct bpf_program filter[255];
+     ubond_tunnel_t *tun[255];
+ };
++
++/* REQ-NET-12: filtros de replicación selectiva por 5-tupla.
++ * Paralelo a ubond_filters pero con semántica distinta: el match
++ * indica que el paquete debe replicarse a TODOS los túneles activos
++ * en lugar de elegir uno solo. */
++#define UBOND_REPLICATE_NAME_MAX 32
++struct ubond_replicate_filters_s {
++    uint8_t count;
++    struct bpf_program filter[255];
++    char name[255][UBOND_REPLICATE_NAME_MAX];  /* solo para logs */
++};
+ #endif
+
+ int ubond_config(int config_file_fd, int first_time);
+@@ -230,6 +241,9 @@ void ubond_rtun_status_down(ubond_tunnel_t *t);
+ #ifdef HAVE_FILTERS
+ int ubond_filters_add(const struct bpf_program *filter, ubond_tunnel_t *tun);
+ ubond_tunnel_t *ubond_filters_choose(uint32_t pktlen, const u_char *pktdata);
++/* REQ-NET-12 */
++int ubond_replicate_filter_add(const struct bpf_program *filter, const char *name);
++int ubond_replicate_filter_match(uint32_t pktlen, const u_char *pktdata);
+ void ubond_send_buffer_write(ubond_pkt_t *p);
+ #endif

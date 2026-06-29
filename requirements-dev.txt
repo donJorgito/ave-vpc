@@ -1,0 +1,10 @@
+# Python dev dependencies para ave-vpc.
+# REQ-NET-33 Phase 1 — code coverage Python (08-monitor.py).
+#
+# Pin a versiones específicas (IDLC v6 R7: deterministic versioning).
+# Versiones reflejan lo instalado en el entorno del usuario 2026-06-03;
+# bump cuando haya razón concreta (CVE, feature requerida, no por inercia).
+
+pytest==8.2.2
+pytest-cov==6.0.0
+coverage==7.6.4

@@ -11,6 +11,7 @@ mlvpn (proceso muestra `!links.X`), seguir esperando al gap retrasa
 inútilmente el cambio a un link que sí está operativo.
 
 Caso real validado 2026-05-25 en AVE:
+
 - Config: iPhone activo (sin fallback_only), Pixel y WiFi como backup
 - Realidad: iPhone en `!` (UDP 5080 filtrado o operador caído),
   Pixel en `@`, WiFi en `!`

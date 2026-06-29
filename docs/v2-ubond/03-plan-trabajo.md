@@ -16,6 +16,7 @@ antes de ir a v2.
 responde pero cuyo throughput es 0 KB/s. La videoconf rompe.
 
 **Diseño preliminar**:
+
 - Cada 5 min, hacer un curl pequeño (~100 KB) por cada interfaz
   física al RPi (no a un servicio externo, para no contar latencia
   Internet).
@@ -29,6 +30,7 @@ responde pero cuyo throughput es 0 KB/s. La videoconf rompe.
 **Coste**: 100 KB × 3 enlaces × 12 ciclos/h ≈ 4 MB/h. Aceptable.
 
 **Tareas**:
+
 1. Endpoint en RPi: `nginx` o socat sirviendo `/dev/urandom`
    tamaño-limitado en 5083/TCP.
 2. Patch `seleccionar-mejor-enlace.sh` con `measure_throughput()`.
@@ -43,6 +45,7 @@ modo failover cuando lo lógico sería ver solo el activo con tráfico
 real y los demás con `~0` (keepalives).
 
 **Diseño preliminar**:
+
 - Leer `mlvpn_active.conf` al arranque del monitor.
 - Para cada link, marcar `[A]` (activo) o `[B]` (backup) según
   `fallback_only`.
@@ -84,6 +87,7 @@ para mlvpn. El error en `ubond_rtun_bind` (línea 1117) es por
 `SO_BINDTODEVICE` (Linux-only) por `IP_BOUND_IF` (macOS).
 
 **Tareas**:
+
 1. Crear `patches/ubond_rtun_bind_darwin.c` con la implementación
    alternativa.
 2. Modificar (a futuro) el `03b-setup-mac-ubond.sh` para aplicar el
@@ -97,6 +101,7 @@ para mlvpn. El error en `ubond_rtun_bind` (línea 1117) es por
 **Sin tocar código todavía.**
 
 **Tareas**:
+
 1. `requirements/ave-vpc-REQ-NET-12-requirement.md`:
    - Sintaxis del filtro: `[filter.replicate]` con `udp dport 5004`,
      `udp dport 19302` (RTP, STUN/Meet).
@@ -138,6 +143,7 @@ para una sesión larga sin interrupciones.
 ## Lo que NO hacer
 
 Recordatorio (de `project_v2_ubond_roadmap.md`):
+
 1. NO reactivar `loss_tolerence`/`reorder_buffer_size` agresivos.
 2. NO reactivar el calibrador WRR (REQ-NET-10 deprecated).
 3. NO tocar `bandwidth_upload` en runtime — solo `fallback_only`.

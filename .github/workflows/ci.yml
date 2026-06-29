@@ -6,77 +6,69 @@ on:
   pull_request:
     branches: [main]
 
+# IDLC v6 Rule 7: actions pineadas a SHA inmutable. El comentario
+# `# vX.Y.Z` es informativo — el lock real es el hash. Para actualizar:
+# `gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq .object.sha`.
+
 jobs:
   lint:
     name: Lint y calidad
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.0
 
       - name: ShellCheck — análisis estático de scripts
-        uses: ludeeus/action-shellcheck@2.0.0
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38  # 2.0.0
         with:
           severity: warning
           scandir: '.'
           additional_files: '*.sh tests/*.sh'
 
       - name: Verificar que no hay claves privadas en el código
-        uses: pre-commit/action@v3.0.1
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
         with:
           extra_args: detect-private-key --all-files
+
+      - name: gitleaks — detección de secrets
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
+        with:
+          extra_args: gitleaks --all-files
 
   test:
     name: Tests de verificación
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.0
+
+      # REQ-NET-31/33: el unit test de pytest (08-monitor.py) DEBE correr en
+      # CI (gate §7.3 unit tests + coverage). En runner GitHub-hosted las deps
+      # se instalan en el workflow — mismo patrón que setup-terraform abajo.
+      # Versiones pinneadas en requirements-dev.txt (R7).
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias de test Python
+        run: pip install -r requirements-dev.txt
 
       - name: Verificar sintaxis de todos los scripts bash
-        run: |
-          find . -name "*.sh" -not -path "./.git/*" | while read -r f; do
-            echo "Comprobando sintaxis: $f"
-            bash -n "$f" || exit 1
-          done
+        run: ./tests/check_bash_syntax.sh
 
       - name: Verificar que config/env.example tiene todas las variables requeridas
-        run: |
-          required=(VPS_IP VPS_USER VPS_SSH_PORT
-                    MLVPN_PORT_1 MLVPN_PORT_2 MLVPN_PORT_3
-                    TUN_VPS_IP TUN_MAC_IP TUN_MTU
-                    IFACE_IPHONE IFACE_PIXEL IFACE_WIFI)
-          for var in "${required[@]}"; do
-            grep -q "^${var}=" config/env.example || {
-              echo "ERROR: ${var} no está en config/env.example"
-              exit 1
-            }
-            echo "✓ ${var}"
-          done
+        run: ./tests/check_env_example.sh
 
       - name: Verificar que terraform.tfvars.example existe y tiene tenancy_ocid
-        run: |
-          test -f terraform/terraform.tfvars.example || { echo "ERROR: terraform.tfvars.example no existe"; exit 1; }
-          grep -q "tenancy_ocid" terraform/terraform.tfvars.example && echo "✓ tenancy_ocid en tfvars.example"
+        run: ./tests/check_terraform_tfvars_example.sh
 
       - name: Verificar que los archivos obligatorios IDLC existen
-        run: |
-          required=(README.md CONTRIBUTING.md CHANGELOG.md CODEOWNERS LICENSE
-                    .pre-commit-config.yaml requirements/REQ.md tests/verificar-setup.sh)
-          for f in "${required[@]}"; do
-            test -f "$f" && echo "✓ $f" || { echo "ERROR: $f no existe"; exit 1; }
-          done
+        run: ./tests/check_idlc_files.sh
 
       - name: Verificar que .gitignore excluye archivos sensibles
-        run: |
-          sensitive=(config/env keys/ terraform/terraform.tfvars terraform/terraform.tfstate)
-          for entry in "${sensitive[@]}"; do
-            grep -q "$entry" .gitignore && echo "✓ $entry en .gitignore" || {
-              echo "ERROR: $entry no está en .gitignore"
-              exit 1
-            }
-          done
+        run: ./tests/check_gitignore_sensitive.sh
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd  # v3.1.2
         with:
           terraform_version: "~1.5"
 
@@ -101,21 +93,14 @@ jobs:
             echo "ERROR: ni gcc ni clang disponibles en runner"
             exit 1
           fi
-          # Lo lanza el wrapper bash, que elige clang/gcc y verifica
-          # que el output contiene ALL_TESTS_PASSED.
           ./tests/test_REQ-NET-12_unit_dedup.sh
 
       - name: Ejecutar suite verificar-setup (incluye trazabilidad IDLC v6)
-        run: |
-          # tests/test_trazabilidad_idlc.sh dentro de la suite valida
-          # la trazabilidad REQ↔Test (Section 5.3.3.4 IDLC v6).
-          # Se elimina el step CI dedicado que existía antes — ahora
-          # lo cubre la suite local + remota uniformemente.
-          ./tests/verificar-setup.sh
+        run: ./tests/verificar-setup.sh
 
       - name: Publicar reportes JUnit XML
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: junit-reports
           path: reports/

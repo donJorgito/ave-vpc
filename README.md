@@ -48,7 +48,7 @@ mlvpn distribuye los paquetes entre los dos enlaces activos simultáneamente. El
 
 ### Opción A — Oracle Cloud
 
-```
+```text
   [ En el AVE ]                            [ Madrid ]
                                         ┌─────────────────┐
        Mac                              │  Oracle Cloud   │
@@ -62,7 +62,7 @@ mlvpn distribuye los paquetes entre los dos enlaces activos simultáneamente. El
 
 ### Opción B — Raspberry Pi en casa
 
-```
+```text
   [ En el AVE ]                       [ Tu casa ]
                                    ┌──────────────────────────────┐
        Mac                         │ Router fibra                 │
@@ -121,6 +121,7 @@ Los scripts instalan automáticamente el resto de dependencias (libev, libsodium
 ### Servidor mlvpn (elige uno)
 
 **Opción A — Oracle Cloud (gratis permanente):**
+
 - Cuenta en [Oracle Cloud Free Tier](https://cloud.oracle.com)
 - Ubuntu 26.04 LTS, IP pública IPv4
 - Puertos UDP 5080, 5081 y 5082 abiertos (Terraform los configura automáticamente)
@@ -131,6 +132,7 @@ Los scripts instalan automáticamente el resto de dependencias (libev, libsodium
 > esperar, usa directamente la **Opción B** (Raspberry Pi).
 
 **Opción B — Raspberry Pi en casa (~167€ una sola vez):**
+
 - Raspberry Pi 4 (4GB) + carcasa pasiva + microSD + fuente USB-C
 - Router con port forwarding y DDNS
 - Ver lista de la compra y guía completa en [`docs/rpi-setup.md`](docs/rpi-setup.md)
@@ -287,8 +289,10 @@ A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con Oracle 
 sudo ./04-conectar.sh
 
 # Desde Claude Code (Macs con Jamf/MDM donde sudo sin TTY falla):
-SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A ./04-conectar.sh
-# El askpass lo crea 03-setup-mac.sh automáticamente
+SUDO_ASKPASS="$(./tools/ensure-askpass.sh)" sudo -A ./04-conectar.sh
+# ensure-askpass.sh recrea /tmp/sudo-askpass.sh si falta y devuelve su ruta.
+# Necesario porque macOS purga /tmp al reiniciar (lo crea 03-setup-mac.sh la
+# primera vez, pero desaparece tras cada arranque).
 ```
 
 Verifica que el tráfico pasa por el tunel:
@@ -338,7 +342,7 @@ SUDO_ASKPASS=/tmp/sudo-askpass.sh sudo -A ./05-desconectar.sh
 
 ## Estructura del proyecto
 
-```
+```text
 ave-vpc/
 ├── 00-detectar-interfaces.sh   # Detecta interfaces iPhone/Android automáticamente
 ├── 01-generar-secreto.sh       # Genera el secreto de cifrado mlvpn
@@ -435,13 +439,17 @@ sudo ./04-conectar.sh --sin-wifi
 Las redes WiFi públicas restrictivas (AVE, aeropuertos, hoteles, redes corporativas) suelen filtrar puertos altos arbitrarios como 5082 pero dejan pasar **443/UDP (QUIC)**. Para vencer ese filtro sin tocar el core de mlvpn:
 
 1. Define en `config/env`:
+
    ```bash
    MLVPN_PORT_3_REMOTE="443"
    ```
+
 2. En el router de casa, añade una regla extra de port forwarding:
-   ```
+
+   ```text
    WAN 443/UDP  →  IP_LOCAL_RPi 5082/UDP
    ```
+
    Mantén también la regla `5082/UDP → 5082/UDP` para conservar el flujo directo.
 
 El cliente conecta a `200bares.dedyn.io:443/UDP`, el router rewrite a `192.168.1.101:5082`, y el `mlvpn` server (que sigue escuchando en 5082) ni se entera. Reversible cambiando `MLVPN_PORT_3_REMOTE` (o quitándolo).
@@ -501,6 +509,7 @@ log stream --predicate 'eventMessage CONTAINS[c] "mlvpn"' --info
 ```
 
 Captura entradas como:
+
 - `mlvpn0[…]: links.iphone authenticated` (el binario)
 - `mlvpn-selector[…]: rotando activo iphone → wifi (iphone:rtt=120ms loss=15% score=730; …)` (selector)
 - `mlvpn-wifi-watcher[…]: wifi rebind 192.168.x.y -> 192.168.x.z` (watcher de IP del WiFi, REQ-NET-07)
@@ -551,6 +560,7 @@ sudo ./04-conectar.sh
 ## Solución de problemas
 
 **El túnel se crea pero no hay internet**
+
 ```bash
 # Verificar IP forwarding en el VPS
 ssh ubuntu@$VPS_IP "sudo sysctl net.ipv4.ip_forward"
@@ -562,6 +572,7 @@ ssh ubuntu@$VPS_IP "sudo iptables -t nat -L POSTROUTING -n"
 ```
 
 **mlvpn no conecta (timeout)**
+
 ```bash
 # Ver logs en tiempo real
 tail -f generated/mlvpn.log
@@ -572,6 +583,7 @@ nc -uzv $VPS_IP 5081 && echo "5081 OK"
 ```
 
 **El Android no se detecta como interfaz**
+
 ```bash
 # Asegúrate de que el tethering USB está activo en el Android
 # Luego ejecuta:
@@ -580,6 +592,7 @@ networksetup -listallhardwareports
 ```
 
 **El cron de provisión no funciona**
+
 ```bash
 # Verificar que está registrado
 crontab -l | grep ave-vpc

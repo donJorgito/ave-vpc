@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 ###############################################################################
-# tools/wifi-reintegrator.sh — REQ-NET-13
+# tools/wifi-reintegrator.sh — REQ-NET-13 (versión mlvpn v1)
+#
+# NOTA (2026-06-12): este fichero es la versión mlvpn v1 — la consumen
+# 04-conectar.sh, los tests REQ-NET-13/41, README y verificar-setup.sh; NO
+# cambiar su comportamiento. El equivalente ubond v2 vive en
+# tools/wifi-reintegrator_ubond.sh (decisión "duplicar vs parametrizar" =
+# duplicar, REQ-NET-22). Lo lanza 04b-conectar-ubond.sh; SOS.sh ya lo limpia.
 #
 # Watcher en background que reintenta los pre-flight checks del WiFi cada
 # 30 s. Si pasan todos (captive autenticado, no es red de casa, sigue con
@@ -43,6 +49,15 @@ source "${CONFIG_FILE}"
 
 # MLVPN_PORT_3_REMOTE: si no está definido, usa el bindport interno
 MLVPN_PORT_3_REMOTE="${MLVPN_PORT_3_REMOTE:-${MLVPN_PORT_3:-5082}}"
+
+# REQ-NET-41: modo OPT-IN para tunelar el WiFi a través del wrapper local
+# (tools/wrap-*.sh) en vez de apuntar directo a VPS_IP. Por defecto OFF →
+# el bloque [links.wifi] se escribe EXACTAMENTE igual que siempre. Con
+# WIFI_VIA_WRAPPER=1 se reescribe bindhost/remotehost a 127.0.0.1 y
+# remoteport al puerto local del wrapper (WRAP_LOCAL_PORT). El wrapper se
+# arranca por separado — este watcher NO lo lanza.
+WIFI_VIA_WRAPPER="${WIFI_VIA_WRAPPER:-0}"
+WRAP_LOCAL_PORT="${WRAP_LOCAL_PORT:-${MLVPN_PORT_3_REMOTE}}"
 
 echo "$$" > "${PID_FILE}"
 
@@ -128,7 +143,21 @@ while :; do
     fi
     log "WiFi pasa pre-flight ahora (IP=${new_ip}) — añadiendo a bonding (failover=${failover_active})"
 
-    cat >> "${ACTIVE_CONF}" <<EOF
+    if [[ "${WIFI_VIA_WRAPPER}" == "1" ]]; then
+        # REQ-NET-41 (OPT-IN): WiFi va a la boca local del wrapper, no a la
+        # RPi. bindhost/remotehost = 127.0.0.1; el wrapper cruza el firewall.
+        log "WIFI_VIA_WRAPPER=1 → WiFi apunta a 127.0.0.1:${WRAP_LOCAL_PORT} (REQ-NET-41)"
+        cat >> "${ACTIVE_CONF}" <<EOF
+
+[links.wifi]
+bindhost = "127.0.0.1"
+remotehost = "127.0.0.1"
+remoteport = ${WRAP_LOCAL_PORT}
+bandwidth_upload = 50000000
+timeout = 8
+EOF
+    else
+        cat >> "${ACTIVE_CONF}" <<EOF
 
 [links.wifi]
 bindhost = "${new_ip}"
@@ -137,6 +166,7 @@ remoteport = ${MLVPN_PORT_3_REMOTE}
 bandwidth_upload = 50000000
 timeout = 8
 EOF
+    fi
     # Si --failover activo, marcar WiFi como backup pasivo
     if [[ "${failover_active}" -eq 1 ]]; then
         echo "fallback_only = 1" >> "${ACTIVE_CONF}"

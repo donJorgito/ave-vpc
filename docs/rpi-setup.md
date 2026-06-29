@@ -20,7 +20,7 @@ abiertos en el router y sale a internet a través de la fibra óptica.
 
 ## Arquitectura con RPi en casa
 
-```
+```text
 [ Tren AVE ]                    [ Tu casa ]
    Mac                          RPi 4 ── router fibra ── internet
     │ iPhone (UDP 5080)            │         │
@@ -49,11 +49,13 @@ a 5082 internamente — ver `MLVPN_PORT_3_REMOTE` y la regla opcional
 ## Paso 1: Grabar la microSD (headless, sin monitor)
 
 Instala **Raspberry Pi Imager** en el Mac:
+
 ```bash
 brew install --cask raspberry-pi-imager
 ```
 
 En el Imager:
+
 1. **Dispositivo**: Raspberry Pi 4
 2. **OS**: Other general-purpose OS → Ubuntu → **Ubuntu Server 26.04 LTS (64-bit)**
 3. **Storage**: tu microSD
@@ -75,6 +77,7 @@ Opciones:
 - **IP estática** en la RPi tras el primer arranque con `sudo nmtui`
 
 Verifica que puedes entrar (espera ~1 min tras enchufar):
+
 ```bash
 ssh TU_USUARIO@192.168.1.XXX
 # o por hostname mDNS:
@@ -85,7 +88,7 @@ ssh TU_USUARIO@mi-rpi.local
 
 En el router: **Internet → Security → Port Forwarding**
 
-Añade tres reglas:
+### 3.1 Reglas mlvpn v1 (legacy)
 
 | Nombre | Protocolo | Puerto externo | IP interna | Puerto interno |
 |---|---|---|---|---|
@@ -103,6 +106,40 @@ Añade tres reglas:
 > El router ZTE F6640 admite port translation (puerto externo distinto
 > del interno) sin problema.
 
+### 3.2 Reglas ubond v2
+
+A partir de v2, ubond corre en paralelo a mlvpn usando un rango de puertos
+distinto (5083/5084/5085) para evitar colisiones con el endpoint legacy.
+Añade las siguientes reglas además de las de v1:
+
+| Nombre | Protocolo | Puerto externo | IP interna | Puerto interno |
+|---|---|---|---|---|
+| ubond-iphone | UDP | 5083 | IP_LOCAL_RPi | 5083 |
+| ubond-pixel | UDP | 5084 | IP_LOCAL_RPi | 5084 |
+| ubond-wifi | UDP | 5085 | IP_LOCAL_RPi | 5085 |
+| ubond-wifi-443 | UDP | 443 | IP_LOCAL_RPi | **5085** |
+
+> La regla **`ubond-wifi-443`** es el equivalente ubond de `mlvpn-443` y
+> resuelve el mismo problema en el WiFi del AVE: Renfe filtra UDP outbound
+> hacia puertos no estándar, pero deja pasar 443/UDP (HTTPS QUIC). Mapea
+> el 443/UDP público al 5085/UDP interno donde escucha el 3er enlace WiFi
+> de ubond. Para activar el bypass en el cliente, define
+> `UBOND_PORT_3_REMOTE="443"` en `config/env`.
+
+### 3.3 Acceso SSH remoto
+
+| Nombre | Protocolo | Puerto externo | IP interna | Puerto interno |
+|---|---|---|---|---|
+| ssh-rpi | TCP | 2222 | IP_LOCAL_RPi | 22 |
+
+> Permite administrar la RPi desde fuera de casa sin exponer el 22 estándar.
+> Usa autenticación por clave (sin password) y considera fail2ban si la
+> mantienes abierta de forma permanente.
+
+Tras aplicar 3.1, 3.2 y 3.3 el router tendrá **8 reglas** activas (4 de
+mlvpn, 3 de ubond y 1 de SSH). Verifica el listado en **Internet →
+Security → Port Forwarding** antes de salir de viaje.
+
 ## Paso 4: DDNS
 
 La fibra de casa tiene IP pública dinámica. Un hostname DDNS mantiene siempre
@@ -113,7 +150,7 @@ un nombre fijo que apunta a tu IP actual.
 [deSEC](https://desec.io) ofrece subdominios `*.dedyn.io` gratuitos con soporte
 para el protocolo DynDNS2 que el router ZTE F6640 soporta nativamente.
 
-1. Regístrate en https://desec.io y crea un subdominio `*.dedyn.io`
+1. Regístrate en <https://desec.io> y crea un subdominio `*.dedyn.io`
 2. En el router: **Internet → DDNS**
    - Provider: `DynDNS`
    - Provider URL: `https://update.dedyn.io/`
@@ -128,6 +165,7 @@ para el protocolo DynDNS2 que el router ZTE F6640 soporta nativamente.
 Regístrate, crea un hostname y configúralo directamente con el proveedor `No-IP`.
 
 Verifica que el hostname resuelve:
+
 ```bash
 dig tu-hostname.dedyn.io +short
 # Debe devolver la IP pública de casa
@@ -144,6 +182,7 @@ RPi_SSH_PORT="22"
 ```
 
 Ejecuta el script desde el Mac:
+
 ```bash
 ./01-generar-secreto.sh   # si no existe ya keys/mlvpn.secret
 ./07-setup-rpi.sh
@@ -162,6 +201,7 @@ VPS_USER="TU_USUARIO"
 ```
 
 Regenera la configuración del Mac:
+
 ```bash
 ./03-setup-mac.sh
 ```
@@ -183,6 +223,7 @@ Las /32 son más específicas que /1 en la tabla global → mlvpn usa ruta direc
 el móvil, el resto del tráfico entra por el tunel.
 
 Para verificar que el bonding funciona correctamente:
+
 ```bash
 traceroute 8.8.8.8
 # Hop 1 debe ser 10.10.10.1 (la RPi) — indica que el tráfico pasa por el tunel

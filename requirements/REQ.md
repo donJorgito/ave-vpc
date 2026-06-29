@@ -57,12 +57,41 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-09](ave-vpc-REQ-NET-09-requirement.md) | Tuning de mlvpn para móvil 4G/5G |
 | [REQ-NET-10](ave-vpc-REQ-NET-10-requirement.md) | Calibración dinámica de pesos WRR en runtime |
 | [REQ-NET-11](ave-vpc-REQ-NET-11-requirement.md) | Modo failover para sesiones interactivas |
+| [REQ-NET-12](ave-vpc-REQ-NET-12-requirement.md) | Replicación selectiva de paquetes por 5-tupla (v2) |
 | [REQ-NET-13](ave-vpc-REQ-NET-13-requirement.md) | Reintegración del WiFi tras autenticar captive portal |
 | [REQ-NET-14](ave-vpc-REQ-NET-14-requirement.md) | Rotación inmediata si current activo no autenticado |
 | [REQ-NET-15](ave-vpc-REQ-NET-15-requirement.md) | Detección de flapping de links |
 | [REQ-NET-16](ave-vpc-REQ-NET-16-requirement.md) | Selector throughput-aware (medición pasiva) |
 | [REQ-NET-17](ave-vpc-REQ-NET-17-requirement.md) | Monitor 08-monitor.py consciente de --failover |
 | [REQ-NET-18](ave-vpc-REQ-NET-18-requirement.md) | Pre-flight: verificar-setup exige bash 4+ |
+| [REQ-NET-19](ave-vpc-REQ-NET-19-requirement.md) | Patches macOS para que ubond compile (v2) |
+| [REQ-NET-20](ave-vpc-REQ-NET-20-requirement.md) | Setup paralelo de ubond en macOS (Fase 4 v2) |
+| [REQ-NET-21](ave-vpc-REQ-NET-21-requirement.md) | Setup paralelo de ubond en RPi (Fase 4 v2) |
+| [REQ-NET-22](ave-vpc-REQ-NET-22-requirement.md) | Cliente ubond paralelo a mlvpn (Fase 4 v2) |
+| [REQ-NET-23](ave-vpc-REQ-NET-23-requirement.md) | Smoke-test adaptativo ubond (tools/smoke-*) |
+| [REQ-NET-24](ave-vpc-REQ-NET-24-requirement.md) | Coexistencia mlvpn↔ubond con subnets distintas |
+| [REQ-NET-25](ave-vpc-REQ-NET-25-requirement.md) | Per-link loss_tolerence/latency_tolerence en ubond (port mlvpn) |
+| [REQ-NET-26](ave-vpc-REQ-NET-26-requirement.md) | Watchdog ubond v2 con auto-recovery + visibilidad |
+| [REQ-NET-27](ave-vpc-REQ-NET-27-requirement.md) | Fix replicación selectiva (H1+H2+NULL check) |
+| [REQ-NET-28](ave-vpc-REQ-NET-28-requirement.md) | Monitor continuo del cliente ubond v2 (ALCOA++) |
+| [REQ-NET-29](ave-vpc-REQ-NET-29-requirement.md) | Parser de [filters] excluye sub-secciones filters.X |
+| [REQ-NET-30](ave-vpc-REQ-NET-30-requirement.md) | Dedup gate por wire signal data_seq!=0 |
+| [REQ-NET-31](ave-vpc-REQ-NET-31-requirement.md) | Monitor TUI 08-monitor.py dual-mode mlvpn/ubond |
+| [REQ-NET-32](ave-vpc-REQ-NET-32-requirement.md) | Watchdog FAIL_THRESHOLD AVE-handover-tolerant |
+| [REQ-NET-33](ave-vpc-REQ-NET-33-requirement.md) | Code coverage roadmap (Python/Bash/C, 3 fases) |
+| [REQ-NET-34](ave-vpc-REQ-NET-34-requirement.md) | Auto-recovery iphone NAT carrier expiry (PDP refresh) |
+| [REQ-NET-35](ave-vpc-REQ-NET-35-requirement.md) | Rebind socket on silence (fix C nativo, complementario NET-34) |
+| [REQ-NET-36](ave-vpc-REQ-NET-36-requirement.md) | SIGHUP purga filters.count antes de re-añadir (fix duplicate filters bug) |
+| [REQ-NET-37](ave-vpc-REQ-NET-37-requirement.md) | Pre-resolución DNS de hosts en filters.replicate antes de lanzar ubond |
+| [REQ-NET-38](ave-vpc-REQ-NET-38-requirement.md) | Listener multipuerto en RPi + probe sistemático del firewall WiFi |
+| [REQ-NET-39](ave-vpc-REQ-NET-39-requirement.md) | Wrappers UDP-over-X para tunelar ubond a través del firewall del WiFi del AVE |
+| [REQ-NET-40](ave-vpc-REQ-NET-40-requirement.md) | Watchdog de captive portal + re-login automático estilo wifionice |
+| [REQ-NET-41](ave-vpc-REQ-NET-41-requirement.md) | Enlace WiFi de ubond enrutable a través de un wrapper local (bypass firewall AVE) |
+| [REQ-NET-42](ave-vpc-REQ-NET-42-requirement.md) | Vía D: launcher de túnel DNS (iodine) como link de vida para ubond |
+| [REQ-NET-43](ave-vpc-REQ-NET-43-requirement.md) | Vía E: launcher de túnel ICMP (ptunnel-ng) como link de vida para ubond |
+| [REQ-NET-44](ave-vpc-REQ-NET-44-requirement.md) | Rotación de MAC del WiFi para resetear la cuota de datos del portal Icomera |
+| [REQ-NET-45](ave-vpc-REQ-NET-45-requirement.md) | Banco de medida throughput/latencia/jitter/loss de ubond por cada wrapper |
+| [REQ-NET-46](ave-vpc-REQ-NET-46-requirement.md) | Elimina busy-wait CPU 99% en ubond (pacing por lotes, 3 spinners libev) |
 
 ## Restricciones macOS (REQ-MAC)
 

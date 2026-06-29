@@ -15,6 +15,7 @@ La intención era reescribir `bandwidth_upload` per-link cada 30 s
 proporcional al "score" observado de cada enlace (RTT + pérdida) y
 hacer SIGHUP a mlvpn para que recalculara pesos WRR sin tirar el
 túnel. Validado empíricamente que **no funciona en producción real**:
+
 - El SIGHUP frecuente con cambios en `bandwidth_upload` causaba
   desestabilización del bonding.
 - Combinación con `reorder_buffer_size` agresivo del REQ-NET-09 hacía
