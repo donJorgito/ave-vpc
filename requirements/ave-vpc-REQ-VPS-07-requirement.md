@@ -4,8 +4,8 @@
 
 Los enlaces del bonding mlvpn entran al servidor por puertos UDP
 distintos: 5080 (iPhone), 5081 (Pixel) y 5082 (WiFi opcional). Los
-tres deben estar abiertos en el firewall del SO del servidor; en
-Oracle Cloud también en las Security Lists de la VCN; en la opción
+tres deben estar abiertos en el firewall del SO del servidor; en un
+VPS cloud también en el security group del proveedor; en la opción
 RPi también en el port forwarding del router de casa.
 
 **Mapeo de puerto público opcional:** la variable `MLVPN_PORT_3_REMOTE`

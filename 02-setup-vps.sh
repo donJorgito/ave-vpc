@@ -229,7 +229,7 @@ sudo sysctl -p /etc/sysctl.d/99-mlvpn.conf 2>/dev/null || true
 
 # =====================================================================
 # Paso 6: Abrir puertos UDP en el firewall del SO
-# (en Oracle Cloud tambien hay que abrir en las Security Lists de la VCN)
+# (en un VPS cloud, ábrelos también en el security group/firewall del proveedor)
 # =====================================================================
 echo "  [VPS] Configurando firewall..."
 if command -v ufw &>/dev/null; then

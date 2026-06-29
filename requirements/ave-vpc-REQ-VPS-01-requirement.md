@@ -2,7 +2,7 @@
 
 **Description:**
 
-El servidor mlvpn (VPS Oracle Cloud o Raspberry Pi en casa) debe usar
+El servidor mlvpn (Raspberry Pi en casa o VPS de pago) debe usar
 Ubuntu Server 26.04 LTS. Esta es la versión validada con los scripts
 `02-setup-vps.sh` y `07-setup-rpi.sh`, que dependen de `apt`,
 `systemd`, `ufw` y la versión de libsodium incluida.

@@ -23,7 +23,6 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-SW-01](ave-vpc-REQ-SW-01-requirement.md) | macOS 13.0 o superior como SO del cliente |
 | [REQ-SW-02](ave-vpc-REQ-SW-02-requirement.md) | Xcode Command Line Tools instalados |
 | [REQ-SW-03](ave-vpc-REQ-SW-03-requirement.md) | Homebrew instalado |
-| [REQ-SW-04](ave-vpc-REQ-SW-04-requirement.md) | Terraform 1.5 o superior |
 | [REQ-SW-05](ave-vpc-REQ-SW-05-requirement.md) | Git 2.39 o superior |
 | [REQ-SW-06](ave-vpc-REQ-SW-06-requirement.md) | libev 4.33 o superior |
 | [REQ-SW-07](ave-vpc-REQ-SW-07-requirement.md) | libsodium 1.0.18 o superior |

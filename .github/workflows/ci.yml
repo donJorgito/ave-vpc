@@ -42,7 +42,7 @@ jobs:
 
       # REQ-NET-31/33: el unit test de pytest (08-monitor.py) DEBE correr en
       # CI (gate §7.3 unit tests + coverage). En runner GitHub-hosted las deps
-      # se instalan en el workflow — mismo patrón que setup-terraform abajo.
+      # se instalan en el workflow (un único paso de orquestación).
       # Versiones pinneadas en requirements-dev.txt (R7).
       - name: Setup Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
@@ -58,26 +58,11 @@ jobs:
       - name: Verificar que config/env.example tiene todas las variables requeridas
         run: ./tests/check_env_example.sh
 
-      - name: Verificar que terraform.tfvars.example existe y tiene tenancy_ocid
-        run: ./tests/check_terraform_tfvars_example.sh
-
       - name: Verificar que los archivos obligatorios IDLC existen
         run: ./tests/check_idlc_files.sh
 
       - name: Verificar que .gitignore excluye archivos sensibles
         run: ./tests/check_gitignore_sensitive.sh
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
-        with:
-          terraform_version: "~1.5"
-
-      - name: Validar Terraform (fmt y validate)
-        run: |
-          cd terraform
-          terraform fmt -check -recursive && echo "✓ terraform fmt OK"
-          terraform init -backend=false -input=false
-          terraform validate && echo "✓ terraform validate OK"
 
       - name: Compilar y ejecutar test unitario C (REQ-NET-12 dedup LRU)
         run: |

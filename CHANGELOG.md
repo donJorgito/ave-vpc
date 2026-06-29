@@ -5,6 +5,19 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+## [2.1.0] — 2026-06-29
+
+### Eliminado
+
+- Aprovisionamiento **Oracle Cloud / Terraform** (código muerto desde el
+  desmantelamiento de Oracle, no aportaba y metía ruido):
+  - Directorio `terraform/` (provider `oracle/oci`, VCN, subnet, instancia…).
+  - Script `06-provision-vps.sh` y guía `docs/oracle-cloud-setup.md`.
+  - REQ-SW-04 (Terraform) y sus tests; checks de tfvars en CI/gitignore.
+  - Ecosistema `terraform` de Dependabot y hooks `terraform_*` de pre-commit.
+- El servidor mlvpn es ahora la Raspberry Pi en casa (o cualquier VPS de pago
+  vía `02-setup-vps.sh`). README reescrito a una sola vía de instalación.
+
 ## [2.0.1] — 2026-06-29
 
 ### Cambiado

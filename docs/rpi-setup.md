@@ -1,8 +1,8 @@
 # Raspberry Pi como endpoint mlvpn en casa
 
-Alternativa a Oracle Cloud: una Raspberry Pi 4 conectada al router de casa
-actúa como servidor mlvpn. El tráfico del AVE llega por los puertos UDP
-abiertos en el router y sale a internet a través de la fibra óptica.
+Una Raspberry Pi 4 conectada al router de casa actúa como servidor mlvpn.
+El tráfico del AVE llega por los puertos UDP abiertos en el router y sale a
+internet a través de la fibra óptica.
 
 ## Lista de la compra (Amazon.es)
 
@@ -206,7 +206,7 @@ Regenera la configuración del Mac:
 ./03-setup-mac.sh
 ```
 
-A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con Oracle Cloud.
+A partir de aquí, `./04-conectar.sh` funciona exactamente igual.
 
 ## Routing en macOS: bonding completo y anti-loop
 
@@ -255,14 +255,14 @@ Diferencias respecto a versiones anteriores:
   no NetworkManager. Para configurar IP estática usar `sudo nmtui` si lo instalas
   o editar `/etc/systemd/network/`. Lo más sencillo: reserva DHCP por MAC en el router.
 
-## Ventajas e inconvenientes frente a Oracle Cloud
+## Ventajas e inconvenientes frente a un VPS de pago
 
-| | RPi en casa | Oracle Cloud |
+| | RPi en casa | VPS de pago |
 |---|---|---|
 | Coste hardware | ~167€ (una sola vez) | 0€ |
-| Coste mensual | 0€ | 0€ (Always Free) |
-| Ancho de banda | Fibra (~600 Mbps) | Limitado (~480 Mbps) |
-| Latencia | Baja (tu casa) | Baja (Madrid) |
-| Disponibilidad | Depende de luz y router | Alta (Oracle SLA) |
-| Setup | Router + DDNS | Automatizado con Terraform |
+| Coste mensual | 0€ | ~€2-5/mes |
+| Ancho de banda | Fibra (~600 Mbps) | Según plan |
+| Latencia | Baja (tu casa) | Baja (datacenter) |
+| Disponibilidad | Depende de luz y router | Alta (SLA del proveedor) |
+| Setup | Router + DDNS | `02-setup-vps.sh` |
 | Control | Total | Limitado |

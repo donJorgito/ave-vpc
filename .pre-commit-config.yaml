@@ -30,14 +30,6 @@ repos:
     hooks:
       - id: gitleaks
 
-  # Terraform — fmt, validate y tflint (IDLC v6 Rule 8: IaC linting).
-  - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: v1.105.0
-    hooks:
-      - id: terraform_fmt
-      - id: terraform_validate
-      - id: terraform_tflint
-
   # markdownlint — linting de docs (IDLC v6 Rule 8: comprehensive
   # docs linting). Config en .markdownlint.yml.
   # Pin a v0.43.0: versiones >=0.44.0 actualizan transitiva de eslint

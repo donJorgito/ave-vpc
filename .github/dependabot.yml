@@ -5,7 +5,6 @@
 # Ecosistemas declarados (verificados contra el árbol del repo 2026-06-29):
 #   - github-actions : .github/workflows/ci.yml (actions pinneadas a SHA, R7)
 #   - pip            : requirements-dev.txt (raíz)
-#   - terraform      : terraform/*.tf (providers/módulos)
 #
 # Política de aprobación (IDLC v6 §6.2 / §7.4): los PRs Minor/Patch del bot
 # pueden auto-mergearse cuando TODOS los automated gates (Secret Scan, SAST,
@@ -60,26 +59,6 @@ updates:
       - "python"
     groups:
       pip-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
-
-  # --- Terraform --------------------------------------------------------
-  - package-ecosystem: "terraform"
-    directory: "/terraform"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Europe/Madrid"
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "chore(deps)"
-    labels:
-      - "dependencies"
-      - "terraform"
-    groups:
-      terraform-minor-patch:
         update-types:
           - "minor"
           - "patch"

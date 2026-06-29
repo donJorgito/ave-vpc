@@ -6,8 +6,6 @@ set -euo pipefail
 SENSITIVE=(
     config/env
     keys/
-    terraform/terraform.tfvars
-    terraform/terraform.tfstate
 )
 
 fail=0

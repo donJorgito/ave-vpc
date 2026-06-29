@@ -120,7 +120,7 @@ fi
 
 # =====================================================================
 # Paso 3: Configuracion de mlvpn
-# Identica a la del VPS de Oracle Cloud: modo servidor, dos enlaces UDP.
+# Identica a la de un VPS: modo servidor, dos enlaces UDP.
 # =====================================================================
 echo "  [RPi] Escribiendo /etc/mlvpn/mlvpn.conf..."
 

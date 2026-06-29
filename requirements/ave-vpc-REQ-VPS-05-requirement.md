@@ -3,10 +3,10 @@
 **Description:**
 
 El cliente del bonding debe poder resolver una dirección IPv4 fija
-del servidor para abrir las conexiones UDP de mlvpn. En Oracle Cloud
-se usa la IP pública de la instancia (estática). En la opción RPi se
-usa un DDNS (`200bares.dedyn.io`) actualizado por cron en la propia
-RPi y resuelto vía DNS público en el cliente.
+del servidor para abrir las conexiones UDP de mlvpn. En un VPS se usa
+su IP pública estática. En la opción RPi se usa un DDNS
+(`200bares.dedyn.io`) actualizado por cron en la propia RPi y resuelto
+vía DNS público en el cliente.
 
 **Parent Requirement:** N/A
 

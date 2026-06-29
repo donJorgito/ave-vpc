@@ -6,7 +6,7 @@
 
 Agrega múltiples conexiones móviles en tiempo real usando [mlvpn](https://github.com/zehome/MLVPN). Diseñado para trayectos de tren de larga distancia donde la cobertura es inestable y las videollamadas se interrumpen.
 
-El servidor mlvpn puede ser **un VPS gratuito en Oracle Cloud** o **una Raspberry Pi en casa** conectada a la fibra óptica. Ambas opciones usan los mismos scripts de cliente en el Mac.
+El servidor mlvpn es **una Raspberry Pi en casa** conectada a la fibra óptica (o cualquier VPS de pago con IP pública). Los scripts de cliente del Mac son los mismos en ambos casos.
 
 **El resultado:** si un enlace móvil cae, el tráfico continúa por el otro sin corte visible. Si ambos funcionan, el ancho de banda se suma.
 
@@ -18,8 +18,7 @@ El servidor mlvpn puede ser **un VPS gratuito en Oracle Cloud** o **una Raspberr
 - [Arquitectura](#arquitectura)
 - [Bonding vs Failover](#bonding-vs-failover)
 - [Requisitos](#requisitos)
-- [Instalación — Opción A: Oracle Cloud (gratis)](#instalación--opción-a-oracle-cloud-gratis)
-- [Instalación — Opción B: Raspberry Pi en casa](#instalación--opción-b-raspberry-pi-en-casa)
+- [Instalación](#instalación)
 - [Uso diario](#uso-diario)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Configuración](#configuración)
@@ -45,22 +44,6 @@ Con dos SIMs de operadoras distintas y este proyecto, los cortes de una se cubre
 ## Arquitectura
 
 mlvpn distribuye los paquetes entre los dos enlaces activos simultáneamente. El servidor los reensambla en orden y los envía a internet. El tráfico de vuelta sigue el mismo camino inverso.
-
-### Opción A — Oracle Cloud
-
-```text
-  [ En el AVE ]                            [ Madrid ]
-                                        ┌─────────────────┐
-       Mac                              │  Oracle Cloud   │
-  10.10.10.2 ── mlvpn ─── UDP:5080 ────│  10.10.10.1     │── internet
-                       \── UDP:5081 ────│  mlvpn0         │
-                            │           └─────────────────┘
-                   ┌────────┴────────┐
-              iPhone (USB)    Pixel (USB)
-              Movistar          Yoigo
-```
-
-### Opción B — Raspberry Pi en casa
 
 ```text
   [ En el AVE ]                       [ Tu casa ]
@@ -109,7 +92,6 @@ El Mac se conecta al hostname DDNS (siempre actualizado por el router), que apun
 
 - **Homebrew** — [brew.sh](https://brew.sh)
 - **Xcode Command Line Tools** — `xcode-select --install`
-- **Terraform** — `brew install terraform`
 - **Git** — incluido en Xcode CLT
 
 Los scripts instalan automáticamente el resto de dependencias (libev, libsodium, etc.).
@@ -118,24 +100,15 @@ Los scripts instalan automáticamente el resto de dependencias (libev, libsodium
 > automáticamente los workarounds necesarios para macOS (incompatibilidad de `strnvis`
 > en `setproctitle.c`). No se requiere ninguna acción manual.
 
-### Servidor mlvpn (elige uno)
-
-**Opción A — Oracle Cloud (gratis permanente):**
-
-- Cuenta en [Oracle Cloud Free Tier](https://cloud.oracle.com)
-- Ubuntu 26.04 LTS, IP pública IPv4
-- Puertos UDP 5080, 5081 y 5082 abiertos (Terraform los configura automáticamente)
-
-> ⚠️ **Aviso**: Las VMs gratuitas de Oracle Cloud (especialmente las ARM A1.Flex)
-> tienen muy poca disponibilidad. Es habitual esperar días o semanas hasta que
-> Oracle asigne capacidad, y en algunas regiones nunca llega. Si no quieres
-> esperar, usa directamente la **Opción B** (Raspberry Pi).
-
-**Opción B — Raspberry Pi en casa (~167€ una sola vez):**
+### Servidor mlvpn — Raspberry Pi en casa (~167€ una sola vez)
 
 - Raspberry Pi 4 (4GB) + carcasa pasiva + microSD + fuente USB-C
 - Router con port forwarding y DDNS
 - Ver lista de la compra y guía completa en [`docs/rpi-setup.md`](docs/rpi-setup.md)
+
+Alternativa: cualquier VPS de pago (Vultr, IONOS, Hetzner desde €2/mes) con
+Ubuntu e IP pública IPv4 también sirve — usa `02-setup-vps.sh` en lugar de
+`07-setup-rpi.sh`.
 
 > ⚠️ **CGNAT**: Muchos ISPs residenciales en España usan CGNAT (la IP WAN del router
 > empieza por `100.x.x.x`), lo que impide recibir conexiones desde internet aunque
@@ -145,7 +118,7 @@ Los scripts instalan automáticamente el resto de dependencias (libev, libsodium
 
 ---
 
-## Instalación — Opción A: Oracle Cloud (gratis)
+## Instalación
 
 ### 1. Clonar el repositorio
 
@@ -158,35 +131,24 @@ cd ave-vpc
 
 ```bash
 cp config/env.example config/env
-# Edita config/env — al menos VPS_IP y los IFACE_* (paso 6 los detecta automáticamente)
+# Edita config/env — RPi_IP y RPi_USER para el setup, y VPS_IP (hostname DDNS).
+# Los IFACE_* los detecta el paso 6 automáticamente.
 ```
 
-### 3. Provisionar el VPS automáticamente
+### 3. Preparar la Raspberry Pi y el router
 
-> ⚠️ **Esto puede tardar días o no conseguirse nunca.** Oracle limita la
-> disponibilidad de las VMs gratuitas (sobre todo ARM) por región. El script
-> reintenta automáticamente cada hora, pero si tras varios días no hay suerte,
-> considera la Opción B (Raspberry Pi) o un VPS de pago desde €2/mes en
-> Vultr, IONOS o Hetzner.
+Guía completa en [`docs/rpi-setup.md`](docs/rpi-setup.md) (lista de la compra,
+setup headless sin monitor, router y DDNS). En resumen:
 
-El script lo intenta cada hora hasta conseguirlo (se para solo cuando lo logra).
+- Graba Ubuntu Server 26.04 LTS en la microSD con Raspberry Pi Imager
+  (activa SSH con tu clave pública antes de grabar).
+- En el router: port forwarding UDP 5080/5081 (y 5082 para el 3er enlace WiFi)
+  → IP local de la RPi, y un DDNS que apunte a tu IP pública dinámica.
 
-Primero configura las credenciales OCI siguiendo [`docs/oracle-cloud-setup.md`](docs/oracle-cloud-setup.md), luego:
-
-```bash
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-# Edita terraform/terraform.tfvars con tu tenancy OCID
-
-# Inicia el proceso automático
-./06-provision-vps.sh --setup-cron
-
-# Seguir el progreso
-tail -f generated/provision.log
-```
-
-Cuando el VPS se crea, el script actualiza `config/env` con la IP y envía una notificación macOS.
-
-> Si no quieres esperar o no hay capacidad disponible, usa la Opción B (Raspberry Pi en casa) o un VPS de pago en Vultr, IONOS o Hetzner desde €2/mes.
+> ⚠️ **CGNAT**: muchos ISPs residenciales en España usan CGNAT (IP WAN
+> `100.x.x.x`), que impide recibir conexiones aunque configures port forwarding.
+> Si `ip route show default` en el router muestra gateway `100.x.x.x`, pide a tu
+> ISP que te lo retire (suele ser gratis).
 
 ### 4. Generar el secreto compartido
 
@@ -196,17 +158,20 @@ Cuando el VPS se crea, el script actualiza `config/env` con la IP y envía una n
 
 Crea `keys/mlvpn.secret`. **Nunca lo subas a git** (ya está en `.gitignore`).
 
-### 5. Configurar el VPS
+### 5. Configurar la Raspberry Pi
 
 ```bash
-./02-setup-vps.sh
+./07-setup-rpi.sh
 ```
 
-Se conecta por SSH y hace todo: instala dependencias, compila mlvpn, configura NAT/IP forwarding y crea el servicio systemd. Tarda ~5 minutos.
+Se conecta por SSH y hace todo: instala dependencias, compila mlvpn, configura
+NAT/IP forwarding y crea el servicio systemd. (Para un VPS de pago usa
+`./02-setup-vps.sh` en su lugar.)
 
 ### 6. Configurar el Mac
 
 ```bash
+# Pon VPS_IP="tu-hostname.dedyn.io" en config/env, luego:
 ./03-setup-mac.sh
 ```
 
@@ -232,42 +197,6 @@ Pixel) y la Wi-Fi del Mac (3er enlace opcional). Actualiza `config/env`.
 ```
 
 Comprueba que todo está correcto antes del primer viaje.
-
----
-
-## Instalación — Opción B: Raspberry Pi en casa
-
-Una Raspberry Pi 4 conectada a la fibra de casa funciona como servidor mlvpn
-en lugar del VPS. El Mac en el tren se conecta a través del router usando un
-hostname DDNS que siempre apunta a tu IP de casa.
-
-Ver la guía completa en [`docs/rpi-setup.md`](docs/rpi-setup.md), que incluye
-lista de la compra, setup headless sin monitor, configuración del router y DDNS.
-
-Pasos resumidos:
-
-```bash
-# 1. Grabar Ubuntu Server 26.04 LTS en la microSD con Raspberry Pi Imager
-#    (activar SSH con tu clave pública en el Imager antes de grabar)
-
-# 2. Configurar en el router:
-#    - Port Forwarding: UDP 5080 y 5081 → IP local de la RPi
-#    - DDNS: apuntar un hostname a tu IP pública dinámica
-
-# 3. Rellenar config/env con la IP local de la RPi
-#    RPi_IP="192.168.1.XXX"
-#    RPi_USER="TU_USUARIO"
-
-# 4. Generar secreto y configurar la RPi
-./01-generar-secreto.sh
-./07-setup-rpi.sh
-
-# 5. Actualizar VPS_IP con el hostname DDNS y configurar el Mac
-#    VPS_IP="tu-hostname.dedyn.io"  (en config/env)
-./03-setup-mac.sh
-```
-
-A partir de aquí, `./04-conectar.sh` funciona exactamente igual que con Oracle Cloud.
 
 ---
 
@@ -350,15 +279,13 @@ ave-vpc/
 ├── 03-setup-mac.sh             # Configura el Mac (ejecutar una vez)
 ├── 04-conectar.sh              # Conectar en el tren (requiere sudo)
 ├── 05-desconectar.sh           # Desconectar al llegar (requiere sudo)
-├── 06-provision-vps.sh         # Provisiona el VPS en Oracle Cloud (auto-retry)
-├── 07-setup-rpi.sh             # Configura una Raspberry Pi como servidor (opción B)
+├── 07-setup-rpi.sh             # Configura una Raspberry Pi como servidor
 ├── 08-monitor.py               # Monitor en tiempo real: throughput por enlace + agregado
 ├── patches/
 │   └── tuntap_darwin_utun.c    # Parche utun para macOS (API nativa, sin kext)
 ├── config/
 │   └── env.example             # Plantilla de configuración
 ├── docs/
-│   ├── oracle-cloud-setup.md   # Guía para obtener credenciales OCI
 │   ├── rpi-setup.md            # Guía Raspberry Pi: lista de compra, DDNS, router
 │   └── screenshots/            # Capturas para README (monitor en vivo, etc.)
 ├── generated/                  # Archivos en tiempo de ejecución (gitignored)
@@ -369,11 +296,6 @@ ave-vpc/
 │   └── mlvpn.secret
 ├── requirements/
 │   └── REQ.md                  # Requisitos del sistema
-├── terraform/
-│   ├── main.tf                 # Infraestructura Oracle Cloud
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── terraform.tfvars.example
 └── tests/
     └── verificar-setup.sh      # Tests de verificación del setup
 ```
@@ -386,7 +308,7 @@ Todas las variables viven en `config/env` (creado a partir de `config/env.exampl
 
 | Variable | Descripción | Valor por defecto |
 |----------|-------------|-------------------|
-| `VPS_IP` | IP o hostname DDNS del servidor (Oracle Cloud o RPi) | *(rellenar)* |
+| `VPS_IP` | IP o hostname DDNS del servidor (RPi o VPS) | *(rellenar)* |
 | `VPS_USER` | Usuario SSH del servidor | `ubuntu` |
 | `VPS_SSH_PORT` | Puerto SSH | `22` |
 | `MLVPN_PORT_1` | Puerto UDP enlace 1 (iPhone) | `5080` |
@@ -399,8 +321,8 @@ Todas las variables viven en `config/env` (creado a partir de `config/env.exampl
 | `IFACE_IPHONE` | Interfaz USB iPhone (tethering) | `en8` |
 | `IFACE_PIXEL` | Interfaz USB Android | `en12` |
 | `IFACE_WIFI` | Interfaz WiFi nativa del Mac (3er enlace) | `en0` |
-| `RPi_IP` | IP local de la RPi (solo opción B, para el setup) | *(rellenar)* |
-| `RPi_USER` | Usuario SSH de la RPi (solo opción B) | `ubuntu` |
+| `RPi_IP` | IP local de la RPi (para el setup) | *(rellenar)* |
+| `RPi_USER` | Usuario SSH de la RPi | `ubuntu` |
 
 ---
 
@@ -589,19 +511,6 @@ nc -uzv $VPS_IP 5081 && echo "5081 OK"
 # Luego ejecuta:
 networksetup -listallhardwareports
 # Busca una entrada nueva que aparezca al conectar el cable
-```
-
-**El cron de provisión no funciona**
-
-```bash
-# Verificar que está registrado
-crontab -l | grep ave-vpc
-
-# Ver log
-tail -20 generated/provision.log
-
-# Lanzar manualmente para depurar
-NO_JITTER=1 ./06-provision-vps.sh
 ```
 
 ---
