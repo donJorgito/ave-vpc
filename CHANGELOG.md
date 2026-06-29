@@ -5,10 +5,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
-Trabajo hacia **v2.0.0** — migración a ubond con replicación selectiva
-de paquetes (UDP/RTP) por 5-tupla. Ver `project_v2_ubond_roadmap.md`
-en memoria del proyecto. Plan en 6 fases, ejecutándose
-incrementalmente sin romper la v1.0.0 actual.
+## [2.0.0] — 2026-06-29
+
+Migración a **ubond** con replicación selectiva de paquetes (UDP/RTP) por
+5-tupla, manteniendo la v1.0.0 (mlvpn) en coexistencia. Cierre del roadmap
+v2 (6 fases). Ver `project_v2_ubond_roadmap.md` en memoria del proyecto.
 
 ### Fix CPU 99% busy-wait en ubond — pacing por lotes (2026-06-18)
 
