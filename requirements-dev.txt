@@ -6,5 +6,5 @@
 # bump cuando haya razón concreta (CVE, feature requerida, no por inercia).
 
 pytest==8.2.2
-pytest-cov==6.0.0
+pytest-cov==7.1.0
 coverage==7.6.4
