@@ -40,6 +40,18 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.0
 
+      # REQ-NET-31/33: el unit test de pytest (08-monitor.py) DEBE correr en
+      # CI (gate §7.3 unit tests + coverage). En runner GitHub-hosted las deps
+      # se instalan en el workflow — mismo patrón que setup-terraform abajo.
+      # Versiones pinneadas en requirements-dev.txt (R7).
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias de test Python
+        run: pip install -r requirements-dev.txt
+
       - name: Verificar sintaxis de todos los scripts bash
         run: ./tests/check_bash_syntax.sh
 
