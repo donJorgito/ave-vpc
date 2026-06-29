@@ -5,6 +5,17 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+### Cambiado
+
+- Dependencias actualizadas vía Dependabot (PRs #2–#8), revisadas por
+  breaking changes y verificadas en CI:
+  - Python: `pytest` 8.2.2 → 9.1.1, `pytest-cov` 6.0.0 → 7.1.0,
+    `coverage` 7.6.4 → 7.14.3 (trío consistente: pytest-cov 7 exige
+    coverage ≥ 7.10.6).
+  - GitHub Actions (pin a SHA, R7): `actions/checkout` → v7.0.0,
+    `actions/upload-artifact` → v7.0.1, `hashicorp/setup-terraform` → v4.0.1.
+  - Terraform provider `oracle/oci` `~> 6.0` → `~> 8.20`.
+
 ## [2.0.0] — 2026-06-29
 
 Migración a **ubond** con replicación selectiva de paquetes (UDP/RTP) por
