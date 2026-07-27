@@ -15,7 +15,7 @@ jobs:
     name: Lint y calidad
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: ShellCheck — análisis estático de scripts
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38  # 2.0.0
@@ -38,7 +38,7 @@ jobs:
     name: Tests de verificación
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       # REQ-NET-31/33: el unit test de pytest (08-monitor.py) DEBE correr en
       # CI (gate §7.3 unit tests + coverage). En runner GitHub-hosted las deps
