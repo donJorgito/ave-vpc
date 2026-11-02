@@ -5,6 +5,6 @@
 # Versiones reflejan lo instalado en el entorno del usuario 2026-06-03;
 # bump cuando haya razón concreta (CVE, feature requerida, no por inercia).
 
-pytest==9.1.1
+pytest==9.2.0
 pytest-cov==7.1.0
-coverage==7.15.0
+coverage==7.17.0
