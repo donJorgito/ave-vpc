@@ -5,6 +5,68 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+### Corregido
+
+- **REQ-NET-47 — el túnel ubond dejaba de transmitir a los 17-45 s.** Primer
+  test real en el AVE tras los cambios de junio: el túnel levantaba, los dos
+  enlaces autenticaban y pingaban, y de golpe el cliente se quedaba a **0
+  paquetes salientes** (medido con `tcpdump`) mientras el servidor seguía
+  enviando. No se recuperaba nunca. Las rutas estaban intactas durante toda
+  la caída (`rutas_vps=3 rutas_/1=2` constantes), así que no era un problema
+  de routing; la red y el NAT de los operadores también se verificaron buenos
+  en ambos sentidos. Causa raíz: **regresión del patch de REQ-NET-46**.
+  `busy_writing` es un semáforo que solo se decrementa una vez por callback de
+  `io_write`, pero el bucle de envío por lotes lo incrementaba una vez **por
+  paquete** (~4 por despertar a 10 Mbit/s), así que nunca volvía a cero. Al
+  pasarse de presupuesto, el `ev_io_stop` del tramo final de
+  `ubond_rtun_do_send()` paraba `io_write` **sin la guarda `!busy_writing`**
+  que sí tiene su gemela — y como los otros dos bombeos están guardados por
+  `if (!tun->busy_writing)`, el enlace quedaba mudo para siempre. El antiguo
+  `check_ev`, que rescataba este caso, dejó de arrancarse en REQ-NET-46.
+  Arreglo: contador por lote (`batch_sent`) y la guarda que faltaba.
+  Patch `patches/ubond_busywriting_deadlock.patch`, desplegado en Mac y RPi.
+
+- **REQ-NET-47 — el mismo deadlock por otra puerta, en el rebind.**
+  `ubond_rtun_rebind_socket_internal` para `io_write` y cierra el socket pero
+  nunca reseteaba `busy_writing`, así que una escritura en vuelo dejaba el
+  contador clavado y tras el rebind nadie volvía a arrancar `io_write`
+  (`ubond_rtun_start` solo arranca `io_read`) → enlace mudo. Lo dispara
+  REQ-NET-35 tras 90 s de silencio inbound. Encontrado por la revisión experta
+  y verificado en código, no es el fallo medido en el AVE pero es idéntico.
+
+- `08-monitor.py` ya no tenía por qué mostrar el Pixel: la interfaz estaba
+  **hardcodeada a `en12`**, que era el Pixel 6 Pro. Con el Pixel 11 Pro
+  (`en15`) el enlace desaparecía del panel aunque ubond lo estuviera usando.
+  Ahora las tres interfaces se leen de `config/env`.
+
+- Marco de la cabecera de `08-monitor.py` desalineado: las tres líneas de la
+  caja eran literales con tiradas de guiones distintas (anchos visibles reales
+  70 / 57 / 67) y la línea central no calculaba relleno. Además el indicador
+  de modo lleva escapes ANSI, así que medir con `len()` contaba bytes
+  invisibles. Añadida `visible_len()` y ancho derivado; las tres líneas miden
+  ahora lo mismo.
+
+- **`07b-setup-rpi-ubond.sh` no podía actualizar una RPi ya provisionada.** El
+  Paso 2 se saltaba la compilación si existía el binario, de modo que ningún
+  patch nuevo llegaba nunca al servidor. Añadido `FORCE_REBUILD=1`.
+
+- **`07b-setup-rpi-ubond.sh` ejecutaba texto de sus propios comentarios en la
+  RPi.** El heredoc que escribe `/etc/ubond/ubond.conf` no está entrecomillado
+  (necesita expandir variables) y los comentarios llevaban backticks, que el
+  shell remoto interpretaba como sustitución de comandos
+  (`bash: ubond_dedup_gate_data_seq.patch: command not found`). El fichero
+  resultante salía con esos comentarios mutilados. Backticks escapados.
+
+- `08-monitor.py` arranca aunque no haya ningún daemon vivo. Antes
+  `main()` hacía `sys.exit(1)` si `detect_daemon()` no encontraba proceso,
+  así que el monitor se negaba a abrir sin túnel. Ahora entra al bucle,
+  pinta el estado `[SIN TÚNEL]` con la pista de conexión y **redetecta el
+  daemon en cada tick**: si levantas el túnel con el monitor ya abierto, lo
+  coge solo (y al revés, si se cae). El cálculo de deltas se reinicia en la
+  transición para no pintar un pico falso con los contadores del utun nuevo.
+  El indicador de modo ya no anuncia `[BONDING]`/`[REPLICATE]` cuando el
+  utun todavía no existe. Modo forzado (`--daemon mlvpn|ubond`) sin cambios.
+
 ## [2.1.0] — 2026-06-29
 
 ### Eliminado

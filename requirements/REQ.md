@@ -91,6 +91,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-44](ave-vpc-REQ-NET-44-requirement.md) | Rotación de MAC del WiFi para resetear la cuota de datos del portal Icomera |
 | [REQ-NET-45](ave-vpc-REQ-NET-45-requirement.md) | Banco de medida throughput/latencia/jitter/loss de ubond por cada wrapper |
 | [REQ-NET-46](ave-vpc-REQ-NET-46-requirement.md) | Elimina busy-wait CPU 99% en ubond (pacing por lotes, 3 spinners libev) |
+| [REQ-NET-47](ave-vpc-REQ-NET-47-requirement.md) | Corrige el deadlock de `busy_writing` que dejaba el enlace mudo a los 17-45 s |
 
 ## Restricciones macOS (REQ-MAC)
 

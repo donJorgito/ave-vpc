@@ -1,0 +1,67 @@
+diff --git a/src/ubond.c b/src/ubond.c
+--- a/src/ubond.c
++++ b/src/ubond.c
+@@ -925,6 +925,20 @@
+     // model fired the timer at ~8kHz and pinned a CPU core. Batching decouples
+     // the timer frequency from the packet rate. bytes_since_adjust is updated
+     // below from `len`, so we re-test the budget each iteration.
++    // REQ-NET-47 (AVE 2026-11-10): `busy_writing` es un semáforo de "tengo UNA
++    // tanda de escrituras pendientes de que io_write me avise", y solo se
++    // decrementa UNA vez por callback de ubond_rtun_write(). Al batchear, el
++    // código original lo incrementaba una vez POR PAQUETE: con el presupuesto
++    // de 10Mbps y el suelo de 5ms del timer entran ~4 paquetes por despertar,
++    // así que el contador subía +4/-1 y nunca volvía a cero. En cuanto el
++    // enlace se pasaba de presupuesto, el ev_io_stop de más abajo mataba el
++    // io_write con el contador aún alto → ya no había quien lo decrementase, y
++    // el único bombeo que quedaba (write_timeout, vía send_timer) está guardado
++    // por `if (!tun->busy_writing)` → el enlace se quedaba MUDO para siempre.
++    // (write_check existe pero es código muerto: REQ-NET-46 eliminó su único
++    // ev_check_start, así que no hay tercera red de seguridad.)
++    // Contamos una sola vez por lote, que es lo que casa con el decremento.
++    int batch_sent = 0;
+     do {
+       len = 0;
+       if (! UBOND_TAILQ_EMPTY(&tun->hpsbuf)) {
+@@ -941,7 +955,10 @@
+       }
+       if (len > 0) {
+         tun->bytes_since_adjust += len + IP4_UDP_OVERHEAD;
+-        tun->busy_writing++;
++        if (!batch_sent) {
++          batch_sent = 1;
++          tun->busy_writing++;
++        }
+         if (!ev_is_active(&tun->io_write)) ev_io_start(EV_A_ &tun->io_write);
+       }
+     } while (len > 0 && tun->bytes_since_adjust < b);
+@@ -987,7 +1004,13 @@
+       ev_io_start(EV_A_ &tun->io_write);
+     }
+   } else { // nothing sent, so disable the write events
+-    if (ev_is_active(&tun->io_write)) {
++    // REQ-NET-47: la misma guarda `!busy_writing` que ya lleva el ev_io_stop
++    // del camino de arriba. Sin ella, esta rama (la de "aún no toca, me paso
++    // de presupuesto") paraba io_write con escrituras todavía en vuelo; como
++    // io_write es el ÚNICO que decrementa busy_writing, el contador se quedaba
++    // clavado y el enlace no volvía a transmitir. Cinturón además del
++    // contador por lote: aunque algo volviera a inflarlo, el bombeo sobrevive.
++    if (!tun->busy_writing && ev_is_active(&tun->io_write)) {
+       ev_io_stop(EV_A_ &tun->io_write);
+     }
+   }
+@@ -2169,6 +2192,15 @@
+         ev_io_stop(EV_A_ &t->io_write);
+         close(t->fd);
+         t->fd = -1;
++        /* REQ-NET-47: el mismo deadlock que en do_send, por otra puerta.
++         * Paramos io_write, que es el UNICO que decrementa busy_writing; si
++         * quedaba una escritura en vuelo el contador se queda clavado, y tras
++         * el rebind nadie vuelve a arrancar io_write (ubond_rtun_start solo
++         * arranca io_read). Con el contador >0 los bombeos guardados por
++         * !busy_writing no envian nunca -> enlace mudo para siempre despues
++         * de un rebind por silencio. El socket se cierra aqui, asi que no hay
++         * ninguna escritura pendiente de verdad: el contador debe volver a 0. */
++        t->busy_writing = 0;
+     }
+     if (t->addrinfo) {
+         freeaddrinfo(t->addrinfo);

@@ -44,11 +44,18 @@ Orden de aplicación según `03b-setup-mac-ubond.sh:66` y bloque
 | 7 | `ubond_dedup_gate_data_seq.patch`           | 1988  | REQ-NET-30     | macOS+Linux|
 | 8 | `ubond_rebind_on_silence.patch`             | 7748  | REQ-NET-35 + REQ-NET-35.1 | macOS+Linux |
 | 9 | `ubond_cpu_pacing_busywait.patch`           | 157   | REQ-NET-46     | macOS+Linux|
+| 10 | `ubond_busywriting_deadlock.patch`         | 2450  | REQ-NET-47     | macOS+Linux|
 
 Notas:
 
-- En RPi (`07b-setup-rpi-ubond.sh:21-26`) hoy solo se aplica el patch #3;
-  los #4-#8 conviven funcionalmente por el lado mac (gap **gap-2** abajo).
+- En RPi se aplican hoy los patches #3-#10 (`07b-setup-rpi-ubond.sh`,
+  variables `UBOND_PATCH_B64`..`UBOND_PATCH9_B64`); los #1-#2 son solo macOS.
+  Verificado el 2026-11-10 recompilando la RPi con `FORCE_REBUILD=1`: los
+  nueve aplicaron sin rechazos. (La nota anterior decía que en RPi solo se
+  aplicaba el #3; quedó obsoleta cuando se fueron integrando los demás.)
+- `FORCE_REBUILD=1` es imprescindible para propagar un patch nuevo a una RPi
+  ya provisionada: sin él, el Paso 2 de `07b` detecta el binario existente y
+  se salta la compilación, dejando el servidor congelado en la versión vieja.
 - Los patches 1 y 3 son `patch -p1`; el item 2 es **replace de fichero**
   (`cp patches/tuntap_darwin_utun_ubond.c src/tuntap_darwin.c`,
   `03b-setup-mac-ubond.sh:164`) — no es diff, es código nuevo escrito
