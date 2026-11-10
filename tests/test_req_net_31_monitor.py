@@ -333,3 +333,75 @@ def test_check_replicate_active_ubond_no_conf_returns_false(monitor, tmp_path):
     """Sin ubond.conf ni ubond_active.conf → False."""
     with patch.object(monitor.os.path, "abspath", return_value=str(tmp_path / "08-monitor.py")):
         assert monitor.check_replicate_active("ubond") is False
+
+
+# ─── arranque sin daemon: draw tolera daemon=None ───────────────────────
+# El monitor debe arrancar aunque no haya túnel (antes main() hacía
+# sys.exit(1)) y redetectar el daemon en cada tick.
+
+
+@pytest.fixture
+def no_clear(monitor):
+    """Evita que draw() borre la pantalla del runner de tests."""
+    with patch.object(monitor.os, "system", return_value=0):
+        yield
+
+
+def _draw_output(monitor, capsys, daemon, utun, **kw):
+    """Llama a draw() con valores neutros y devuelve el stdout sin colores."""
+    monitor.draw(
+        daemon, {}, {}, 1.0, kw.get("links", {}), utun, 1,
+        kw.get("failover_roles", {}), kw.get("replicate_active", False),
+    )
+    import re as _re
+    return _re.sub(r"\033\[[0-9;]*m", "", capsys.readouterr().out)
+
+
+def test_draw_sin_daemon_no_revienta(monitor, capsys, no_clear):
+    """daemon=None no debe lanzar KeyError sobre DAEMON_INFO."""
+    with patch.object(monitor, "get_link_ifaces",
+                      return_value={"IFACE_IPHONE": "en8", "IFACE_PIXEL": "en12",
+                                    "IFACE_WIFI": "en0"}), \
+         patch.object(monitor, "get_interface_ip", return_value=None):
+        out = _draw_output(monitor, capsys, None, None)
+    assert "No activo" in out
+
+
+def test_draw_sin_daemon_indica_sin_tunel(monitor, capsys, no_clear):
+    """El panel debe decir claramente que no hay túnel y sugerir ambos hints."""
+    with patch.object(monitor, "get_link_ifaces",
+                      return_value={"IFACE_IPHONE": "en8", "IFACE_PIXEL": "en12",
+                                    "IFACE_WIFI": "en0"}), \
+         patch.object(monitor, "get_interface_ip", return_value=None):
+        out = _draw_output(monitor, capsys, None, None)
+    assert "[SIN TÚNEL]" in out
+    assert monitor.DAEMON_INFO["mlvpn"]["connect_hint"] in out
+    assert monitor.DAEMON_INFO["ubond"]["connect_hint"] in out
+    assert "ninguno (esperando túnel)" in out
+
+
+def test_draw_daemon_vivo_sin_utun_no_dice_bonding(monitor, capsys, no_clear):
+    """Daemon detectado pero utun aún no configurado → sigue siendo SIN TÚNEL.
+    [REPLICATE]/[BONDING] salen de la config, no de que el túnel exista."""
+    with patch.object(monitor, "get_link_ifaces",
+                      return_value={"IFACE_IPHONE": "en8", "IFACE_PIXEL": "en12",
+                                    "IFACE_WIFI": "en0"}), \
+         patch.object(monitor, "get_interface_ip", return_value=None):
+        out = _draw_output(monitor, capsys, "ubond", None, replicate_active=True)
+    assert "[SIN TÚNEL]" in out
+    assert "[REPLICATE]" not in out
+
+
+def test_draw_marco_alineado_en_los_tres_modos(monitor, capsys, no_clear):
+    """El marco de cabecera debe cuadrar también en la rama sin daemon."""
+    import re as _re
+    for daemon, utun in ((None, None), ("ubond", "utun7")):
+        with patch.object(monitor, "get_link_ifaces",
+                          return_value={"IFACE_IPHONE": "en8", "IFACE_PIXEL": "en12",
+                                        "IFACE_WIFI": "en0"}), \
+             patch.object(monitor, "get_interface_ip", return_value=None):
+            out = _draw_output(monitor, capsys, daemon, utun)
+        bordes = [ln for ln in out.splitlines() if ln and ln[0] in "┌│└"]
+        assert len(bordes) == 3, f"{daemon}: {len(bordes)} bordes"
+        anchos = {len(_re.sub(r"\033\[[0-9;]*m", "", ln)) for ln in bordes}
+        assert len(anchos) == 1, f"{daemon}: bordes descuadrados {anchos}"

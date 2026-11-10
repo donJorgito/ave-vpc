@@ -151,6 +151,32 @@ def get_interface_ip(iface):
         return None
 
 
+def get_link_ifaces():
+    """Lee IFACE_IPHONE/IFACE_PIXEL/IFACE_WIFI de config/env.
+
+    Antes estaban hardcodeados aquí (en8/en12/en0). Al cambiar de Pixel 6 Pro
+    a Pixel 11 Pro la interfaz pasó a ser en15 y el enlace dejaba de aparecer
+    en el monitor aunque ubond sí lo estuviera usando (AVE 2026-11-10).
+    Los valores por defecto se mantienen por si no hay config/env.
+    """
+    defaults = {'IFACE_IPHONE': 'en8', 'IFACE_PIXEL': 'en12', 'IFACE_WIFI': 'en0'}
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            'config', 'env')
+    try:
+        with open(env_path, encoding='utf-8') as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith('#') or '=' not in line:
+                    continue
+                key, _, value = line.partition('=')
+                key = key.strip()
+                if key in defaults:
+                    defaults[key] = value.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return defaults
+
+
 def find_tunnel_utun(daemon):
     """Busca el utun que el daemon dado está usando (subnet específica
     por daemon: 10.10.10.x para mlvpn, 10.10.20.x para ubond)."""
@@ -320,16 +346,39 @@ def fmt_total(b):
         return f'{b/1_073_741_824:.2f} GB'
 
 
+def visible_len(s):
+    """Longitud visible de una cadena en pantalla: descuenta los escapes ANSI
+    de color (BOLD, GREEN, RESET...). len() los cuenta como caracteres aunque
+    no ocupen celda en el terminal, y el padding del marco sale descuadrado.
+    """
+    return len(re.sub(r'\033\[[0-9;]*m', '', s))
+
+
 def draw(daemon, prev_stats, curr_stats, interval, links_status, utun,
          iteration, failover_roles, replicate_active):
     """Dibuja la pantalla del monitor."""
     os.system('clear')
 
-    info = DAEMON_INFO[daemon]
+    # daemon puede ser None (auto-detect sin ningún proceso vivo): en ese caso
+    # no abortamos, pintamos el panel con etiquetas genéricas y el estado
+    # "sin túnel". En cuanto el daemon aparezca, main() lo redetecta y
+    # volvemos a la rama normal sin relanzar el monitor.
+    info = DAEMON_INFO[daemon] if daemon else {
+        'header_label': 'monitor (sin daemon)',
+        'tunnel_label': 'TÚNEL',
+        'tun_ip': '–',
+        'connect_hint': f'{DAEMON_INFO["mlvpn"]["connect_hint"]} (v1) o '
+                        f'{DAEMON_INFO["ubond"]["connect_hint"]} (v2)',
+    }
     is_failover = bool(failover_roles)
     is_replicate = bool(replicate_active)
 
-    if is_failover:
+    # Sin daemon, o con daemon vivo pero sin utun todavía (arranque a medias),
+    # el modo real es "no hay túnel": pintar [BONDING]/[REPLICATE] ahí engaña,
+    # porque esos rótulos salen de la config, no de que el túnel exista.
+    if daemon is None or utun is None:
+        mode_str = f'{RED}[SIN TÚNEL]{RESET}'
+    elif is_failover:
         mode_str = f'{YELLOW}[FAILOVER]{RESET}'
     elif is_replicate:
         mode_str = f'{BLUE}[REPLICATE]{RESET}'
@@ -337,9 +386,18 @@ def draw(daemon, prev_stats, curr_stats, interval, links_status, utun,
         mode_str = f'{GREEN}[BONDING]{RESET}'
 
     title = f'ave-vpc {info["header_label"]}'
-    print(f'{BOLD}{CYAN}┌─ {title} ─────────────────────────────────────────┐{RESET}')
-    print(f'{BOLD}{CYAN}│{RESET}  Tick {interval}s  •  Modo: {mode_str}  •  Ctrl+C para salir' + f'{BOLD}{CYAN}  │{RESET}')
-    print(f'{BOLD}{CYAN}└─────────────────────────────────────────────────────────────────┘{RESET}')
+    # Marco de cabecera: antes los tres bordes llevaban tiradas de guiones fijas
+    # (70/57/67 visibles) y el relleno ignoraba los escapes ANSI de mode_str.
+    # Ahora el ancho interior se deriva del contenido real medido con
+    # visible_len, con 65 de mínimo (el ancho histórico de la caja).
+    top_content = f'─ {title} '
+    mid_content = f'  Tick {interval}s  •  Modo: {mode_str}  •  Ctrl+C para salir'
+    box_width = max(65, visible_len(top_content), visible_len(mid_content) + 2)
+    top_fill = '─' * (box_width - visible_len(top_content))
+    mid_fill = ' ' * (box_width - visible_len(mid_content))
+    print(f'{BOLD}{CYAN}┌{top_content}{top_fill}┐{RESET}')
+    print(f'{BOLD}{CYAN}│{RESET}{mid_content}{mid_fill}{BOLD}{CYAN}│{RESET}')
+    print(f'{BOLD}{CYAN}└{"─" * box_width}┘{RESET}')
     print()
 
     # ─── Estado del túnel ─────────────────────────────────────────────
@@ -359,10 +417,11 @@ def draw(daemon, prev_stats, curr_stats, interval, links_status, utun,
     print()
 
     # ─── Enlaces físicos ──────────────────────────────────────────────
+    ifaces = get_link_ifaces()
     link_names = {
-        'links.iphone': ('iPhone', 'en8'),
-        'links.pixel':  ('Pixel',  'en12'),
-        'links.wifi':   ('WiFi',   'en0'),
+        'links.iphone': ('iPhone', ifaces['IFACE_IPHONE']),
+        'links.pixel':  ('Pixel',  ifaces['IFACE_PIXEL']),
+        'links.wifi':   ('WiFi',   ifaces['IFACE_WIFI']),
     }
 
     print(f'{BOLD}  ENLACES FÍSICOS{RESET}')
@@ -466,7 +525,8 @@ def draw(daemon, prev_stats, curr_stats, interval, links_status, utun,
             print(f'  •  Encapsulado {DIM}↓{fmt_bytes(sum_active_rx)} ↑{fmt_bytes(sum_active_tx)}{RESET}', end='')
     print()
     print()
-    print(f'  {DIM}iter {iteration}  •  daemon: {daemon}{RESET}')
+    daemon_str = daemon if daemon else 'ninguno (esperando túnel)'
+    print(f'  {DIM}iter {iteration}  •  daemon: {daemon_str}{RESET}')
 
 
 def main():
@@ -483,11 +543,16 @@ def main():
     if args.daemon == 'auto':
         daemon, both_alive = detect_daemon()
         if daemon is None:
-            print(f'{RED}Ningún daemon detectado.{RESET}')
+            # Antes aquí había un sys.exit(1): el monitor se negaba a arrancar
+            # sin túnel. Ahora entra igual al bucle, pinta "sin túnel" y
+            # redetecta en cada tick (ver más abajo), así que puedes dejarlo
+            # abierto y levantar el túnel después sin relanzarlo.
+            print(f'{YELLOW}Ningún daemon detectado — arrancando en espera.{RESET}')
             print(f'  Lanza {DAEMON_INFO["mlvpn"]["connect_hint"]} (v1)'
-                  f' o {DAEMON_INFO["ubond"]["connect_hint"]} (v2).')
-            sys.exit(1)
-        if both_alive:
+                  f' o {DAEMON_INFO["ubond"]["connect_hint"]} (v2)'
+                  ' y el monitor lo cogerá solo.')
+            time.sleep(1)
+        elif both_alive:
             print(f'{YELLOW}{BOLD}AVISO:{RESET}{YELLOW} mlvpn Y ubond vivos simultáneamente.{RESET}')
             print('  Estado anómalo (transición v1→v2 incompleta o SOS fallido).')
             print('  Mostrando ubond. Para limpiar: ejecuta SOS.sh y relanza.')
@@ -501,16 +566,32 @@ def main():
 
     prev_stats = get_interface_stats()
     iteration = 0
+    auto = args.daemon == 'auto'
 
     try:
         while True:
             time.sleep(args.interval)
             iteration += 1
+            daemon_changed = False
+            if auto:
+                # Redetección por tick: el daemon puede aparecer o morir con el
+                # monitor ya abierto. Sin esto habría que relanzarlo.
+                new_daemon, _ = detect_daemon()
+                if new_daemon != daemon:
+                    daemon = new_daemon
+                    daemon_changed = True
             curr_stats = get_interface_stats()
-            utun = find_tunnel_utun(daemon)
-            links = check_daemon_links(daemon)
-            failover_roles = check_failover_roles(daemon)
-            replicate_active = check_replicate_active(daemon)
+            if daemon_changed:
+                # El túnel acaba de aparecer/desaparecer: los contadores previos
+                # ya no son comparables (utun nuevo, counters a cero) y el delta
+                # pintaría un pico falso. Reiniciamos la base del cálculo.
+                prev_stats = curr_stats
+            # Con daemon None (sin túnel) no hay nada que consultar: los valores
+            # neutros hacen que draw() pinte la rama "No activo".
+            utun = find_tunnel_utun(daemon) if daemon else None
+            links = check_daemon_links(daemon) if daemon else {}
+            failover_roles = check_failover_roles(daemon) if daemon else {}
+            replicate_active = check_replicate_active(daemon) if daemon else False
             draw(daemon, prev_stats, curr_stats,
                  args.interval, links, utun, iteration,
                  failover_roles, replicate_active)

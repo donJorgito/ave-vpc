@@ -107,6 +107,13 @@ UBOND_PATCH5_B64="$(base64 < "${PATCHES_DIR}/ubond_dedup_gate_data_seq.patch" | 
 UBOND_PATCH6_B64="$(base64 < "${PATCHES_DIR}/ubond_rebind_on_silence.patch" | tr -d '\n')"
 UBOND_PATCH7_B64="$(base64 < "${PATCHES_DIR}/ubond_filters_count_purge.patch" | tr -d '\n')"
 UBOND_PATCH8_B64="$(base64 < "${PATCHES_DIR}/ubond_cpu_pacing_busywait.patch" | tr -d '\n')"
+UBOND_PATCH9_B64="$(base64 < "${PATCHES_DIR}/ubond_busywriting_deadlock.patch" | tr -d '\n')"
+
+# REQ-NET-47: si ya hay un binario instalado, el Paso 2 se lo salta. Eso hacía
+# IMPOSIBLE propagar un patch nuevo a una RPi ya provisionada (el binario de
+# junio se quedaba congelado mientras el repo seguía avanzando). Con
+# FORCE_REBUILD=1 se recompila e instala encima.
+FORCE_REBUILD="${FORCE_REBUILD:-0}"
 
 echo "=> Conectando a la Raspberry Pi ${RPi_IP} (puerto SSH ${RPi_SSH_PORT})..."
 echo "=> ubond escuchará en ${UBOND_PORT_1}/${UBOND_PORT_2}/${UBOND_PORT_3} UDP (paralelo a mlvpn 5080-5082)"
@@ -127,6 +134,8 @@ ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     UBOND_PATCH6_B64="${UBOND_PATCH6_B64}" \
     UBOND_PATCH7_B64="${UBOND_PATCH7_B64}" \
     UBOND_PATCH8_B64="${UBOND_PATCH8_B64}" \
+    UBOND_PATCH9_B64="${UBOND_PATCH9_B64}" \
+    FORCE_REBUILD="${FORCE_REBUILD}" \
     bash <<'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -147,8 +156,8 @@ echo "  [RPi] Dependencias OK"
 # en Linux: SO_BINDTODEVICE existe, struct ifreq es completa, tuntap
 # usa /dev/net/tun y no necesita el reemplazo utun-API.
 # =====================================================================
-if command -v ubond &>/dev/null; then
-    echo "  [RPi] ubond ya instalado"
+if command -v ubond &>/dev/null && [[ "${FORCE_REBUILD}" != "1" ]]; then
+    echo "  [RPi] ubond ya instalado (FORCE_REBUILD=1 para recompilar con patches nuevos)"
 else
     echo "  [RPi] Compilando ubond desde fuente con patch REQ-NET-12..."
     cd /tmp
@@ -226,6 +235,19 @@ else
     fi
     rm -f /tmp/ubond_cpu_pacing_busywait.patch
 
+    # REQ-NET-47: deadlock del camino de envío introducido por el patch 8.
+    # busy_writing se incrementaba una vez POR PAQUETE en el bucle por lotes
+    # pero solo se decrementa una vez por callback de io_write; al pasarse de
+    # presupuesto, ev_io_stop mataba el único watcher que lo decrementaba y el
+    # enlace quedaba MUDO para siempre (los otros dos bombeos están guardados
+    # por !busy_writing). Medido en el AVE 2026-11-10: el túnel moría a los
+    # 17-45s con rutas y red intactas. Contador por lote + guarda en el stop.
+    printf '%s' "${UBOND_PATCH9_B64}" | base64 -d > /tmp/ubond_busywriting_deadlock.patch
+    if ! patch -p1 -N --reject-file=- < /tmp/ubond_busywriting_deadlock.patch 2>&1 | head -10; then
+        echo "  [RPi] (patch busywriting_deadlock ya aplicado o no aplicable; continuando)"
+    fi
+    rm -f /tmp/ubond_busywriting_deadlock.patch
+
     ./autogen.sh
     # --enable-filters: requerido para [filters.replicate]
     ./configure --sysconfdir=/etc --enable-filters
@@ -260,12 +282,12 @@ statuscommand = "/etc/ubond/ubond_updown.sh"
 [filters]
 [filters.fifo]
 
-# REQ-NET-30 (2026-06-03): el patch C `ubond_dedup_gate_data_seq.patch`
+# REQ-NET-30 (2026-06-03): el patch C \`ubond_dedup_gate_data_seq.patch\`
 # (aplicado más arriba en este mismo script) cambia el gate de dedup
-# en ubond.c de `replicate_filters.count > 0` a `proto->data_seq != 0`
+# en ubond.c de \`replicate_filters.count > 0\` a \`proto->data_seq != 0\`
 # (señal autoritativa del wire). Eso permite dejar esta sección VACÍA
 # en el servidor — el cliente decide qué replicar via su propia
-# `[filters.replicate]`, marca los clones con `data_seq` en el wire,
+# \`[filters.replicate]\`, marca los clones con \`data_seq\` en el wire,
 # y el server dedupea sin necesidad de conocer las reglas BPF.
 #
 # Antes del patch (REQ-NET-12), la sección vacía aquí causaba el cuelgue
