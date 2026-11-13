@@ -12,7 +12,7 @@
 #   v2 ubond:
 #     - Modo BONDING o REPLICATE (detecta [filters.replicate] activa)
 #     - Throughput utun (10.10.20.2) + por enlace físico
-#     - Estado links: ACTIVO / AUTH... / sin IP
+#     - Estado links: ACTIVO / PÉRDIDAS ~ / AUTH... / sin IP
 #
 # USO:
 #   ./08-monitor.py                    # auto-detect mlvpn o ubond
@@ -199,7 +199,9 @@ def check_daemon_links(daemon):
     """Obtiene el estado de los links del daemon desde el nombre del proceso.
     El proctitle de mlvpn/ubond tiene la forma:
       'mlvpn: mlvpn0 @links.iphone @links.pixel !links.wifi ...'
-    @ = autenticado, ! = autenticación pendiente.
+    @ = autenticado, ~ = con pérdidas (LOSSY), ! = autenticación pendiente
+    o desconectado. Los símbolos son los de update_process_title() en
+    build/ubond/src/ubond.c (UBOND_AUTHOK, UBOND_LOSSY, resto).
     """
     pattern = DAEMON_INFO[daemon]['proc_pattern']
     try:
@@ -207,8 +209,11 @@ def check_daemon_links(daemon):
         for line in out.splitlines():
             if pattern in line and '[priv]' not in line:
                 authed = re.findall(r'@(links\.\w+)', line)
+                lossy = re.findall(r'~(links\.\w+)', line)
                 pending = re.findall(r'!(links\.\w+)', line)
-                return {lk: 'OK' for lk in authed} | {lk: 'AUTH_PENDING' for lk in pending}
+                return ({lk: 'OK' for lk in authed}
+                        | {lk: 'LOSSY' for lk in lossy}
+                        | {lk: 'AUTH_PENDING' for lk in pending})
     except Exception:
         pass
     return {}
@@ -449,6 +454,13 @@ def draw(daemon, prev_stats, curr_stats, interval, links_status, utun,
             status_str = f'{GREEN}ACTIVO ●{RESET}'
             color = GREEN
             active_count += 1
+        elif link_status == 'LOSSY':
+            # ubond lo marca ~ cuando falla el keepalive o supera el umbral de
+            # pérdida: sigue recibiendo, pero ya no recibe paquetes nuevos
+            # (ubond_rtun_choose y la replicación exigen UBOND_AUTHOK), así
+            # que NO suma a active_count. No debe pintarse como SIN TUNEL.
+            status_str = f'{YELLOW}PÉRDIDAS ~{RESET}'
+            color = YELLOW
         elif link_status == 'AUTH_PENDING':
             status_str = f'{YELLOW}AUTH...{RESET}'
             color = YELLOW

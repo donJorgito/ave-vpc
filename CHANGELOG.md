@@ -7,6 +7,17 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Corregido
 
+- **REQ-NET-50 — el monitor mostraba SIN TUNEL en un enlace ubond con
+  pérdidas.** `check_daemon_links` (`08-monitor.py`) solo parseaba `@`
+  (autenticado) y `!` (pendiente) del título del proceso, pero ubond usa también
+  `~` para `UBOND_LOSSY`: ese enlace desaparecía del diccionario y `draw()` lo
+  pintaba como SIN TUNEL, indistinguible de uno ausente. Reproducido sin red:
+  `ubond: ubond0 ~links.wifi @links.pixel ~links.iphone` devolvía solo
+  `links.pixel`. Ahora devuelve `LOSSY` y `draw()` muestra `PÉRDIDAS ~` en
+  amarillo, con el ancho de columna intacto. Un enlace LOSSY no suma al
+  recuento de enlaces activos, porque ubond no planifica ni replica sobre él.
+  Test: `tests/test_REQ-NET-50_monitor_lossy_links.sh` (pytest en
+  `tests/test_req_net_50_monitor_lossy.py`).
 - **REQ-NET-48 — tres defectos del arnés de smoke-tests (`tools/`).**
   (1) `ubond_runner_wait_auth` buscaba `@links.X` en el log del cliente y el
   título `ubond: ubond @links.`, pero el cliente se lanza con `--name ubond0`
