@@ -1,64 +1,104 @@
+# Pre-commit — IDLC v6.2.1 §7.2 / §6.3 (plantilla canónica: templates/.pre-commit-config.yaml)
+#
+# SUPPLY CHAIN (Rule 1 / §8.3.7): todos los hooks son `repo: local`. Ninguno
+# clona ni descarga de github.com público; cada hook invoca una herramienta ya
+# instalada en la estación de trabajo desde los proxies de Artifactory de Roche
+# (PyPI: common-cache-pypi, npm: common-cache-npm, genérico: common-cache-generic).
+# NO añadir `repo: https://github.com/...`. Test: tests/test_REQ-NET-49_precommit_repo_local.sh
+#
+# HERRAMIENTAS REQUERIDAS (Rule 7: versiones explícitas, instalar una vez):
+#
+#   Herramienta        Aporta (entry)                                   Versión   Instalación
+#   -----------------  -----------------------------------------------  --------  ---------------------------------
+#   pre-commit         el framework                                     4.7.0     pip install -r requirements-dev.txt
+#   pre-commit-hooks   trailing-whitespace-fixer, end-of-file-fixer,    4.6.0     pip install -r requirements-dev.txt
+#                      check-yaml, check-added-large-files,
+#                      detect-private-key
+#   ruff               ruff                                             0.11.2    pip install -r requirements-dev.txt
+#   pytest, pytest-cov pytest                                           ver       pip install -r requirements-dev.txt
+#                                                                                 (requirements-dev.txt)
+#   markdownlint-cli   markdownlint                                     0.43.0    npm install -g markdownlint-cli@0.43.0
+#                                                                                 (registro npm = proxy Artifactory)
+#   shellcheck         shellcheck                                       0.10.0    binario (proxy genérico Artifactory)
+#   gitleaks           gitleaks                                         8.30.1    binario (proxy genérico Artifactory)
+#
+# Los Python se resuelven con el intérprete fijado en .python-version (pyenv).
+# Nota markdownlint: >=0.44.0 arrastra una dependencia transitiva de eslint que
+# exige Node 20.19+/22.13+/24+; se mantiene 0.43.0 (mismo pin que antes).
+
 repos:
-  # Checks básicos: ficheros sin terminar, BOM, espacios en blanco
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+  - repo: local
     hooks:
+      # Checks básicos: ficheros sin terminar, espacios en blanco
       - id: trailing-whitespace
+        name: trailing-whitespace
+        entry: trailing-whitespace-fixer   # needs: pre-commit-hooks==4.6.0
+        language: system
+        types: [text]
         # Los .patch deben preservarse byte a byte: un diff con espacios de
         # contexto significativos deja de aplicar si se le quita whitespace.
         exclude: '\.patch$'
       - id: end-of-file-fixer
+        name: end-of-file-fixer
+        entry: end-of-file-fixer           # needs: pre-commit-hooks==4.6.0
+        language: system
+        types: [text]
         exclude: '\.patch$'
       - id: check-yaml
+        name: check-yaml
+        entry: check-yaml                  # needs: pre-commit-hooks==4.6.0
+        language: system
+        types: [yaml]
       - id: check-added-large-files
-        args: ['--maxkb=500']
+        name: check-added-large-files
+        entry: check-added-large-files --maxkb=500   # needs: pre-commit-hooks==4.6.0
+        language: system
       - id: detect-private-key
+        name: detect-private-key
+        entry: detect-private-key          # needs: pre-commit-hooks==4.6.0
+        language: system
+        types: [text]
 
-  # ShellCheck — análisis estático de scripts bash
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.10.0.1
-    hooks:
+      # ShellCheck 0.10.0 — análisis estático de scripts bash
       - id: shellcheck
-        args: ['--severity=warning']
-        files: '\.(sh)$'
+        name: shellcheck
+        entry: shellcheck --severity=warning   # needs: shellcheck 0.10.0
+        language: system
+        files: '\.sh$'
 
-  # gitleaks — detección de secrets en código (defensa en profundidad).
-  # Complementa detect-private-key (que solo cubre SSH/PGP) con tokens,
-  # API keys, AWS/GCP creds y patrones similares.
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.1
-    hooks:
+      # gitleaks 8.30.1 — detección de secrets en código (defensa en
+      # profundidad). Complementa detect-private-key (que solo cubre SSH/PGP)
+      # con tokens, API keys, AWS/GCP creds y patrones similares.
+      # Mismo comportamiento que el hook upstream anterior (escanea lo staged).
+      # --config .gitleaks.toml: misma configuración que el CI (reglas por
+      # defecto + regla `private-key-header` equivalente a detect-private-key).
       - id: gitleaks
+        name: gitleaks (secret scan)
+        entry: gitleaks git --pre-commit --config .gitleaks.toml --redact --staged   # needs: gitleaks 8.30.1
+        language: system
+        pass_filenames: false
 
-  # markdownlint — linting de docs (IDLC v6 Rule 8: comprehensive
-  # docs linting). Config en .markdownlint.yml.
-  # Pin a v0.43.0: versiones >=0.44.0 actualizan transitiva de eslint
-  # que exige Node 20.19+/22.13+/24+. Mientras Jorge use Node 21.x,
-  # v0.43.0 es la última compatible.
-  - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.43.0
-    hooks:
+      # markdownlint-cli 0.43.0 — linting de docs (IDLC v6 Rule 8). Config en
+      # .markdownlint.yml.
       - id: markdownlint
-        args: ['--ignore', 'build/', '--ignore', 'node_modules/']
+        name: markdownlint
+        entry: markdownlint --ignore build/ --ignore node_modules/   # needs: markdownlint-cli 0.43.0
+        language: system
+        types: [markdown]
 
-  # ruff — linting Python (IDLC v6 Rule 8). Cubre 08-monitor.py
-  # (582 LOC). Reemplaza flake8 + pyflakes + pycodestyle (más rápido,
-  # menos deps). Configuración en pyproject.toml o ruff.toml si
-  # necesitamos override; por defecto razonable para Lane 1.
-  # Excluye build/ (ubond upstream) y __pycache__/.
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.2
-    hooks:
+      # ruff 0.11.2 — linting Python (IDLC v6 Rule 8). Cubre 08-monitor.py.
+      # Excluye build/ (ubond upstream) y __pycache__/. --force-exclude hace que
+      # los excludes también apliquen a los ficheros pasados explícitamente.
       - id: ruff
-        args: ['--exclude', 'build/', '--exclude', '__pycache__/']
+        name: ruff
+        entry: ruff check --force-exclude --exclude build/ --exclude __pycache__/   # needs: ruff 0.11.2
+        language: system
+        types_or: [python, pyi]
 
-  # pytest + coverage — REQ-NET-33 Fase 1 (Python coverage gating).
-  # Hook local porque pytest necesita el entorno del usuario con
-  # las deps instaladas. cov-fail-under=40 inicial conservador
-  # (cobertura real medida 48% — margen para refactors menores).
-  # Elevar el threshold cuando se estabilice cobertura.
-  - repo: local
-    hooks:
+      # pytest + coverage — REQ-NET-33 Fase 1 (Python coverage gating).
+      # cov-fail-under=40 inicial conservador (cobertura real medida 48% —
+      # margen para refactors menores). Elevar el threshold cuando se
+      # estabilice cobertura.
       - id: pytest-monitor-coverage
         name: pytest 08-monitor.py with coverage (REQ-NET-33 P1)
         entry: pytest tests/test_req_net_31_monitor.py tests/test_req_net_50_monitor_lossy.py --cov=ave_monitor --cov-fail-under=40 -q
