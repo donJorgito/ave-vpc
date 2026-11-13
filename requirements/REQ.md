@@ -93,6 +93,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-46](ave-vpc-REQ-NET-46-requirement.md) | Elimina busy-wait CPU 99% en ubond (pacing por lotes, 3 spinners libev) |
 | [REQ-NET-47](ave-vpc-REQ-NET-47-requirement.md) | Corrige el deadlock de `busy_writing` que dejaba el enlace mudo a los 17-45 s |
 | [REQ-NET-48](ave-vpc-REQ-NET-48-requirement.md) | Corrige tres defectos del arnés de smoke-tests (gate de auth, stop, diagnóstico con falso positivo) |
+| [REQ-NET-49](ave-vpc-REQ-NET-49-requirement.md) | Hooks de pre-commit como `repo: local` con herramientas fijadas (IDLC v6.2.1 §7.2) |
 | [REQ-NET-50](ave-vpc-REQ-NET-50-requirement.md) | El monitor muestra los enlaces LOSSY (`~`) de ubond en lugar de SIN TUNEL |
 
 ## Restricciones macOS (REQ-MAC)

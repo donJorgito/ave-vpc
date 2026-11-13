@@ -8,3 +8,11 @@
 pytest==9.2.0
 pytest-cov==7.1.0
 coverage==7.17.0
+
+# Herramientas de los hooks de pre-commit (REQ-NET-49, IDLC v6.2.1 §7.2):
+# hooks `repo: local` que invocan estas herramientas instaladas desde el
+# proxy PyPI de Artifactory. markdownlint-cli, shellcheck y gitleaks no son
+# paquetes Python: sus versiones se documentan en .pre-commit-config.yaml.
+pre-commit==4.7.0
+pre-commit-hooks==4.6.0
+ruff==0.11.2

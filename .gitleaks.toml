@@ -1,0 +1,26 @@
+# Configuracion de gitleaks para ave-vpc (REQ-NET-49).
+#
+# Se usa igual en el hook local y en el CI (misma herramienta, misma version,
+# misma configuracion) para que el pre-commit anticipe los fallos del CI.
+#
+# Extiende las reglas por defecto de gitleaks y anade una regla que replica las
+# cabeceras que detecta `detect-private-key` de pre-commit-hooks 4.6.0
+# (BLACKLIST de detect_private_key.py). La regla `private-key` por defecto de
+# gitleaks exige cabecera, cuerpo de 64 o mas caracteres y pie, por lo que no
+# marca una cabecera sola ni los formatos PuTTY, SSH2 y OpenVPN. El test
+# tests/test_REQ-NET-49_precommit_repo_local.sh comprueba que la regla cubre
+# las 10 entradas.
+#
+# Los patrones usan una clase de caracteres (por ejemplo `KE[Y]`) para que este
+# fichero no coincida con su propia regla.
+
+title = "ave-vpc gitleaks"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "private-key-header"
+description = "Cabecera de clave privada (equivalente a detect-private-key de pre-commit-hooks 4.6.0)"
+regex = '''BEGIN (?:RSA |DSA |EC |OPENSSH |SSH2 ENCRYPTED |ENCRYPTED |)PRIVATE KE[Y]|BEGIN PGP PRIVATE KEY BLOC[K]|PuTTY-User-Key-File-[2]|BEGIN OpenVPN Static key V[1]'''
+keywords = ["private key", "putty-user-key-file-2", "openvpn static key"]

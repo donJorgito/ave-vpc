@@ -9,6 +9,11 @@ on:
 # IDLC v6 Rule 7: actions pineadas a SHA inmutable. El comentario
 # `# vX.Y.Z` es informativo — el lock real es el hash. Para actualizar:
 # `gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq .object.sha`.
+#
+# Las versiones de shellcheck y gitleaks DEBEN coincidir con las de
+# .pre-commit-config.yaml: el pre-commit solo anticipa los fallos del CI si
+# ambos usan la misma herramienta y versión (lo verifica
+# tests/test_REQ-NET-49_precommit_repo_local.sh).
 
 jobs:
   lint:
@@ -20,19 +25,21 @@ jobs:
       - name: ShellCheck — análisis estático de scripts
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38  # 2.0.0
         with:
+          version: v0.10.0
           severity: warning
           scandir: '.'
           additional_files: '*.sh tests/*.sh'
 
-      - name: Verificar que no hay claves privadas en el código
-        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
-        with:
-          extra_args: detect-private-key --all-files
-
+      # gitleaks: mismo binario y versión que el hook local de
+      # .pre-commit-config.yaml (8.30.1), para que el pre-commit anticipe los
+      # fallos del CI. Imagen fijada por tag y digest (Regla 7). `dir` escanea
+      # todo el árbol del checkout. .gitleaks.toml añade la regla
+      # `private-key-header`, que cubre las cabeceras que antes detectaba
+      # detect-private-key y que la regla por defecto de gitleaks no marca.
       - name: gitleaks — detección de secrets
-        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
+        uses: docker://ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
         with:
-          extra_args: gitleaks --all-files
+          args: dir . --config .gitleaks.toml --redact --no-banner
 
   test:
     name: Tests de verificación

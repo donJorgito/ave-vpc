@@ -5,6 +5,25 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+### Cambiado
+
+- **REQ-NET-49 — hooks de pre-commit como `repo: local` (IDLC v6.2.1 §7.2).**
+  Los 10 hooks dejan de clonarse de `github.com` (Rule 1 / §8.3.7) y pasan a
+  `repo: local` con `language: system`, con versión explícita por herramienta
+  (pre-commit 4.7.0, pre-commit-hooks 4.6.0, ruff 0.11.2, markdownlint-cli
+  0.43.0, shellcheck 0.10.0, gitleaks 8.30.1). Mismos argumentos y versiones
+  que antes: no se retira ni relaja ninguna regla. `requirements-dev.txt` fija
+  las herramientas Python. Test: `tests/test_REQ-NET-49_precommit_repo_local.sh`.
+  El job `lint` de CI deja de invocar `pre-commit/action` (el runner no tiene
+  esas herramientas) y usa las mismas versiones que el hook local: gitleaks
+  8.30.1 como imagen fijada por tag y digest, y shellcheck v0.10.0 explícito
+  (antes `stable`). `detect-private-key` se sustituye en CI por gitleaks con
+  `.gitleaks.toml`, que añade la regla `private-key-header` equivalente a las 10
+  cabeceras de `detect-private-key` (la regla por defecto de gitleaks no marca
+  una cabecera suelta ni PuTTY, SSH2 ni OpenVPN). Hook local y CI usan la misma
+  configuración. El test falla si divergen las versiones de CI y pre-commit o si
+  la regla deja de cubrir alguna cabecera.
+
 ### Corregido
 
 - **REQ-NET-50 — el monitor mostraba SIN TUNEL en un enlace ubond con

@@ -48,9 +48,14 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 Instala los hooks antes de tu primer commit:
 
 ```bash
-pip install pre-commit
+pip install -r requirements-dev.txt   # pre-commit, pre-commit-hooks, ruff, pytest (versiones fijadas)
 pre-commit install
 ```
+
+Los hooks son `repo: local` (IDLC v6.2.1 §7.2): no se clonan de github.com.
+`markdownlint-cli`, `shellcheck` y `gitleaks` se instalan aparte desde los
+proxies de Artifactory; las versiones están en la cabecera de
+`.pre-commit-config.yaml`.
 
 Los hooks comprueban automáticamente ShellCheck y que no se suban secretos.
 

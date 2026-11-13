@@ -89,11 +89,11 @@ limitación reconocida del Lane 1.
 `pre-commit` ejecuta sobre código del repo Roche, NO sobre `build/ubond`
 (excluido explícitamente):
 
-- `gitleaks` v8.30.1 — secrets scan (`.pre-commit-config.yaml:25`).
-- `ruff` v0.11.2 con `--exclude build/` (`.pre-commit-config.yaml:57`).
-- `shellcheck` v0.10.0.1 — solo `*.sh` del repo.
+- `gitleaks` v8.30.1 — secrets scan (`.pre-commit-config.yaml:73`, hook `repo: local`).
+- `ruff` v0.11.2 con `--exclude build/` (`.pre-commit-config.yaml:90`).
+- `shellcheck` v0.10.0 — solo `*.sh` del repo.
 - `markdownlint` v0.43.0 con `--ignore build/`
-  (`.pre-commit-config.yaml:46`).
+  (`.pre-commit-config.yaml:81`).
 - `detect-private-key` + `check-added-large-files --maxkb=500`.
 
 ### 4.2. Cobertura real sobre código upstream + patches
@@ -131,6 +131,15 @@ ad-hoc si CVE de `libsodium`/`libev` aparece en NVD feed.
   necesita.
 - **gap-3**: SAST C/C++ no wired. Mitigación posible: `cppcheck`
   pre-commit hook sobre `patches/*.c`. Lane 1, baja prioridad.
+- **gap-4** (REQ-NET-49, Rule 1 / §8.3.7): el CI (`.github/workflows/ci.yml`)
+  descarga código de registros públicos en cada ejecución: las acciones de
+  GitHub (fijadas a SHA de commit) y la imagen
+  `ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:...` del paso de gitleaks. El
+  `pre-commit` local no clona nada de `github.com` (conforme con §7.2), pero el
+  runner `ubuntu-latest` es público y no alcanza los proxies internos de
+  Artifactory. Mitigación aplicada: todo está fijado por SHA o digest. Sin
+  resolver: espejar acciones e imagen en un registro interno. Desviación
+  pendiente de aceptación del PO (Appendix F.F).
 
 ## 5. Update policy
 
