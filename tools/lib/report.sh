@@ -25,6 +25,17 @@ _report_pkt_count() {
     tcpdump -nn -r "${pcap}" 2>/dev/null | wc -l | tr -d ' '
 }
 
+# Devuelve 0 si al menos uno de los pcaps indicados existe y no está vacío.
+# Un fichero ausente (p. ej. el scp de la captura RPi falló) o de 0 bytes
+# (sin cabecera pcap) NO es "0 paquetes": es una captura no disponible.
+_report_have_capture() {
+    local pcap
+    for pcap in "$@"; do
+        [[ -r "${pcap}" && -s "${pcap}" ]] && return 0
+    done
+    return 1
+}
+
 # Genera una tabla markdown con los conteos por iface. Args opcionales:
 # $1 = nombre del orchestrator (casa/cafe/ave), $2 = utun usado.
 report_render_markdown() {
@@ -110,9 +121,22 @@ report_diagnose() {
         return
     fi
 
-    if   (( mac_out == 0 ));        then printf '**Veredicto:** Mac no envía nada — ubond no autentica o socket no bind.\n'
+    # Capturas disponibles por punto: sin pcap no se puede afirmar "0 pkts".
+    local have_mac_out=0 have_rpi_in=0 have_rpi_tun=0 have_mac_tun=0
+    shopt -s nullglob
+    _report_have_capture "${SMOKE_TMPDIR}"/cap_mac_en[0-9]*.pcap && have_mac_out=1
+    _report_have_capture "${SMOKE_TMPDIR}"/cap_rpi_eth*.pcap && have_rpi_in=1
+    _report_have_capture "${SMOKE_TMPDIR}"/cap_rpi_ubond0*.pcap && have_rpi_tun=1
+    _report_have_capture "${SMOKE_TMPDIR}"/cap_mac_utun*.pcap && have_mac_tun=1
+    shopt -u nullglob
+
+    if   (( have_mac_out == 0 ));   then printf '**Veredicto:** no verificable — falta la captura Mac de las interfaces físicas.\n'
+    elif (( mac_out == 0 ));        then printf '**Veredicto:** Mac no envía nada — ubond no autentica o socket no bind.\n'
+    elif (( have_rpi_in == 0 ));    then printf '**Veredicto:** no verificable — la captura RPi (eth) no está disponible (scp fallido o fichero vacío); no se puede afirmar filtrado en red.\n'
     elif (( rpi_in == 0 ));         then printf '**Veredicto:** Mac envía pero RPi no recibe — filtrado en red (NAT/firewall) entre Mac y RPi.\n'
+    elif (( have_rpi_tun == 0 ));   then printf '**Veredicto:** no verificable — la captura RPi (ubond0) no está disponible; no se puede afirmar fallo del servidor.\n'
     elif (( rpi_tun_out == 0 ));    then printf '**Veredicto:** RPi recibe UDP pero NO escribe al tun — bug en ubond servidor (decrypt/dedup/reorder).\n'
+    elif (( have_mac_tun == 0 ));   then printf '**Veredicto:** no verificable — falta la captura Mac del utun.\n'
     elif (( mac_tun_in == 0 ));     then printf '**Veredicto:** RPi escribe respuesta al tun pero Mac no la ve en utun — bug retorno (RPi→Mac).\n'
     else                                 printf '**Veredicto:** Paquetes fluyen en todas las capas — si ping falla aquí es kernel-side.\n'
     fi

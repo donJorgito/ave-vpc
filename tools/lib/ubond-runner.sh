@@ -6,8 +6,8 @@
 #     fantasma (problema observado en debug 2026-05-29).
 #   - start_with_conf: lanza ubond con el conf indicado en background,
 #     redirigiendo a un log conocido.
-#   - wait_auth: bloquea hasta que ≥1 link aparece como autenticado en log,
-#     o hasta timeout.
+#   - wait_auth: bloquea hasta que ≥1 link aparece como autenticado en el
+#     process title del cliente (`@links.X`), o hasta timeout.
 #   - find_utun_iface: detecta qué utunN ha tomado la IP del túnel.
 #   - stop: kill limpio.
 #
@@ -19,16 +19,36 @@
 UBOND_BIN="${UBOND_BIN:-/usr/local/sbin/ubond}"
 UBOND_LOG="${SMOKE_TMPDIR}/ubond_client.log"
 UBOND_PID_FILE="${SMOKE_TMPDIR}/ubond_client.pid"
+# Nombre del cliente: se pasa a ubond con --name y el proceso lo reescribe en
+# su process title ("ubond: <nombre> !links.x @links.y ..."). Única fuente
+# para el lanzamiento y para los patrones de pgrep/pkill (REQ-NET-48).
+UBOND_CLIENT_NAME="${UBOND_CLIENT_NAME:-ubond0}"
+# Patrón (ERE) del process title de nuestro cliente, anclado al inicio de la
+# línea de comandos: ubond reescribe su título a "ubond: <nombre> ...", así
+# que pkill/pgrep -f sobre la ruta del binario no encuentran nada, y sin el
+# ancla casaría cualquier otro proceso que lleve esa cadena en sus argumentos.
+UBOND_TITLE_RE="^ubond: ${UBOND_CLIENT_NAME} "
+
+# 0 si queda algún proceso cliente ubond vivo (por process title).
+ubond_runner_clients_alive() {
+    pgrep -f "${UBOND_TITLE_RE}" >/dev/null 2>&1
+}
+
+# Mata los clientes ubond por process title: TERM, espera y KILL.
+ubond_runner_kill_clients() {
+    pkill -f "${UBOND_TITLE_RE}" 2>/dev/null || true
+    sleep 1
+    pkill -9 -f "${UBOND_TITLE_RE}" 2>/dev/null || true
+}
 
 # Mata procesos ubond colgados, limpia IPs ubond (10.10.20.x) de utuns
 # fantasma. Importante: NO tocamos 10.10.10.x — esa subnet pertenece a
 # mlvpn y un cleanup global rompería v1 corriendo simultáneamente
 # (REQ-NET-24).
 ubond_runner_cleanup_stale() {
-    if pgrep -f "${UBOND_BIN}" >/dev/null 2>&1; then
+    if ubond_runner_clients_alive; then
         log_warn "Procesos ubond previos — terminando"
-        pkill -9 -f "${UBOND_BIN}" || true
-        sleep 1
+        ubond_runner_kill_clients
     fi
     local subnet_re="${UBOND_TUN_MAC_IP%.*}\\."  # ej. 10.10.20.
     # Escapa puntos para regex literal.
@@ -52,14 +72,14 @@ ubond_runner_start_with_conf() {
     require_cmd "${UBOND_BIN}"
 
     : > "${UBOND_LOG}"
-    # --name ubond0 alinea el process title con producción (04b usa el
+    # --name "${UBOND_CLIENT_NAME}" alinea el process title con producción (04b usa el
     # mismo flag) — sin esto los procesos quedan como "ubond: ubond [priv]"
     # y SOS.sh no los mataba con su patrón "ubond: ubond0" (bug AVE
     # 2026-06-01).
     "${UBOND_BIN}" \
         --config "${conf}" \
         --user ubond \
-        --name ubond0 \
+        --name "${UBOND_CLIENT_NAME}" \
         --debug --verbose \
         > "${UBOND_LOG}" 2>&1 &
     local pid="$!"
@@ -67,19 +87,22 @@ ubond_runner_start_with_conf() {
     log_info "ubond cliente arrancado (PID ${pid}) → log ${UBOND_LOG}"
 }
 
+# Patrón (ERE) del process title de un cliente con al menos un link
+# autenticado: "ubond: <nombre> !links.wifi @links.pixel ...". `@links.X`
+# solo aparece en el título (el log del cliente no lo contiene).
+ubond_runner_auth_title_re() {
+    printf '%s.*@links\\.' "${UBOND_TITLE_RE}"
+}
+
 # Espera hasta que al menos un link aparezca autenticado (`@links.NAME`)
-# en el log. Args: $1 = timeout en segundos (default 15).
+# en el process title. Args: $1 = timeout en segundos (default 15).
 # Devuelve 0 si hay auth, 1 si timeout.
 ubond_runner_wait_auth() {
     local timeout="${1:-15}"
-    local elapsed=0
+    local elapsed=0 title_re
+    title_re="$(ubond_runner_auth_title_re)"
     while (( elapsed < timeout )); do
-        if grep -qE "@links\.[a-z]+" "${UBOND_LOG}" 2>/dev/null; then
-            log_info "Auth detectada tras ${elapsed}s"
-            return 0
-        fi
-        # Match alternativo: el process title lo refleja también.
-        if pgrep -f "ubond: ubond @links\." >/dev/null 2>&1; then
+        if pgrep -f "${title_re}" >/dev/null 2>&1; then
             log_info "Auth detectada (via process title) tras ${elapsed}s"
             return 0
         fi
@@ -107,11 +130,8 @@ ubond_runner_find_utun_iface() {
 # Para ubond limpio (kill + cleanup IPs ubond colgadas). Importante: solo
 # limpiamos utuns con la IP de ubond (UBOND_TUN_MAC_IP), no las de mlvpn.
 ubond_runner_stop() {
-    if [[ -f "${UBOND_PID_FILE}" ]]; then
-        pkill -f "${UBOND_BIN}" 2>/dev/null || true
-    fi
-    sleep 1
-    pkill -9 -f "${UBOND_BIN}" 2>/dev/null || true
+    # El proceso reescribe su título a "ubond: ...": hay que casar por él.
+    ubond_runner_kill_clients
     rm -f "${UBOND_PID_FILE}"
     local target="${UBOND_TUN_MAC_IP:-10.10.20.2}"
     local i ip
@@ -120,6 +140,11 @@ ubond_runner_stop() {
                 | awk '$1 == "inet" && $2 == "'"${target}"'" { print $2; exit }')"
         [[ -n "${ip}" ]] && ifconfig "utun${i}" inet delete 2>/dev/null || true
     done
+    sleep 1
+    if ubond_runner_clients_alive; then
+        log_err "ubond sigue vivo tras el kill — NO detenido"
+        return 1
+    fi
     log_info "ubond detenido"
 }
 

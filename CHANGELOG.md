@@ -7,6 +7,25 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Corregido
 
+- **REQ-NET-48 — tres defectos del arnés de smoke-tests (`tools/`).**
+  (1) `ubond_runner_wait_auth` buscaba `@links.X` en el log del cliente y el
+  título `ubond: ubond @links.`, pero el cliente se lanza con `--name ubond0`
+  (título real `ubond: ubond0 !links.wifi @links.pixel ...`) y el log no
+  contiene `@links`: la puerta siempre expiraba y todos los smoke tests se
+  saltaban. Ahora el patrón se deriva de `UBOND_CLIENT_NAME`, la misma variable
+  que se pasa a `--name`. (2) `ubond_runner_stop` hacía `pkill -f` sobre la ruta
+  del binario, que el proceso ya no tiene en su línea de comandos: no mataba
+  nada y aun así registraba "detenido" (se acumularon tres clientes). Ahora
+  mata por el título anclado `^ubond: <nombre>` (seguido de espacio) y verifica que
+  no queda ninguno; si queda, registra un error y devuelve 1. El mismo defecto
+  tenía `ubond_runner_cleanup_stale` (corre al inicio de cada smoke y dejaba
+  clientes huérfanos que duplicaban subred y puertos): ahora comparte helper y
+  patrón con `stop`. El ancla `^` evita casar procesos ajenos que lleven
+  `ubond: ubond0 ...` en sus argumentos. (3) El
+  diagnóstico automático de `report.sh` trataba una captura RPi ausente (scp
+  fallido) como 0 paquetes y acusaba falsamente de "filtrado en red"; ahora
+  distingue captura no disponible de 0 paquetes y responde "no verificable".
+  Test: `tests/test_REQ-NET-48_smoke_harness_fixes.sh` (con stubs, sin red).
 - **REQ-NET-47 — el túnel ubond dejaba de transmitir a los 17-45 s.** Primer
   test real en el AVE tras los cambios de junio: el túnel levantaba, los dos
   enlaces autenticaban y pingaban, y de golpe el cliente se quedaba a **0
