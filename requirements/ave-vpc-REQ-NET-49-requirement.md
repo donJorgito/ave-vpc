@@ -68,18 +68,22 @@ entradas.
 
 **Riesgos:**
 
-- Sin verificar en un runner real: que `uses: docker://...@sha256:...` y los
-  argumentos `dir . --redact --no-banner` funcionan en GitHub Actions. Solo se
-  prueba al ejecutar el CI de la PR; en local se verificó el mismo comando con
-  el binario 8.30.1 (`no leaks found`) y la existencia de la imagen y su digest
-  en el registro.
+- Verificado en un runner real (CI de la PR #20, runner 2.338.2): el
+  `docker pull` con `tag@digest` funciona y el digest coincide; el paso ejecuta
+  `docker run` con los argumentos `dir . --config .gitleaks.toml --redact
+  --no-banner`, escanea el árbol y termina con `no leaks found`; el paso de
+  shellcheck usa `version: v0.10.0`. La forma `docker://imagen:tag@sha256:...`
+  no está documentada por GitHub: que funcione hoy no garantiza que siga así.
+  La descarga de la imagen tardó cerca de dos minutos en esa ejecución.
 - Rule 1 en el CI: la imagen de gitleaks y las acciones de GitHub proceden de
   registros públicos (fijados por SHA o digest). Es una desviación residual,
   registrada en `SUPPLY_CHAIN.md` (gap-4) y pendiente de aceptación del PO.
-- El test de paridad se comprobó a mano en la sesión: con la versión de
-  gitleaks del CI desviada falla con `gitleaks_version_drift`. La detección de
-  desviación de shellcheck solo se razonó leyendo el test; no hay un test
-  automático que ejerza el caso de fallo.
+- Los casos de fallo del test se comprobaron a mano en la sesión, cada uno con
+  una desviación deliberada y restaurada después: versión de gitleaks del CI
+  distinta (`gitleaks_version_drift`), `version: stable` en shellcheck
+  (`shellcheck_version_drift`, antes el test moría sin mensaje) y una entrada
+  quitada de la regla (`private_key_header_gap`). No hay un test automático que
+  ejerza esos casos de fallo.
 - La paridad de versiones local y CI solo cubre shellcheck y gitleaks, que son
   las herramientas que el CI ejecuta; ruff, markdownlint y el resto de hooks
   corren solo en local y el CI no los repite.
