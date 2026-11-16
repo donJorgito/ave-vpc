@@ -59,6 +59,11 @@ jobs:
       - name: Instalar dependencias de test Python
         run: pip install -r requirements-dev.txt
 
+      # REQ-NET-53: ruff también como gate de CI (antes solo corría en el hook
+      # local de pre-commit). Versión de requirements-dev.txt; reglas en ruff.toml.
+      - name: Lint Python (ruff)
+        run: ruff check .
+
       - name: Verificar sintaxis de todos los scripts bash
         run: ./tests/check_bash_syntax.sh
 

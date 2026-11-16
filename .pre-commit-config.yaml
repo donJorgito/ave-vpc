@@ -11,10 +11,10 @@
 #   Herramienta        Aporta (entry)                                   Versión   Instalación
 #   -----------------  -----------------------------------------------  --------  ---------------------------------
 #   pre-commit         el framework                                     4.7.0     pip install -r requirements-dev.txt
-#   pre-commit-hooks   trailing-whitespace-fixer, end-of-file-fixer,    4.6.0     pip install -r requirements-dev.txt
+#   pre-commit-hooks   trailing-whitespace-fixer, end-of-file-fixer,    6.0.0     pip install -r requirements-dev.txt
 #                      check-yaml, check-added-large-files,
 #                      detect-private-key
-#   ruff               ruff                                             0.11.2    pip install -r requirements-dev.txt
+#   ruff               ruff                                             0.17.5    pip install -r requirements-dev.txt
 #   pytest, pytest-cov pytest                                           ver       pip install -r requirements-dev.txt
 #                                                                                 (requirements-dev.txt)
 #   markdownlint-cli   markdownlint                                     0.43.0    npm install -g markdownlint-cli@0.43.0
@@ -32,7 +32,7 @@ repos:
       # Checks básicos: ficheros sin terminar, espacios en blanco
       - id: trailing-whitespace
         name: trailing-whitespace
-        entry: trailing-whitespace-fixer   # needs: pre-commit-hooks==4.6.0
+        entry: trailing-whitespace-fixer   # needs: pre-commit-hooks==6.0.0
         language: system
         types: [text]
         # Los .patch deben preservarse byte a byte: un diff con espacios de
@@ -40,22 +40,22 @@ repos:
         exclude: '\.patch$'
       - id: end-of-file-fixer
         name: end-of-file-fixer
-        entry: end-of-file-fixer           # needs: pre-commit-hooks==4.6.0
+        entry: end-of-file-fixer           # needs: pre-commit-hooks==6.0.0
         language: system
         types: [text]
         exclude: '\.patch$'
       - id: check-yaml
         name: check-yaml
-        entry: check-yaml                  # needs: pre-commit-hooks==4.6.0
+        entry: check-yaml                  # needs: pre-commit-hooks==6.0.0
         language: system
         types: [yaml]
       - id: check-added-large-files
         name: check-added-large-files
-        entry: check-added-large-files --maxkb=500   # needs: pre-commit-hooks==4.6.0
+        entry: check-added-large-files --maxkb=500   # needs: pre-commit-hooks==6.0.0
         language: system
       - id: detect-private-key
         name: detect-private-key
-        entry: detect-private-key          # needs: pre-commit-hooks==4.6.0
+        entry: detect-private-key          # needs: pre-commit-hooks==6.0.0
         language: system
         types: [text]
 
@@ -86,12 +86,12 @@ repos:
         language: system
         types: [markdown]
 
-      # ruff 0.11.2 — linting Python (IDLC v6 Rule 8). Cubre 08-monitor.py.
+      # ruff 0.17.5 — linting Python (IDLC v6 Rule 8). Cubre 08-monitor.py.
       # Excluye build/ (ubond upstream) y __pycache__/. --force-exclude hace que
       # los excludes también apliquen a los ficheros pasados explícitamente.
       - id: ruff
         name: ruff
-        entry: ruff check --force-exclude --exclude build/ --exclude __pycache__/   # needs: ruff 0.11.2
+        entry: ruff check --force-exclude --exclude build/ --exclude __pycache__/   # needs: ruff 0.17.5
         language: system
         types_or: [python, pyi]
 

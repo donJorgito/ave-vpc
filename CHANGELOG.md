@@ -18,6 +18,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Cambiado
 
+- **REQ-NET-53 — ruff con reglas explícitas y como gate de CI (IDLC v6 Rule 8).**
+  Con ruff 0.17.5 (subida de Dependabot, PR #21) `ruff check .` daba 15 errores
+  que 0.11.2 no marcaba: cambió el conjunto de reglas por defecto y el CI no
+  ejecutaba ruff. `ruff.toml` fija `E4`, `E7`, `E9` y `F` (las reglas aplicadas
+  hasta ahora, sin relajar ni ampliar), `ci.yml` ejecuta `ruff check .` y
+  `pre-commit-hooks` pasa a 6.0.0. Test:
+  `tests/test_REQ-NET-53_ruff_explicit_rules.sh`.
 - **REQ-NET-52 — commit de ubond fijado en las compilaciones (IDLC v6 Rule 7).**
   `03b-setup-mac-ubond.sh` y `07b-setup-rpi-ubond.sh` dejan de clonar el
   `master` de ubond y descargan el commit fijado en `patches/ubond.ref`

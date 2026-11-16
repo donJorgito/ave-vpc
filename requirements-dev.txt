@@ -14,5 +14,5 @@ coverage==7.17.3
 # proxy PyPI de Artifactory. markdownlint-cli, shellcheck y gitleaks no son
 # paquetes Python: sus versiones se documentan en .pre-commit-config.yaml.
 pre-commit==4.7.0
-pre-commit-hooks==4.6.0
+pre-commit-hooks==6.0.0
 ruff==0.17.5

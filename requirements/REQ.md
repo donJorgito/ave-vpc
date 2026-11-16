@@ -97,6 +97,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-50](ave-vpc-REQ-NET-50-requirement.md) | El monitor muestra los enlaces LOSSY (`~`) de ubond en lugar de SIN TUNEL |
 | [REQ-NET-51](ave-vpc-REQ-NET-51-requirement.md) | Auto-merge de PRs minor y patch de Dependabot cuando pasan los checks obligatorios |
 | [REQ-NET-52](ave-vpc-REQ-NET-52-requirement.md) | Commit de ubond fijado en `patches/ubond.ref` para las compilaciones del Mac y de la RPi (Regla 7) |
+| [REQ-NET-53](ave-vpc-REQ-NET-53-requirement.md) | ruff con reglas explícitas en `ruff.toml` y como gate de CI (Regla 8) |
 
 ## Restricciones macOS (REQ-MAC)
 
