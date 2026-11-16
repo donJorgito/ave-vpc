@@ -1,0 +1,9 @@
+# REQ-NET-53 (IDLC v6 Rule 8): reglas de ruff explícitas.
+# Hasta ruff 0.11.2 el conjunto por defecto era exactamente E4, E7, E9 y F. Con
+# ruff 0.17 el conjunto por defecto crece y una subida de versión (Dependabot)
+# empezaba a fallar en local sin que el CI lo viera. Fijar las reglas hace que
+# el lint no cambie al subir la versión; ampliarlas es un cambio deliberado.
+extend-exclude = ["build", "__pycache__"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
