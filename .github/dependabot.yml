@@ -9,8 +9,9 @@
 # Política de aprobación (IDLC v6 §6.2 / §7.4): los PRs Minor/Patch del bot
 # pueden auto-mergearse cuando TODOS los automated gates (Secret Scan, SAST,
 # Lint, Unit Tests) pasen. Los Major requieren Peer + PO/Delegate (+ ITQA).
-# Aquí solo se configura la generación de PRs; el auto-merge se gobierna por
-# branch protection + reviews, no por este archivo.
+# Aquí solo se configura la generación de PRs. El auto-merge de minor/patch lo
+# programa .github/workflows/dependabot-automerge.yml (REQ-NET-51) y lo ejecuta
+# GitHub cuando se cumple la branch protection.
 #
 # Commits: prefijo Conventional Commits (App. D.3, MANDATORY).
 

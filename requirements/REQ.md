@@ -95,6 +95,7 @@ cumplimiento y emite un reporte JUnit XML en `reports/`.
 | [REQ-NET-48](ave-vpc-REQ-NET-48-requirement.md) | Corrige tres defectos del arnés de smoke-tests (gate de auth, stop, diagnóstico con falso positivo) |
 | [REQ-NET-49](ave-vpc-REQ-NET-49-requirement.md) | Hooks de pre-commit como `repo: local` con herramientas fijadas (IDLC v6.2.1 §7.2) |
 | [REQ-NET-50](ave-vpc-REQ-NET-50-requirement.md) | El monitor muestra los enlaces LOSSY (`~`) de ubond en lugar de SIN TUNEL |
+| [REQ-NET-51](ave-vpc-REQ-NET-51-requirement.md) | Auto-merge de PRs minor y patch de Dependabot cuando pasan los checks obligatorios |
 
 ## Restricciones macOS (REQ-MAC)
 

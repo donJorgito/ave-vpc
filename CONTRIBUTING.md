@@ -43,6 +43,15 @@ Si el commit contiene código generado o revisado con IA, añade al final:
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
+## Excepción de aprobación: PRs de Dependabot
+
+Los PRs minor y patch de `dependabot[bot]` se fusionan sin revisión humana
+cuando pasan los checks obligatorios de `main` (`Lint y calidad` y `Tests de
+verificación`, con `strict`), según IDLC v6 §6.2 / §7.4. Lo programa
+`.github/workflows/dependabot-automerge.yml` (REQ-NET-51). Los major y los PRs de
+cualquier otro autor siguen requiriendo revisión. Desviación viva: no hay SAST
+entre los checks obligatorios.
+
 ## Pre-commit hooks
 
 Instala los hooks antes de tu primer commit:

@@ -5,6 +5,17 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [Sin publicar]
 
+### Añadido
+
+- **REQ-NET-51 — auto-merge de PRs minor y patch de Dependabot (IDLC v6 §6.2 / §7.4).**
+  `.github/workflows/dependabot-automerge.yml` programa `gh pr merge --auto
+  --squash` solo para PRs de `dependabot[bot]` con `update-type` minor o patch.
+  La fusión la ejecuta GitHub cuando pasan los checks obligatorios de `main`; si
+  uno falla, el PR queda abierto. Los major siguen siendo revisión humana.
+  Disparador `pull_request`, sin checkout, permisos mínimos y action fijada a
+  SHA. No publica release. Test:
+  `tests/test_REQ-NET-51_dependabot_automerge.sh`.
+
 ### Cambiado
 
 - **REQ-NET-49 — hooks de pre-commit como `repo: local` (IDLC v6.2.1 §7.2).**
