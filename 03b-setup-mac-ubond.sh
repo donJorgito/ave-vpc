@@ -14,7 +14,8 @@
 # PASOS:
 #   1. Verifica Xcode CLT + Homebrew + libs (libev, libsodium, libpcap)
 #   2. Comprueba que existe bash 4+ (necesario para los watchers v2)
-#   3. Clona markfoodyburton/ubond en build/ubond/ si no está
+#   3. Descarga markfoodyburton/ubond en build/ubond/ si no está, en el commit
+#      fijado en patches/ubond.ref (REQ-NET-52)
 #   4. Aplica los 3 patches:
 #        a) patches/ubond_macos_compile.patch  (REQ-NET-19, SO_BINDTODEVICE)
 #        b) patches/tuntap_darwin_utun_ubond.c (REQ-NET-19, sustituye
