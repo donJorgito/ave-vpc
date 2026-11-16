@@ -1,0 +1,41 @@
+name: Dependabot auto-merge
+
+# REQ-NET-51 (IDLC v6 §6.2 / §7.4): los PRs minor y patch de Dependabot se
+# fusionan solos cuando pasan los checks obligatorios de la branch protection de
+# `main` ("Lint y calidad" y "Tests de verificación"). Los major y cualquier PR
+# que no sea del bot quedan para revisión humana.
+#
+# Seguridad: el disparador es `pull_request` (no `pull_request_target`) y el job
+# no hace checkout ni ejecuta código del PR. `gh pr merge --auto` solo programa la
+# fusión; la ejecuta GitHub cuando se cumplen las reglas de la rama. Si un check
+# falla, el PR queda abierto sin fusionar.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  automerge:
+    name: Auto-merge minor y patch
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Metadatos de Dependabot
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98  # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Programar auto-merge (squash) si es minor o patch
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-minor' ||
+          steps.meta.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
