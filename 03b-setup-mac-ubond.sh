@@ -14,7 +14,8 @@
 # PASOS:
 #   1. Verifica Xcode CLT + Homebrew + libs (libev, libsodium, libpcap)
 #   2. Comprueba que existe bash 4+ (necesario para los watchers v2)
-#   3. Clona markfoodyburton/ubond en build/ubond/ si no está
+#   3. Descarga markfoodyburton/ubond en build/ubond/ si no está, en el commit
+#      fijado en patches/ubond.ref (REQ-NET-52)
 #   4. Aplica los 3 patches:
 #        a) patches/ubond_macos_compile.patch  (REQ-NET-19, SO_BINDTODEVICE)
 #        b) patches/tuntap_darwin_utun_ubond.c (REQ-NET-19, sustituye
@@ -146,8 +147,21 @@ else
     mkdir -p "${BUILD_DIR}"
     cd "${BUILD_DIR}"
 
+    # REQ-NET-52 (Regla 7): commit de ubond fijado en patches/ubond.ref.
+    UBOND_REF="$(tr -d '[:space:]' < "${PATCHES_DIR}/ubond.ref")"
+    if [[ ! "${UBOND_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "ERROR: patches/ubond.ref no contiene un SHA de 40 caracteres"
+        exit 1
+    fi
     if [[ ! -d "ubond" ]]; then
-        git clone --depth 1 https://github.com/markfoodyburton/ubond.git
+        git init -q ubond
+        git -C ubond fetch -q --depth 1 https://github.com/markfoodyburton/ubond.git "${UBOND_REF}"
+        git -C ubond checkout -q --detach FETCH_HEAD
+    fi
+    if [[ "$(git -C ubond rev-parse HEAD)" != "${UBOND_REF}" ]]; then
+        echo "ERROR: build/ubond no está en el commit fijado ${UBOND_REF}"
+        echo "       (rm -rf build/ubond y relanzar este script)"
+        exit 1
     fi
 
     cd ubond

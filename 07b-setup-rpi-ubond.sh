@@ -108,6 +108,12 @@ UBOND_PATCH6_B64="$(base64 < "${PATCHES_DIR}/ubond_rebind_on_silence.patch" | tr
 UBOND_PATCH7_B64="$(base64 < "${PATCHES_DIR}/ubond_filters_count_purge.patch" | tr -d '\n')"
 UBOND_PATCH8_B64="$(base64 < "${PATCHES_DIR}/ubond_cpu_pacing_busywait.patch" | tr -d '\n')"
 UBOND_PATCH9_B64="$(base64 < "${PATCHES_DIR}/ubond_busywriting_deadlock.patch" | tr -d '\n')"
+# REQ-NET-52 (Regla 7): commit de ubond fijado en patches/ubond.ref.
+UBOND_REF="$(tr -d '[:space:]' < "${PATCHES_DIR}/ubond.ref")"
+if [[ ! "${UBOND_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "ERROR: patches/ubond.ref no contiene un SHA de 40 caracteres"
+    exit 1
+fi
 
 # REQ-NET-47: si ya hay un binario instalado, el Paso 2 se lo salta. Eso hacía
 # IMPOSIBLE propagar un patch nuevo a una RPi ya provisionada (el binario de
@@ -135,6 +141,7 @@ ssh -p "${RPi_SSH_PORT}" "${RPi_USER}@${RPi_IP}" \
     UBOND_PATCH7_B64="${UBOND_PATCH7_B64}" \
     UBOND_PATCH8_B64="${UBOND_PATCH8_B64}" \
     UBOND_PATCH9_B64="${UBOND_PATCH9_B64}" \
+    UBOND_REF="${UBOND_REF}" \
     FORCE_REBUILD="${FORCE_REBUILD}" \
     bash <<'REMOTE_SCRIPT'
 set -euo pipefail
@@ -162,8 +169,14 @@ else
     echo "  [RPi] Compilando ubond desde fuente con patch REQ-NET-12..."
     cd /tmp
     rm -rf ubond-build
-    git clone --depth 1 https://github.com/markfoodyburton/ubond.git ubond-build
+    git init -q ubond-build
     cd ubond-build
+    git fetch -q --depth 1 https://github.com/markfoodyburton/ubond.git "${UBOND_REF}"
+    git checkout -q --detach FETCH_HEAD
+    if [[ "$(git rev-parse HEAD)" != "${UBOND_REF}" ]]; then
+        echo "ERROR: el checkout no está en el commit fijado ${UBOND_REF}"
+        exit 1
+    fi
 
     # Volcar y aplicar patches en orden (replicate primero, per_link después
     # — el segundo asume el estado post-replicate).
