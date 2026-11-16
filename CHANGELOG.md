@@ -18,6 +18,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ### Cambiado
 
+- **REQ-NET-52 — commit de ubond fijado en las compilaciones (IDLC v6 Rule 7).**
+  `03b-setup-mac-ubond.sh` y `07b-setup-rpi-ubond.sh` dejan de clonar el
+  `master` de ubond y descargan el commit fijado en `patches/ubond.ref`
+  (`466b4227…`, el mismo `master` actual y el de `build/ubond` en el Mac),
+  abortando si el checkout no coincide. Test:
+  `tests/test_REQ-NET-52_ubond_pinned_ref.sh`.
 - **REQ-NET-49 — hooks de pre-commit como `repo: local` (IDLC v6.2.1 §7.2).**
   Los 10 hooks dejan de clonarse de `github.com` (Rule 1 / §8.3.7) y pasan a
   `repo: local` con `language: system`, con versión explícita por herramienta

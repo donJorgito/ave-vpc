@@ -146,8 +146,21 @@ else
     mkdir -p "${BUILD_DIR}"
     cd "${BUILD_DIR}"
 
+    # REQ-NET-52 (Regla 7): commit de ubond fijado en patches/ubond.ref.
+    UBOND_REF="$(tr -d '[:space:]' < "${PATCHES_DIR}/ubond.ref")"
+    if [[ ! "${UBOND_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "ERROR: patches/ubond.ref no contiene un SHA de 40 caracteres"
+        exit 1
+    fi
     if [[ ! -d "ubond" ]]; then
-        git clone --depth 1 https://github.com/markfoodyburton/ubond.git
+        git init -q ubond
+        git -C ubond fetch -q --depth 1 https://github.com/markfoodyburton/ubond.git "${UBOND_REF}"
+        git -C ubond checkout -q --detach FETCH_HEAD
+    fi
+    if [[ "$(git -C ubond rev-parse HEAD)" != "${UBOND_REF}" ]]; then
+        echo "ERROR: build/ubond no está en el commit fijado ${UBOND_REF}"
+        echo "       (rm -rf build/ubond y relanzar este script)"
+        exit 1
     fi
 
     cd ubond
